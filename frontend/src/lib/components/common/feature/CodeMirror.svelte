@@ -24,8 +24,6 @@
     /** Whether to use the dark theme. */
     darkMode: boolean;
 
-    /** The style for the container. */
-    style: string | null;
     /** The class names for the container. */
     class: string;
     /** The class names for the panel. */
@@ -224,7 +222,6 @@
     readOnly = false,
     darkMode = false,
 
-    style,
     class: _class,
     panelClass,
     editorClass,
@@ -429,7 +426,7 @@
   }}
 />
 
-<div class="shrink-0 overflow-auto rounded-box border-1 border-base-content/20 {_class}" {style}>
+<div class="shrink-0 overflow-auto rounded-box border-1 border-base-content/20 {_class}">
   <div class={editorClass} bind:this={editor}></div>
   <div class="flex items-center justify-between border-t px-2 py-[1px] {panelClass}">
     <span class="flex-center gap-1">
@@ -491,10 +488,6 @@
       {lineLength}
       {readOnly}
       {darkMode}
-      {style}
-      class={_class}
-      {panelClass}
-      {editorClass}
       minHeight="80dvh"
       maxHeight="calc(100dvh - 10rem)"
       minWidth="100%"
@@ -524,10 +517,6 @@
       {lineLength}
       {readOnly}
       {darkMode}
-      {style}
-      class={_class}
-      {panelClass}
-      {editorClass}
       minHeight="12rem"
       maxHeight="12rem"
       minWidth="100%"
