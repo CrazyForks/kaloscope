@@ -199,7 +199,7 @@
           <input type="radio" class="radio radio-xs" checked={true} />
           <span class="text-lg font-thin">{triggers.length + 1}</span>
         </span>
-        <select class="list-col-grow select select-sm" bind:value={graph}>
+        <select class="list-col-grow select appearance-none select-sm" bind:value={graph}>
           {#each unboundGraphs as graph (graph.id)}
             <option value={graph}>{graph.name}</option>
           {/each}

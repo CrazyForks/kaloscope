@@ -23,7 +23,7 @@
     {$label(field.label)}
   </Label>
   <select
-    class="nodrag select w-full select-sm"
+    class="nodrag select w-full appearance-none select-sm"
     required={field.required}
     bind:value={data}
     onchange={() => updateNodeData(field.nodeId, { [field.id]: data })}

@@ -132,7 +132,7 @@
             {/each}
             <!-- select dropdown for mobile -->
             <select
-              class="select max-w-24 truncate select-sm sm:hidden"
+              class="select max-w-24 appearance-none truncate select-sm sm:hidden"
               bind:value={current}
               onchange={() => onchange?.(current, size)}
             >

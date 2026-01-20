@@ -117,7 +117,7 @@ methods:
     <fieldset class="fieldset">
       <Label>{$_('download.downloader.preset')}</Label>
       <select
-        class="select w-full {preset ? '' : 'text-base-content/50'}"
+        class="select w-full appearance-none {preset ? '' : 'text-base-content/50'}"
         value={preset}
         name="preset"
         disabled={!!id}
