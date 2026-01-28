@@ -23,7 +23,7 @@ dependencies = [
   "stpyv8 (>=13.1.201.22,<14.0.0.0)",
   "aiofiles (>=25.1.0,<26.0.0)",
   "autopep8 (>=2.3.2,<3.0.0)",
-  "opencc (>=1.1.9,<2.0.0)",
+  "opencc (>=1.2.0,<2.0.0)",
   "torrentool (>=1.2.0,<2.0.0)",
   "gitpython (>=3.1.46,<4.0.0)"
 ]
@@ -34,11 +34,11 @@ package-mode = true
 packages = [{ include = "app" }]
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.14.13"
+ruff = "^0.14.14"
 pytest = "^9.0.2"
 pre-commit = "^4.5.1"
-commitizen = "^4.12.0"
-pip-licenses = "^5.5.0"
+commitizen = "^4.12.1"
+pip-licenses = "^5.5.1"
 
 [tool.ruff]
 line-length = 88
