@@ -98,8 +98,8 @@
   });
 
   // the states for the image source and fallback text
-  let src: string | null = $state(_src);
-  let text: string | null = $state(_text);
+  let src: string | null = $derived(_src);
+  let text: string | null = $derived(_text);
   $effect(() => {
     if (sluggish) {
       // update the `src` and `text` states slowly to prevent flickering

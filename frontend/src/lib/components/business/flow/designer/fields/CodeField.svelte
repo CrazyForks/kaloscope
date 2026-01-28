@@ -34,7 +34,7 @@
   import { StreamLanguage } from '@codemirror/language';
   import { jinja2 } from '@codemirror/legacy-modes/mode/jinja2';
   import { useSvelteFlow } from '@xyflow/svelte';
-  import { getContext, hasContext } from 'svelte';
+  import { getContext, hasContext, onMount } from 'svelte';
 
   let {
     data,
@@ -98,18 +98,20 @@
   }
 
   // load template if data is empty and template is set
-  if (!data && field.template) {
-    data = loadTemplate(field.template);
-  }
+  onMount(() => {
+    if (!data && field.template) {
+      data = loadTemplate(field.template);
+    }
+  });
 </script>
 
 {#if field.collapse}
   <fieldset class="collapse-arrow collapse border">
     <input type="checkbox" />
-    <div class="collapse-title bg-base-150 py-2 text-base [&:after]:!top-[1.4rem]">
+    <div class="collapse-title bg-base-150 py-2 text-base [&:after]:top-[1.4rem]!">
       {$label(field.label)}
     </div>
-    <div class="collapse-content !p-0">
+    <div class="collapse-content p-0!">
       {@render code('rounded-t-none border-x-0 border-b-0')}
     </div>
   </fieldset>

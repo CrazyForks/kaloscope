@@ -96,6 +96,7 @@
                 href={nav.path}
                 class="flex-center size-10 duration-0 {active ? 'cursor-default item-active' : ''}"
                 onclick={(event) => active && event.preventDefault()}
+                aria-label={$_(nav.title)}
                 use:tooltip={{
                   zIndex: 9999,
                   content: $_(nav.title),

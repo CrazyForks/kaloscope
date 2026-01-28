@@ -3,6 +3,7 @@
   import { icons } from '$lib/icons';
   import type { NodeSchema } from '$lib/types';
   import { useEdges, useNodes, useStore, useSvelteFlow, type NodeProps } from '@xyflow/svelte';
+  import { onMount } from 'svelte';
   import NodeHandle from './NodeHandle.svelte';
   import * as _fields from './fields';
 
@@ -12,15 +13,17 @@
 
   // get node props
   let { id, data }: NodeProps = $props();
-  const schema: NodeSchema = data.$schema as NodeSchema;
+  const schema: NodeSchema = $derived(data.$schema as NodeSchema);
 
   // update node data with default values
   const { updateNodeData } = useSvelteFlow();
-  for (const field of schema.fields) {
-    updateNodeData(id, {
-      [field.id]: (data[field.id] = data[field.id] ?? field.default)
-    });
-  }
+  onMount(() => {
+    for (const field of schema.fields) {
+      updateNodeData(id, {
+        [field.id]: (data[field.id] = data[field.id] ?? field.default)
+      });
+    }
+  });
 
   // get all nodes and edges
   const nodes = useNodes();
@@ -66,7 +69,7 @@
       <iconify-icon icon={icons.delete} width="1.25rem"></iconify-icon>
     </button>
   </div>
-  <div class="relative -mt-[1px] flex flex-col rounded-b-box p-3 {bodyClass}">
+  <div class="relative -mt-px flex flex-col rounded-b-box p-3 {bodyClass}">
     {#each schema.fields as field (field.id)}
       {@const Field = fields[field.field_type]}
       <Field nodeId={id} data={data[field.id]} {...field} />

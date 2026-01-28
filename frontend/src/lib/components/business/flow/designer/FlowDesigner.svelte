@@ -31,7 +31,7 @@
 
   const { id: graphId, readonly }: { id: string; readonly: boolean } = $props();
   const { screenToFlowPosition } = useSvelteFlow();
-  const sidebar = readonly ? writable<boolean | null>(false) : mediaQuery('(min-width: 40rem)');
+  const sidebar = $derived(readonly ? writable<boolean | null>(false) : mediaQuery('(min-width: 40rem)'));
   const loading = createLoading();
   const store = $derived(useStore());
 
@@ -366,7 +366,7 @@
   {:else if !$sidebar && graph}
     <button
       aria-label={$_('action.open', $_('flow.sidebar'))}
-      class="!ml-0 cursor-pointer rounded-r-field border-l-0 {btnClass}"
+      class="ml-0! cursor-pointer rounded-r-field border-l-0 {btnClass}"
       onclick={() => ($sidebar = true)}
       use:tooltip={{ content: $_('action.open', $_('flow.sidebar')), followCursor: true }}
       in:fly={{ x: -50 }}
@@ -405,7 +405,7 @@
         }
       }}
       onnodedragstart={hideAllTips}
-      class="!bg-transparent"
+      class="bg-transparent!"
     >
       {@render sideButton()}
       <ControlBar bind:nodes bind:edges {graph} {jsonGraph} {readonly} {interactive} />

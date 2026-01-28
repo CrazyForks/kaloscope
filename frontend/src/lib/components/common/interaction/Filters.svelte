@@ -17,7 +17,7 @@
   import { icons } from '$lib/icons';
 
   let { schema, value, onclose }: FiltersProps = $props();
-  let values: Record<string, string | string[]> = $state(JSON.parse(value || '{}'));
+  let values: Record<string, string | string[]> = $derived(JSON.parse(value || '{}'));
 
   let modal: Modal;
   export const showModal = () => modal.show();

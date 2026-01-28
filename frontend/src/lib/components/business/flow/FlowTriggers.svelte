@@ -17,7 +17,7 @@
   let { category, triggers: _triggers, onchange, class: _class }: FlowTriggersProps = $props();
 
   // the snapshot is used to avoid reactivity issues with the initial triggers
-  let triggers: FlowTrigger[] = $state($state.snapshot(_triggers) ?? []);
+  let triggers: FlowTrigger[] = $derived($state.snapshot(_triggers) ?? []);
 
   // the currently selected trigger graph ID and element
   let triggerGraphId: number = $state(0);

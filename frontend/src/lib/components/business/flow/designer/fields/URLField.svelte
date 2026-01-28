@@ -16,6 +16,7 @@
     maxlength: number;
   } = $props();
 
+  // svelte-ignore state_referenced_locally
   // eslint-disable-next-line svelte/prefer-writable-derived
   let url: string = $state(data);
   let urlInput: HTMLInputElement;

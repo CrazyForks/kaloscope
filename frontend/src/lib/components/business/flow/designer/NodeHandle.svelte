@@ -11,7 +11,7 @@
 
   // check if the handle is connectable
   const store = useStore();
-  const connections = useNodeConnections({ id: nodeId, handleType: type, handleId: id });
+  const connections = $derived(useNodeConnections({ id: nodeId, handleType: type, handleId: id }));
   const isConnectable = $derived(store.nodesConnectable && connections.current.length < maxconn);
 
   // dynamic class names
@@ -45,5 +45,5 @@
   {position}
   {isConnectable}
   style={style ?? ''}
-  class="!border-base-content/40 transition-all {bgClass} {sizeClass}"
+  class="border-base-content/40! transition-all {bgClass} {sizeClass}"
 />

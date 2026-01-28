@@ -50,7 +50,7 @@
     boxClass,
     cornerClass,
     onclose
-  }: ModalProps = $props();
+  }: Omit<ModalProps, 'explicit'> = $props();
   let dialog: HTMLDialogElement | null = $state(null);
   const id: string = `modal-${uuidv4()}`;
 

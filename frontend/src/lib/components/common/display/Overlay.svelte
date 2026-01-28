@@ -27,8 +27,8 @@
 
   const { loading, black = false, dvh = false, animation = 'bars' }: OverlayProps = $props();
   // the overlay class names
-  const bgClass = `absolute layer-3 w-full ${dvh ? 'h-(--ks-svh) sm:h-(--ks-lvh)' : 'h-full'}`;
-  const loadingClass = `loading fixed inset-0 m-auto loading-lg ${ANIMATIONS[animation] || 'hidden'}`;
+  const bgClass = $derived(`absolute layer-3 w-full ${dvh ? 'h-(--ks-svh) sm:h-(--ks-lvh)' : 'h-full'}`);
+  const loadingClass = $derived(`loading fixed inset-0 m-auto loading-lg ${ANIMATIONS[animation] || 'hidden'}`);
 </script>
 
 {#if black}

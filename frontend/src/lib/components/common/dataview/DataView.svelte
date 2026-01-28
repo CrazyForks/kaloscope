@@ -84,7 +84,7 @@
 
   let view: HTMLDivElement;
   let viewScrollTop = 0;
-  let panel: boolean = $state(modes.length > 1 || !!filters || !!actions);
+  let panel: boolean = $derived(modes.length > 1 || !!filters || !!actions);
   let panelSlide: number = $state(200);
   let panelToggling: boolean = false;
   let timeoutId: ReturnType<typeof setTimeout> | null;
@@ -171,7 +171,7 @@
       {/if}
     </div>
   {:else if dvh && hideOnScroll}
-    <div class="z-1 h-[1px] nav-shadow"></div>
+    <div class="z-1 h-px nav-shadow"></div>
   {/if}
   <!-- data view -->
   <div
