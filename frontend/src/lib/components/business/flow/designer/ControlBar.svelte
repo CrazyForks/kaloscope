@@ -73,7 +73,7 @@
     if (index > 0) {
       skipRecord = true;
       historyId = keys[index - 1];
-      const record = $state.snapshot(histories.get(historyId)) as History;
+      const record = $state.snapshot(histories.get(historyId) as unknown) as History;
       nodes = record.nodes;
       edges = record.edges;
     }
@@ -88,7 +88,7 @@
     if (index < keys.length - 1) {
       skipRecord = true;
       historyId = keys[index + 1];
-      const record = $state.snapshot(histories.get(historyId)) as History;
+      const record = $state.snapshot(histories.get(historyId) as unknown) as History;
       nodes = record.nodes;
       edges = record.edges;
     }
@@ -131,7 +131,7 @@
     } else {
       lastHistoryId = historyId;
     }
-    histories.set(historyId, $state.snapshot({ nodes: nodes, edges: edges }) as History);
+    histories.set(historyId, $state.snapshot({ nodes: nodes, edges: edges } as unknown) as History);
   });
 
   $effect(() => {
@@ -283,6 +283,7 @@
           onconfirm: () => {
             leaving = true;
             confirming = false;
+            // eslint-disable-next-line svelte/no-navigation-without-resolve
             to && goto(to.url);
           }
         });

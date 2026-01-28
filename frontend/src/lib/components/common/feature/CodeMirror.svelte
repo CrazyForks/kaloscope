@@ -60,7 +60,7 @@
    *
    * @param language - The language object.
    */
-  function getName(language: LanguageSupport | Language | null | undefined): string {
+  function getLanguageName(language: LanguageSupport | Language | null | undefined): string {
     if (!language) {
       // default to plain text
       return 'text';
@@ -243,7 +243,7 @@
   let editorView: EditorView;
   let largerView: Modal | null = $state(null);
   let originalDoc = document;
-  const languageName = getName(language);
+  const languageName = $derived(getLanguageName(language));
 
   let evaluatorView: Modal | null = $state(null);
   let evalResult: CodeMirror | null = $state(null);
@@ -317,7 +317,7 @@
    *
    * https://codemirror.net/examples/styling/
    */
-  const styleSheets: Extension = [
+  const styleSheets: Extension = $derived([
     EditorView.baseTheme({
       '&': {
         userSelect: 'text'
@@ -347,12 +347,12 @@
         minHeight: minHeight
       }
     })
-  ];
+  ]);
 
   /**
    * An extension to support the specified language.
    */
-  const languageSupport: Extension = language ? language : [];
+  const languageSupport: Extension = $derived(language ? language : []);
 
   /**
    * An extension to listen to the document changes.
@@ -369,12 +369,12 @@
    *
    * https://codemirror.net/examples/tab/
    */
-  const tabKeyHandler: Extension = [keymap.of([indentWithTab]), indentUnit.of(' '.repeat(tabSize))];
+  const tabKeyHandler: Extension = $derived([keymap.of([indentWithTab]), indentUnit.of(' '.repeat(tabSize))]);
 
   /**
    * An extension to use the One Dark theme.
    */
-  const darkModeHandler: Extension = darkMode ? oneDark : [];
+  const darkModeHandler: Extension = $derived(darkMode ? oneDark : []);
 
   /**
    * An extension to make the editor read-only.
@@ -390,7 +390,7 @@
   /**
    * An extension to enable the placeholder text.
    */
-  const placeholderHandler: Extension = _placeholder ? placeholder(_placeholder) : [];
+  const placeholderHandler: Extension = $derived(_placeholder ? placeholder(_placeholder) : []);
 
   onMount(() => {
     // construct a new view
@@ -426,9 +426,9 @@
   }}
 />
 
-<div class="shrink-0 overflow-auto rounded-box border-1 border-base-content/20 {_class}">
+<div class="shrink-0 overflow-auto rounded-box border {_class}">
   <div class={editorClass} bind:this={editor}></div>
-  <div class="flex items-center justify-between border-t px-2 py-[1px] {panelClass}">
+  <div class="flex items-center justify-between border-t px-2 py-px {panelClass}">
     <span class="flex-center gap-1">
       <Button
         size="xs"

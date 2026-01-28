@@ -57,7 +57,7 @@
     padding = ''
   }: ContainerProps = $props();
 
-  const preset = PRESETS[type];
+  const preset = $derived(PRESETS[type]);
 </script>
 
 <div

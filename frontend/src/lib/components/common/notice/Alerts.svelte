@@ -58,7 +58,7 @@
   import { v4 as uuidv4 } from 'uuid';
 
   const { dialog = false, maxSize = 5, timeout = 3000 }: AlertsProps = $props();
-  const dialogId = dialog ? uuidv4() : '';
+  const dialogId = $derived(dialog ? uuidv4() : '');
 
   // reactive map of alert instances
   const alerts = new SvelteMap<string, Alert>();
