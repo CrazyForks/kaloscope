@@ -1,3 +1,4 @@
+import { sniffer } from '$lib/utils';
 import { appendCustomStyle } from 'iconify-icon';
 import { addMessages, getLocaleFromNavigator, init, register, waitLocale } from 'svelte-i18n';
 import tippy, { followCursor } from 'tippy.js';
@@ -21,7 +22,7 @@ export const load: LayoutLoad = async () => {
     theme: 'neutral',
     animation: 'scale',
     placement: 'bottom',
-    trigger: 'mouseenter',
+    trigger: sniffer.isMobile() ? 'click' : 'mouseenter',
     plugins: [followCursor]
   });
 
