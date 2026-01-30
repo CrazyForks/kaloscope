@@ -114,21 +114,21 @@
   });
 
   // the dynamic class names
-  let borderClass = $derived(border ? 'border' : '');
-  let shadowClass = $derived(shadow && src ? 'shadow-sm' : '');
   let roundedClass = $derived(circle ? 'rounded-full' : 'rounded-sm');
-  let bgClass = $derived(transparent ? 'bg-transparent' : !src ? 'bg-base-300/70' : '');
   let btnClass = $derived(onclick ? 'btn-scale cursor-pointer' : '');
+  let bgClass = $derived(transparent ? 'bg-transparent' : !src ? 'bg-base-300/70' : '');
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
   tabindex={onclick ? 0 : undefined}
   role={onclick ? 'button' : 'generic'}
-  class="flex-center shrink-0 overflow-hidden {borderClass} {shadowClass} {roundedClass} {bgClass} {btnClass} {_class}"
-  style:aspect-ratio={aspectRatio}
+  class="flex-center shrink-0 rotate-0 overflow-hidden {roundedClass} {btnClass} {bgClass} {_class}"
+  class:shadow-sm={shadow && src}
+  class:border
   style:width={width || size}
   style:height={height || size}
+  style:aspect-ratio={aspectRatio}
   {onclick}
 >
   {#if src}
@@ -136,7 +136,7 @@
       <img
         src={proxyImage(src, proxy)}
         alt=""
-        class="size-full rotate-0 object-cover"
+        class="size-full object-cover"
         loading="lazy"
         draggable={false}
         in:fade
