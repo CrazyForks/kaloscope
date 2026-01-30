@@ -31,8 +31,8 @@
   onNavigate((navigation) => {
     // vibrate if user preference is enabled
     $user?.preferences?.vibration && vibrate();
-    // start view transition if supported and not on iOS
-    if (document.startViewTransition && !sniffer.isIos()) {
+    // start view transition if supported and not on Safari
+    if (document.startViewTransition && !sniffer.isSafari()) {
       return new Promise((resolve) => {
         document.startViewTransition(async () => {
           resolve();

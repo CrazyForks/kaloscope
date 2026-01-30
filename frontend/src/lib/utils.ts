@@ -171,6 +171,9 @@ export const sniffer = {
     // https://github.com/bytedance/xgplayer/blob/main/packages/xgplayer/src/utils/sniffer.js
     return /(?:iPad|PlayBook)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   },
+  isSafari: () => {
+    return browser.name === 'Safari' || browser.name === 'Mobile Safari';
+  },
   isMobile: () => {
     return device.type === 'mobile';
   },
