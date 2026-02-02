@@ -21,6 +21,7 @@
   import { _ } from '$lib/i18n';
   import { icons } from '$lib/icons';
   import { historyBack, subroutes } from '$lib/stores';
+  import { scale } from 'svelte/transition';
 
   let { navs = [], back = false, shadow = false, appMode = false }: NavbarProps = $props();
   let themeSwitcher: Themes;
@@ -95,7 +96,7 @@
               <a
                 href={nav.path}
                 aria-label={$_(nav.title)}
-                class="flex-center size-10 duration-0 {active ? 'cursor-default item-active' : ''}"
+                class="flex-center size-10 duration-0 {active ? 'pointer-events-none item-active' : ''}"
                 onclick={(event) => {
                   if (active) {
                     event.preventDefault();
@@ -115,7 +116,11 @@
                   delay: [800, 0]
                 }}
               >
-                <iconify-icon icon={active ? nav.iconFilled : nav.icon} width="1.5rem"></iconify-icon>
+                {#if active}
+                  <iconify-icon icon={nav.iconFilled} width="1.5rem" in:scale={{ duration: 200 }}></iconify-icon>
+                {:else}
+                  <iconify-icon icon={nav.icon} width="1.5rem"></iconify-icon>
+                {/if}
               </a>
             </li>
           {/each}
