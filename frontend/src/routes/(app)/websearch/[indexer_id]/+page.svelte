@@ -201,7 +201,6 @@
         if (error.name === 'AbortError') {
           aborted = true;
         } else {
-          console.error(error);
           resources = [];
           pagination.total = null;
         }

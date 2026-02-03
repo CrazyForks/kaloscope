@@ -8,7 +8,7 @@ export const load: PageLoad = async ({ params }) => {
   await api
     .get(`flow/indexer/${params.indexer_id}/config`)
     .json<Resp<IndexerConfig>>()
-    .then((resp) => (config = resp.data))
-    .catch((error) => console.error(error));
+    .then((resp) => (config = resp.data));
+
   return { config };
 };

@@ -67,9 +67,6 @@
       .json<Resp<Page<FlowGraph>>>()
       .then((resp) => {
         graphs = resp.data.list;
-      })
-      .catch((error) => {
-        console.error(error);
       });
   });
 </script>

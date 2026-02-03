@@ -159,18 +159,17 @@ class UserService(BaseService[User], model=User):
                 sessions[token] = login_user
 
     @classmethod
-    async def create(cls, username: str, password: str):
+    async def create(cls, username: str, password: str, role: UserRole = UserRole.USER):
         """Create a new user.
 
         Args:
             username: The username to create.
             password: The password to create.
+            role: The role of the user. Defaults to UserRole.USER.
         """
         if await User.filter(username=username).count() > 0:
             raise KaloscopeException(ErrorCode.USERNAME_ALREADY_EXISTS)
-        await User.create(
-            username=username, password=encrypt(password), role=UserRole.USER
-        )
+        await User.create(username=username, password=encrypt(password), role=role)
 
 
 class UserFavoriteService(BaseService[UserFavorite], model=UserFavorite):

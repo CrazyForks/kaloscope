@@ -5,6 +5,7 @@
   import { createLoading } from '$lib/helpers';
   import { _ } from '$lib/i18n';
   import { icons } from '$lib/icons';
+  import { token } from '$lib/stores';
   import type { Path, PathStats, Resp } from '$lib/types';
   import { onMount } from 'svelte';
 
@@ -19,7 +20,16 @@
 
   // the modal dialog instance
   let modal: Modal;
-  export const showModal = () => modal.show();
+  export const showModal = () => {
+    if (!paths || paths.length === 0) {
+      list(rootPath).then((result) => {
+        paths = result;
+        modal.show();
+      });
+    } else {
+      modal.show();
+    }
+  };
 
   // the loading state
   const loading = createLoading();
@@ -81,7 +91,9 @@
   }
 
   onMount(async () => {
-    paths = await list(rootPath);
+    if ($token) {
+      paths = await list(rootPath);
+    }
   });
 </script>
 

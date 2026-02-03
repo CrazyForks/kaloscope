@@ -13,11 +13,18 @@ from app.models.user import (
     UserInfo,
     UserPwd,
     UserQuery,
+    UserRole,
 )
 from app.services.user import UserFavoriteService, UserService
 
 # subroutes for all user related operations
 user = Blueprint("user", url_prefix="/user")
+
+
+@user.get("/count")
+async def count(_) -> HTTPResponse:
+    """Get the count of users."""
+    return json(await User.all().count())
 
 
 @user.get("/list")
@@ -44,6 +51,16 @@ async def list_users(_, query: UserQuery) -> HTTPResponse:
 async def create_user(_, body: UserCreate) -> HTTPResponse:
     """Create a new user."""
     await UserService.create(body.username, body.password)
+    return empty()
+
+
+@user.post("/create_admin")
+@validate(form=UserCreate)
+async def create_admin(_, body: UserCreate) -> HTTPResponse:
+    """Create the first admin user if no users exist."""
+    count = await User.all().count()
+    if not count:
+        await UserService.create(body.username, body.password, UserRole.ADMIN)
     return empty()
 
 

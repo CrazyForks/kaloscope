@@ -1,6 +1,10 @@
 {
   "app": {
-    "name": "可视",
+    "name": "Kaloscope",
+    "setup": "设置向导",
+    "setup_welcome": "欢迎使用",
+    "setup_description": "首次使用需要创建一个管理员账户",
+    "setup_create_admin": "创建管理员账户",
     "login": "登录",
     "logout": "退出登录",
     "switch_theme": "切换主题",

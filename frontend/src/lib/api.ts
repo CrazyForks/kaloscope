@@ -35,20 +35,26 @@ export const api = ky.create({
     beforeError: [
       async (error) => {
         const resp = await error.response.json<BaseResp>();
+
         // goto login page if unauthorized
         if (resp.status === 401) {
           token.set(null);
           goto('/login');
         }
+
         // alert error message
+        error.message = resp.message;
         if (resp.message || resp.status === 500) {
           alert({
             level: 'error',
             message: resp.message || 'internal_server_error',
             unique: resp.status === 401
           });
+          return error;
         }
-        error.message = resp.message;
+
+        // log other errors
+        console.error(error);
         return error;
       }
     ]

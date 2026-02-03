@@ -1,6 +1,10 @@
 {
   "app": {
     "name": "Kaloscope",
+    "setup": "Setup",
+    "setup_welcome": "Welcome",
+    "setup_description": "Create an admin account to get started",
+    "setup_create_admin": "Create Admin Account",
     "login": "Login",
     "logout": "Logout",
     "switch_theme": "Switch Theme",

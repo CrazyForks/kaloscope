@@ -44,9 +44,6 @@ export const load: LayoutLoad = async () => {
           icon: graph.icon ?? icons.globe
         }))
       });
-    })
-    .catch((error) => {
-      console.error(error);
     });
 
   return { menus };

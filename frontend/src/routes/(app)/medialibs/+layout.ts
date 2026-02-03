@@ -20,9 +20,6 @@ export const load: LayoutLoad = async () => {
           }))
         });
       }
-    })
-    .catch((error) => {
-      console.error(error);
     });
 
   return { menus };

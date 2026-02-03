@@ -17,8 +17,7 @@
         .post('user/update_pref', {
           json: { key: key, value: $user.preferences[key] }
         })
-        .catch((error) => {
-          console.error(error);
+        .catch(() => {
           user.set(null);
         });
     }

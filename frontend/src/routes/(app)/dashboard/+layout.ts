@@ -19,9 +19,6 @@ export const load: LayoutLoad = async () => {
     .then((resp) => {
       graphs = resp.data.list;
       graphs = graphs.filter((g) => g.node_types.includes('board_start'));
-    })
-    .catch((error) => {
-      console.error(error);
     });
 
   return { graphs };

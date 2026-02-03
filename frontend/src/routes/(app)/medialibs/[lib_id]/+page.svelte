@@ -102,7 +102,6 @@
         if (error.name === 'AbortError') {
           aborted = true;
         } else {
-          console.error(error);
           items = [];
           pagination.total = 0;
         }
