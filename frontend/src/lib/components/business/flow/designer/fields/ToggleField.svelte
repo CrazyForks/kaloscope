@@ -5,11 +5,11 @@
   import { useSvelteFlow } from '@xyflow/svelte';
 
   let {
-    data,
+    data = false,
     ...field
   }: Field & {
     nodeId: string;
-    data: boolean;
+    data?: boolean;
   } = $props();
 
   const { updateNodeData } = useSvelteFlow();

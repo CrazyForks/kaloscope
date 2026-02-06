@@ -5,11 +5,11 @@
   import { useSvelteFlow } from '@xyflow/svelte';
 
   let {
-    data,
+    data = '',
     ...field
   }: Field & {
     nodeId: string;
-    data: string | number | boolean;
+    data?: string | number | boolean;
     placeholder: string | null;
     options: Record<string, string | number | boolean>;
   } = $props();

@@ -59,11 +59,11 @@ def execute(node_id, node_data, context):
   };
 
   let {
-    data: _data,
+    data: _data = { language: 'python', code: null },
     ...field
   }: Field & {
     nodeId: string;
-    data: NodeData;
+    data?: NodeData;
     placeholder: string | null;
     tabsize: number;
     lineLength: number;

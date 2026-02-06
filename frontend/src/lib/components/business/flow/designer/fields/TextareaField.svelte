@@ -6,11 +6,11 @@
   import { getContext, hasContext } from 'svelte';
 
   let {
-    data,
+    data = '',
     ...field
   }: Field & {
     nodeId: string;
-    data: string;
+    data?: string;
     placeholder: string | null;
     minlength: number;
     maxlength: number | null;

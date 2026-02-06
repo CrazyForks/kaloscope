@@ -37,11 +37,11 @@
   import { getContext, hasContext, onMount } from 'svelte';
 
   let {
-    data,
+    data = '',
     ...field
   }: Field & {
     nodeId: string;
-    data: string;
+    data?: string;
     template: string | null;
     placeholder: string | null;
     language: Language | null;

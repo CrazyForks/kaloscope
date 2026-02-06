@@ -5,11 +5,11 @@
   import { useSvelteFlow } from '@xyflow/svelte';
 
   let {
-    data,
+    data = 0,
     ...field
   }: Field & {
     nodeId: string;
-    data: number;
+    data?: number;
     min: number | null;
     max: number | null;
     step: number;

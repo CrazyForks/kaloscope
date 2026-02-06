@@ -6,11 +6,11 @@
   import { useSvelteFlow } from '@xyflow/svelte';
 
   let {
-    data,
+    data = [],
     ...field
   }: Field & {
     nodeId: string;
-    data: { key: string; value: string }[];
+    data?: { key: string; value: string }[];
     placeholder: (string | null)[] | null;
   } = $props();
 
