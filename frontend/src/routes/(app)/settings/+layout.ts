@@ -33,6 +33,11 @@ export const load: LayoutLoad = () => {
           icon: icons.peopleSettings
         },
         {
+          title: 'nav.settings.system.variables',
+          path: '/settings/system/variables',
+          icon: icons.bracesVariable
+        },
+        {
           title: 'nav.settings.system.medialibs',
           path: '/settings/system/medialibs',
           icon: icons.videoClipMultiple

@@ -7,7 +7,7 @@ from typing import Any, Self
 from app.core.decorators import after
 from app.models.flow import FlowVariable
 from app.models.general import GlobalVariable
-from app.utils.crypto import xor
+from app.utils.crypto import xor_decrypt
 from app.utils.deep import deep_update
 from app.utils.dict import TrackableDict
 
@@ -64,7 +64,8 @@ class Context:
         # load global variables
         globalvars = await GlobalVariable.all()
         globalvars = {
-            g.key: (xor(g.value) if g.encrypted else g.value) for g in globalvars
+            g.key: (xor_decrypt(g.value) if g.encrypted else g.value)
+            for g in globalvars
         }
         # load local variables
         now = time.time()

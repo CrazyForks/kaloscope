@@ -12,7 +12,7 @@
   let libs: MediaLib[] = $state([]);
   let creator: MediaLibEditor | null = $state(null);
   let updater: MediaLibEditor | null = $state(null);
-  let current: MediaLib | null = $state(null);
+  let selected: MediaLib | null = $state(null);
   const loading = createLoading();
 
   /**
@@ -86,7 +86,7 @@
         <Button
           icon={icons.edit}
           onclick={() => {
-            current = lib;
+            selected = lib;
             tick().then(() => updater?.showModal());
           }}
         />
@@ -162,6 +162,6 @@
 
 <MediaLibEditor bind:this={creator} onsave={getAll} />
 
-{#if current}
-  <MediaLibEditor bind:this={updater} {...current} onsave={getAll} />
+{#if selected}
+  <MediaLibEditor bind:this={updater} {...selected} onsave={getAll} />
 {/if}

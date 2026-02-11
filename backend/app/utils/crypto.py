@@ -1,3 +1,4 @@
+import base64
 import hashlib
 
 from app.core.constants import APP_NAME, ENCODING
@@ -20,17 +21,42 @@ def encrypt(password: str) -> str:
     return hash.hex()
 
 
-def xor(input_str: str) -> str:
-    """Encrypt/Decrypt the input string using XOR operation.
+def xor(input_bytes: bytes) -> bytes:
+    """XOR the input bytes with the key bytes.
 
     Args:
-        input_str: The input string.
+        input_bytes: The input bytes.
 
     Returns:
-        The encrypted/decrypted string.
+        The XOR-ed bytes.
     """
-    input_bytes = input_str.encode(ENCODING)
     output_bytes = bytearray()
     for i in range(len(input_bytes)):
         output_bytes.append(input_bytes[i] ^ _KEY_BYTES[i % _KEY_BYTES_LENGTH])
-    return output_bytes.decode(ENCODING)
+    return bytes(output_bytes)
+
+
+def xor_encrypt(plain_text: str) -> str:
+    """Encrypt the plain text using XOR operation with Base64 encoding.
+
+    Args:
+        plain_text: The plain text to encrypt.
+
+    Returns:
+        The encrypted string in Base64 format.
+    """
+    encrypted_bytes = xor(plain_text.encode(ENCODING))
+    return base64.b64encode(encrypted_bytes).decode(ENCODING)
+
+
+def xor_decrypt(encrypted_text: str) -> str:
+    """Decrypt the encrypted text using XOR operation from Base64 format.
+
+    Args:
+        encrypted_text: The encrypted text in Base64 format.
+
+    Returns:
+        The decrypted plain text.
+    """
+    encrypted_bytes = base64.b64decode(encrypted_text)
+    return xor(encrypted_bytes).decode(ENCODING)

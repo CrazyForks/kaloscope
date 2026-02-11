@@ -39,7 +39,7 @@
   let borderClass = $derived(`border-1 border-base-content/10 ${dashed ? 'border-dashed' : ''}`);
   let shadowClass = $derived(shadow ? 'shadow-inner' : '');
   let uppercaseClass = $derived(uppercase ? 'uppercase' : '');
-  let btnClass = $derived(onclick ? 'cursor-pointer transition-transform duration-200 active:scale-95' : '');
+  let btnClass = $derived(onclick ? 'btn-scale' : '');
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->

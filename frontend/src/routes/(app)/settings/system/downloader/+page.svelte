@@ -12,7 +12,7 @@
   let refreshKey: number = $state(0);
   let creator: DownloaderEditor | null = $state(null);
   let updater: DownloaderEditor | null = $state(null);
-  let current: Downloader | null = $state(null);
+  let selected: Downloader | null = $state(null);
   const loading = createLoading();
 
   /**
@@ -101,7 +101,7 @@
         <Button
           icon={icons.edit}
           onclick={() => {
-            current = downloader;
+            selected = downloader;
             tick().then(() => updater?.showModal());
           }}
         />
@@ -188,6 +188,6 @@
   />
 {/key}
 
-{#if current}
-  <DownloaderEditor bind:this={updater} {...current} preset={current.preset ?? ''} onsave={getAll} />
+{#if selected}
+  <DownloaderEditor bind:this={updater} {...selected} preset={selected.preset ?? ''} onsave={getAll} />
 {/if}

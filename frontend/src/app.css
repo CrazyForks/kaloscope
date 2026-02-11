@@ -175,7 +175,7 @@
 }
 
 @utility btn-scale {
-  @apply transition-transform duration-200 active:scale-95;
+  @apply cursor-pointer transition-transform duration-200 active:scale-95;
 }
 
 @utility btn-subtle {
@@ -215,6 +215,10 @@
 
 @utility marquee-mask {
   mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
+}
+
+@utility hover-dashed {
+  @apply cursor-pointer overflow-hidden rounded-field border-dashed border-base-content/20 hover:border;
 }
 
 /* grid columns with different widths */
@@ -265,19 +269,19 @@
 
 /* blur background effect */
 @utility bg-blur-90 {
-  @apply bg-base-125/90 backdrop-blur-sm;
+  @apply bg-base-125/90 backdrop-blur-xs;
 }
 @utility bg-blur-80 {
-  @apply bg-base-125/80 backdrop-blur-sm;
+  @apply bg-base-125/80 backdrop-blur-xs;
 }
 @utility bg-blur-70 {
-  @apply bg-base-125/70 backdrop-blur-sm;
+  @apply bg-base-125/70 backdrop-blur-xs;
 }
 @utility bg-blur-60 {
-  @apply bg-base-125/60 backdrop-blur-sm;
+  @apply bg-base-125/60 backdrop-blur-xs;
 }
 @utility bg-blur-50 {
-  @apply bg-base-125/50 backdrop-blur-sm;
+  @apply bg-base-125/50 backdrop-blur-xs;
 }
 
 /* custom Tippy.js themes */

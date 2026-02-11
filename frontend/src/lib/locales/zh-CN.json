@@ -56,6 +56,7 @@
       "system": {
         "title": "系统设置",
         "users": "用户管理",
+        "variables": "全局变量",
         "medialibs": "媒体库管理",
         "downloader": "下载器设置"
       },
@@ -124,6 +125,8 @@
     "templates": "模板",
     "favorite": "收藏",
     "favorites": "收藏",
+    "variable": "变量",
+    "variables": "变量",
     "download": "下载任务",
     "downloads": "下载任务",
     "media_lib": "媒体库",
@@ -133,6 +136,7 @@
       "file": "文件",
       "type": "类型",
       "name": "名称",
+      "value": "值",
       "role": "角色",
       "title": "标题",
       "state": "状态",

@@ -34,10 +34,7 @@ CREATE TABLE IF NOT EXISTS "download_task" (
     "info_hash" VARCHAR(40) UNIQUE,
     "info_hash_v2" VARCHAR(68) UNIQUE,
     "magnet_link" TEXT,
-    "state" VARCHAR(16) NOT NULL /* DOWNLOADING: downloading
-PAUSED: paused
-COMPLETED: completed
-ERROR: error */,
+    "state" VARCHAR(16) NOT NULL /* DOWNLOADING: downloading\nPAUSED: paused\nCOMPLETED: completed\nERROR: error */,
     "raw_state" VARCHAR(32),
     "error_msg" TEXT,
     "up_speed" BIGINT,
@@ -69,11 +66,7 @@ CREATE TABLE IF NOT EXISTS "flow_template" (
     "name" VARCHAR(64) NOT NULL,
     "icon" VARCHAR(255),
     "description" VARCHAR(255),
-    "category" VARCHAR(16) NOT NULL /* INDEXER: indexer
-DOWNLOAD: download
-INGEST: ingest
-MANUAL: manual
-SCHEDULE: schedule */,
+    "category" VARCHAR(16) NOT NULL /* INDEXER: indexer\nDOWNLOAD: download\nINGEST: ingest\nMANUAL: manual\nSCHEDULE: schedule */,
     "revision" INT NOT NULL,
     "definition" JSON NOT NULL,
     "newest" INT NOT NULL DEFAULT 1,
@@ -88,15 +81,9 @@ CREATE TABLE IF NOT EXISTS "flow_graph" (
     "name" VARCHAR(64) NOT NULL UNIQUE,
     "icon" VARCHAR(255),
     "description" VARCHAR(255),
-    "category" VARCHAR(16) NOT NULL /* INDEXER: indexer
-DOWNLOAD: download
-INGEST: ingest
-MANUAL: manual
-SCHEDULE: schedule */,
+    "category" VARCHAR(16) NOT NULL /* INDEXER: indexer\nDOWNLOAD: download\nINGEST: ingest\nMANUAL: manual\nSCHEDULE: schedule */,
     "revision" INT,
-    "state" VARCHAR(16) NOT NULL /* DRAFTING: drafting
-MODIFIED: modified
-PUBLISHED: published */,
+    "state" VARCHAR(16) NOT NULL /* DRAFTING: drafting\nMODIFIED: modified\nPUBLISHED: published */,
     "draft" JSON,
     "definition" JSON,
     "editable" INT NOT NULL DEFAULT 1,
@@ -136,20 +123,12 @@ CREATE TABLE IF NOT EXISTS "flow_job" (
     "bootparams" JSON,
     "repeatable" INT NOT NULL DEFAULT 0,
     "recoverable" INT NOT NULL DEFAULT 1,
-    "state" VARCHAR(16) NOT NULL /* PENDING: pending
-RUNNING: running
-PAUSED: paused */,
-    "trigger" VARCHAR(16) NOT NULL /* DATE: date
-CRON: cron
-INTERVAL: interval */,
+    "state" VARCHAR(16) NOT NULL /* PENDING: pending\nRUNNING: running\nPAUSED: paused */,
+    "trigger" VARCHAR(16) NOT NULL /* DATE: date\nCRON: cron\nINTERVAL: interval */,
     "run_date" TIMESTAMP,
     "cron_expr" VARCHAR(255),
     "interval_num" INT,
-    "interval_unit" VARCHAR(16) /* WEEKS: weeks
-DAYS: days
-HOURS: hours
-MINUTES: minutes
-SECONDS: seconds */,
+    "interval_unit" VARCHAR(16) /* WEEKS: weeks\nDAYS: days\nHOURS: hours\nMINUTES: minutes\nSECONDS: seconds */,
     "interval_start" TIMESTAMP,
     "interval_end" TIMESTAMP,
     "graph_id" INT NOT NULL REFERENCES "flow_graph" ("id") ON DELETE CASCADE
@@ -175,11 +154,7 @@ CREATE TABLE IF NOT EXISTS "flow_trigger" (
     "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    "category" VARCHAR(16) NOT NULL /* INDEXER: indexer
-DOWNLOAD: download
-INGEST: ingest
-MANUAL: manual
-SCHEDULE: schedule */,
+    "category" VARCHAR(16) NOT NULL /* INDEXER: indexer\nDOWNLOAD: download\nINGEST: ingest\nMANUAL: manual\nSCHEDULE: schedule */,
     "rel_id" INT NOT NULL,
     "priority" INT NOT NULL,
     "asynchronous" INT NOT NULL DEFAULT 0,
@@ -215,7 +190,7 @@ CREATE TABLE IF NOT EXISTS "global_variable" (
     "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     "key" VARCHAR(64) NOT NULL UNIQUE,
-    "value" VARCHAR(255) NOT NULL,
+    "value" VARCHAR(4096) NOT NULL,
     "value_length" INT NOT NULL,
     "encrypted" INT NOT NULL
 );
@@ -223,13 +198,10 @@ CREATE TABLE IF NOT EXISTS "media_lib" (
     "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    "lib_type" VARCHAR(16) NOT NULL /* MOVIE: movie
-TV_SHOW: tv_show
-MUSIC: music */,
+    "lib_type" VARCHAR(16) NOT NULL /* MOVIE: movie\nTV_SHOW: tv_show\nMUSIC: music */,
     "name" VARCHAR(64) NOT NULL UNIQUE,
     "dir" VARCHAR(4096) NOT NULL UNIQUE,
-    "language" VARCHAR(16) /* EN_US: en-US
-ZH_CN: zh-CN */,
+    "language" VARCHAR(16) /* EN_US: en-US\nZH_CN: zh-CN */,
     "priority" INT NOT NULL UNIQUE
 );
 CREATE TABLE IF NOT EXISTS "media_event" (
@@ -269,8 +241,7 @@ CREATE TABLE IF NOT EXISTS "user" (
     "username" VARCHAR(64) NOT NULL UNIQUE,
     "password" VARCHAR(64) NOT NULL,
     "avatar" VARCHAR(255),
-    "role" VARCHAR(16) NOT NULL /* USER: user
-ADMIN: admin */,
+    "role" VARCHAR(16) NOT NULL /* USER: user\nADMIN: admin */,
     "preferences" JSON
 );
 CREATE TABLE IF NOT EXISTS "user_favorite" (
@@ -374,26 +345,26 @@ MODELS_STATE = (
     "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"
-    "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"
+    "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"
 )

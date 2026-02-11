@@ -115,7 +115,7 @@
 
   // the dynamic class names
   let roundedClass = $derived(circle ? 'rounded-full' : 'rounded-sm');
-  let btnClass = $derived(onclick ? 'btn-scale cursor-pointer' : '');
+  let btnClass = $derived(onclick ? 'btn-scale' : '');
   let bgClass = $derived(transparent ? 'bg-transparent' : !src ? 'bg-base-300/70' : '');
 </script>
 

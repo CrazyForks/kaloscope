@@ -17,7 +17,9 @@
   import { icons } from '$lib/icons';
 
   let { schema, value, onclose }: FiltersProps = $props();
-  let values: Record<string, string | string[]> = $derived(JSON.parse(value || '{}'));
+
+  // svelte-ignore state_referenced_locally
+  let values: Record<string, string | string[]> = $state(JSON.parse(value || '{}'));
 
   let modal: Modal;
   export const showModal = () => modal.show();
@@ -174,13 +176,19 @@
   <div
     popover
     id={callyPopoverId}
-    class="dropdown invisible m-1 rounded-box border bg-base-100 shadow-xl"
+    class="dropdown invisible m-1 rounded-box border bg-base-100 shadow-xl transition-none"
     style="position-anchor:--{callyId}"
   >
     <calendar-date
       class="cally [&_::part(day_selected):hover]:bg-base-content/80 [&_::part(day_today):hover]:bg-primary/80"
       value={values[key]}
-      onfocusday={(event: { target: { value: string } }) => (values[key] = event.target.value)}
+      onfocusday={(event: { target: { value: string } }) => {
+        const newValue = event.target.value;
+        if (values[key] !== newValue) {
+          values[key] = newValue;
+          document.getElementById(callyPopoverId)?.hidePopover();
+        }
+      }}
     >
       {/* @ts-expect-error property does not exist */ null}
       <svg

@@ -20,3 +20,5 @@ export { default as MediaLibEditor } from './library/MediaLibEditor.svelte';
 export { default as UserCenter } from './user/UserCenter.svelte';
 export { default as UserCreator } from './user/UserCreator.svelte';
 export { default as UserPermissions } from './user/UserPermissions.svelte';
+
+export { default as VariableEditor } from './variable/VariableEditor.svelte';

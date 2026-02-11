@@ -99,7 +99,10 @@
    */
   function italic(title: string): string {
     title = escapeHTML(title);
-    return title.replace(/\[([^\]]+)\]/g, '<span class="pr-2 text-sm font-normal italic opacity-60">[ $1 ]</span>');
+    return title.replace(
+      /\[([^\]]+)\]/g,
+      '<span class="text-sm font-normal opacity-60">[<span class="italic px-1">$1</span>]</span>'
+    );
   }
 </script>
 

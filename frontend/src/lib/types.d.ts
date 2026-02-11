@@ -150,6 +150,19 @@ export type PathStats = {
 };
 
 /**
+ * The type of the global variable.
+ */
+export type GlobalVariable = {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  key: string;
+  value: string;
+  value_length: number;
+  encrypted: boolean;
+};
+
+/**
  * The type of the media library.
  */
 export type MediaLib = {

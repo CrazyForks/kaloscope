@@ -66,7 +66,7 @@
 />
 
 <details class="dropdown {_class}" bind:this={dropdown} bind:open>
-  <summary class="flex-center {onclick ? 'btn-scale cursor-pointer' : ''} {triggerClass}" {onclick}>
+  <summary class="flex-center {onclick ? 'btn-scale' : ''} {triggerClass}" {onclick}>
     {#if trigger}
       {@render trigger()}
     {:else}

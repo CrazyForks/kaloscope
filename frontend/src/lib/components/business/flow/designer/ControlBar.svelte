@@ -318,9 +318,8 @@
 
 <PageHeader>
   {#if graph}
-    {@const borderClass = 'border-base-content/20 border-dashed hover:border'}
     <button
-      class="group relative flex-center cursor-pointer gap-2 overflow-hidden rounded-field px-2 {borderClass}"
+      class="group relative flex-center hover-dashed gap-2 px-2"
       onclick={() => graphEditor && graphEditor.showModal()}
       use:tooltip={{
         zIndex: 9999,
@@ -334,7 +333,7 @@
       <Image transparent src={graph.icon} icon={icons.flowchartFilled} />
       <span class="overflow-hidden">
         <div class="truncate text-sm opacity-90">{graph.name}</div>
-        <div class="mt-1 flex-center">
+        <div class="mt-0.5 flex-center">
           <Badge shadow={false} dashed={graph.state === 'drafting'}>
             {@const state = GraphState[graph.state]}
             <span class="size-4">
@@ -358,7 +357,7 @@
         </div>
       </span>
       <div class="invisible absolute flex-center size-full bg-blur-90 group-hover:visible">
-        <iconify-icon icon={icons.edit} width="2rem" class="opacity-30"></iconify-icon>
+        <iconify-icon icon={icons.edit} width="2rem" class="opacity-30 group-active:scale-95"></iconify-icon>
       </div>
     </button>
   {/if}
