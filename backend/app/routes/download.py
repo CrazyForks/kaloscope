@@ -15,7 +15,7 @@ from app.models.download import (
     DownloadDel,
     DownloadDir,
     Downloader,
-    DownloaderBasics,
+    DownloaderUpsert,
     DownloadQuery,
     DownloadTask,
 )
@@ -29,61 +29,59 @@ download = Blueprint("download", url_prefix="/download")
 
 
 @download.get("/manager/list")
-async def list_managers(_) -> HTTPResponse:
-    """List the download managers."""
-    managers = await DownloaderService.dump_list(await Downloader.all())
-    for manager in managers:
+async def list_downloaders(_) -> HTTPResponse:
+    """List the downloaders."""
+    downloaders = await DownloaderService.dump_list(await Downloader.all())
+    for downloader in downloaders:
         # attach the list of flow triggers
-        manager["triggers"] = await FlowTriggerService.get_triggers(
-            GraphCategory.DOWNLOAD, manager["id"]
+        downloader["triggers"] = await FlowTriggerService.get_triggers(
+            GraphCategory.DOWNLOAD, downloader["id"]
         )
-        # check if the download manager is up or down
-        adapter = load_config(manager["config"])
+        # check if the downloader is up or down
+        adapter = load_config(downloader["config"])
         if not adapter.methods.get("version"):
-            manager["status"] = "unknown"
+            downloader["status"] = "unknown"
             continue
         version = await adapter.version()
-        manager["status"] = "up" if version else "down"
-        if version and manager["version"] != version:
-            manager["version"] = version
-            await Downloader.filter(id=manager["id"]).update(version=version)
-    return json(managers)
+        downloader["status"] = "up" if version else "down"
+        if version and downloader["version"] != version:
+            downloader["version"] = version
+            await Downloader.filter(id=downloader["id"]).update(version=version)
+    return json(downloaders)
 
 
 @download.post("/manager/sort")
 @validate(json=IDs)
-async def sort_managers(_, body: IDs) -> HTTPResponse:
-    """Sort the download managers."""
+async def sort_downloaders(_, body: IDs) -> HTTPResponse:
+    """Sort the downloaders."""
     await DownloaderService.update_priorities(body.ids)
     return empty()
 
 
 @download.get("/manager/presets")
-async def get_manager_presets(_) -> HTTPResponse:
-    """Get the download manager presets."""
+async def get_downloader_presets(_) -> HTTPResponse:
+    """Get the downloader presets."""
     return json(await DownloaderService.get_presets())
 
 
 @download.post("/manager/upsert")
-@validate(json=DownloaderBasics)
-async def upsert_manager_basics(_, body: DownloaderBasics) -> HTTPResponse:
-    """Create or update the download manager basics."""
-    return json(
-        await DownloaderService.dump(await DownloaderService.upsert_basics(body))
-    )
+@validate(json=DownloaderUpsert)
+async def upsert_downloader(_, body: DownloaderUpsert) -> HTTPResponse:
+    """Create or update a downloader."""
+    return json(await DownloaderService.dump(await DownloaderService.upsert(body)))
 
 
 @download.post("/manager/delete")
 @validate(json=IDs)
-async def delete_managers(_, body: IDs) -> HTTPResponse:
-    """Delete the download managers."""
+async def delete_downloaders(_, body: IDs) -> HTTPResponse:
+    """Delete the downloaders."""
     for id in body.ids:
         try:
             await DownloaderService.delete(int(id))
         except Exception as e:
             if len(body.ids) == 1:
                 raise e
-            logger.error("Failed to delete the download manager: %s", id, exc_info=True)
+            logger.error("Failed to delete the downloader: %s", id, exc_info=True)
     return empty()
 
 

@@ -115,7 +115,7 @@ class DownloadTask(TortoiseModel):
 
 
 # -------------------- Pydantic Models -------------------- #
-class DownloaderBasics(BaseModel):
+class DownloaderUpsert(BaseModel):
     id: PositiveInt | None = None
     preset: str | None = Field(max_length=16, default=None)
     config: str

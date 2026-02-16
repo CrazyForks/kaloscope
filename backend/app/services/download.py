@@ -15,7 +15,7 @@ from app.models.download import (
     DownloadAdd,
     DownloadDir,
     Downloader,
-    DownloaderBasics,
+    DownloaderUpsert,
     DownloadState,
     DownloadStats,
     DownloadTask,
@@ -30,16 +30,16 @@ from app.utils.bittorrent import (
 
 
 class DownloaderService(BaseService[Downloader], model=Downloader):
-    """The service class for all download manager related operations."""
+    """The service class for all downloader related operations."""
 
     PRESETS_PATH = Path(__file__).resolve().parents[2] / "static/downloaders"
 
     @classmethod
     async def get_presets(cls) -> dict[str, str]:
-        """Get the download manager presets.
+        """Get the downloader presets.
 
         Returns:
-            The download manager presets.
+            The downloader presets.
         """
         presets = {}
         for file in cls.PRESETS_PATH.iterdir():
@@ -51,81 +51,81 @@ class DownloaderService(BaseService[Downloader], model=Downloader):
     @classmethod
     @atomic()
     async def update_priorities(cls, ids: list):
-        """Update the download manager priorities.
+        """Update the downloader priorities.
 
         Args:
-            ids: The sorted download manager IDs.
+            ids: The sorted downloader IDs.
         """
-        managers = await Downloader.filter(id__in=ids)
+        downloaders = await Downloader.filter(id__in=ids)
         # avoid duplicate priorities
-        priorities = [manager.priority for manager in managers]
+        priorities = [downloader.priority for downloader in downloaders]
         start_priority = 1 if min(priorities) > len(ids) else max(priorities) + 1
-        for manager in managers:
-            manager.priority = start_priority + ids.index(manager.id)
-        await Downloader.bulk_update(managers, fields=["priority"])
+        for downloader in downloaders:
+            downloader.priority = start_priority + ids.index(downloader.id)
+        await Downloader.bulk_update(downloaders, fields=["priority"])
 
     @classmethod
     @atomic()
-    async def upsert_basics(cls, basics: DownloaderBasics) -> Downloader:
-        """Create or update the download manager basics.
+    async def upsert(cls, obj: DownloaderUpsert) -> Downloader:
+        """Create or update a downloader.
 
         Args:
-            basics: The download manager basics.
+            obj: The downloader data.
 
         Raises:
             KaloscopeException: If the name already exists.
 
         Returns:
-            The download manager instance.
+            The downloader instance.
         """
         # load the YAML configuration
-        adapter = load_config(basics.config)
+        adapter = load_config(obj.config)
 
         # check if the name already exists
         filter = Q(name=adapter.name)
-        if basics.id:
-            filter &= ~Q(id=basics.id)
+        if obj.id:
+            filter &= ~Q(id=obj.id)
         if await Downloader.filter(filter).count() > 0:
             raise KaloscopeException(ErrorCode.NAME_ALREADY_EXISTS)
 
-        if basics.id:
-            # update the download manager
-            await Downloader.filter(id=basics.id).update(
-                config=basics.config,
+        if obj.id:
+            # update the downloader
+            await Downloader.filter(id=obj.id).update(
+                config=obj.config,
                 name=adapter.name,
                 host=adapter.host,
                 port=adapter.port,
             )
-            manager = await Downloader.get(id=basics.id)
+            downloader = await Downloader.get(id=obj.id)
         else:
-            # create the download manager
+            # create the downloader
             version = await adapter.version()
             priorities: list = await Downloader.all().values_list("priority", flat=True)
-            manager = Downloader(
-                preset=basics.preset or None,
-                config=basics.config,
+            downloader = Downloader(
+                preset=obj.preset or None,
+                config=obj.config,
                 name=adapter.name,
                 host=adapter.host,
                 port=adapter.port,
                 version=version,
                 priority=(max(priorities) + 1 if priorities else 1),
             )
-            await manager.save()
+            await downloader.save()
 
-        # bind the flow triggers to the download manager
+        # bind the flow triggers to the downloader
         await FlowTriggerService.bind_triggers(
-            GraphCategory.DOWNLOAD, manager.id, basics.triggers
+            GraphCategory.DOWNLOAD, downloader.id, obj.triggers
         )
 
-        return manager
+        return downloader
 
     @classmethod
     @atomic()
     async def delete(cls, id: int):
-        """Delete a download manager.
+        """Delete a downloader.
 
         Args:
-            id: The download manager ID.
+            id: The downloader ID.
         """
         await Downloader.filter(id=id).delete()
         await FlowTrigger.filter(category=GraphCategory.DOWNLOAD, rel_id=id).delete()
@@ -183,8 +183,8 @@ class DownloadTaskService(BaseService[DownloadTask], model=DownloadTask):
         Returns:
             The added download task.
         """
-        manager = await Downloader.get(id=add.downloader_id)
-        adapter = load_config(manager.config)
+        downloader = await Downloader.get(id=add.downloader_id)
+        adapter = load_config(downloader.config)
 
         # call the `add_torrent` or `add_link` method
         info_hash, info_hash_v2, magnet_link, result = None, None, None, None
@@ -212,7 +212,7 @@ class DownloadTaskService(BaseService[DownloadTask], model=DownloadTask):
         # create the download task
         unique_id = result.get("unique_id") if isinstance(result, dict) else None
         return await DownloadTask.create(
-            downloader_id=manager.id,
+            downloader_id=downloader.id,
             dir=add.dir,
             name=info_hash or info_hash_v2,
             unique_id=unique_id,
@@ -230,8 +230,8 @@ class DownloadTaskService(BaseService[DownloadTask], model=DownloadTask):
             id: The download task ID.
         """
         task = await DownloadTask.get(id=id)
-        manager = await Downloader.get(id=task.downloader_id)
-        adapter = load_config(manager.config)
+        downloader = await Downloader.get(id=task.downloader_id)
+        adapter = load_config(downloader.config)
         await adapter.call("pause", asdict(Unique.from_task(task)))
         await DownloadTask.filter(id=id).update(state=DownloadState.PAUSED)
 
@@ -243,8 +243,8 @@ class DownloadTaskService(BaseService[DownloadTask], model=DownloadTask):
             id: The download task ID.
         """
         task = await DownloadTask.get(id=id)
-        manager = await Downloader.get(id=task.downloader_id)
-        adapter = load_config(manager.config)
+        downloader = await Downloader.get(id=task.downloader_id)
+        adapter = load_config(downloader.config)
         await adapter.call("start", asdict(Unique.from_task(task)))
         await DownloadTask.filter(id=id).update(state=DownloadState.DOWNLOADING)
 
@@ -257,8 +257,8 @@ class DownloadTaskService(BaseService[DownloadTask], model=DownloadTask):
             local: Whether to delete the local files.
         """
         task = await DownloadTask.get(id=id)
-        manager = await Downloader.get(id=task.downloader_id)
-        adapter = load_config(manager.config)
+        downloader = await Downloader.get(id=task.downloader_id)
+        adapter = load_config(downloader.config)
         await adapter.call("delete", {**asdict(Unique.from_task(task)), "local": local})
         await DownloadTask.filter(id=id).delete()
 

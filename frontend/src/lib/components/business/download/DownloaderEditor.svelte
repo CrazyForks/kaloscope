@@ -41,7 +41,7 @@ methods:
 `.trimStart();
 
   /**
-   * The download manager presets.
+   * The downloader presets.
    */
   let presets: Record<string, string> | null = $state(null);
 </script>
@@ -67,7 +67,7 @@ methods:
   const loading = createLoading();
 
   /**
-   * Save or update the download manager.
+   * Save or update the downloader.
    *
    * @param form - The form element.
    * @param data - The form data.

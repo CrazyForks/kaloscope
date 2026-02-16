@@ -82,7 +82,7 @@
   }
 
   /**
-   * Get the download managers.
+   * Get the downloaders.
    */
   async function getDownloaders(): Promise<Downloader[]> {
     try {

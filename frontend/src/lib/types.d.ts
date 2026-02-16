@@ -193,7 +193,7 @@ export type MediaItem = {
 };
 
 /**
- * The type of the download manager.
+ * The type of the downloader.
  */
 export type Downloader = {
   id: number;

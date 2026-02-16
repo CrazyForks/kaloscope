@@ -16,7 +16,7 @@
   const loading = createLoading();
 
   /**
-   * Get the download managers.
+   * Get the downloaders.
    */
   function getAll() {
     loading.start();
@@ -28,9 +28,9 @@
   }
 
   /**
-   * Delete download manager by ID.
+   * Delete downloader by ID.
    *
-   * @param id - The download manager ID.
+   * @param id - The downloader ID.
    */
   function del(id: number) {
     loading.start();
@@ -41,7 +41,7 @@
   }
 
   /**
-   * Sort the download managers.
+   * Sort the downloaders.
    */
   const sort = debounce(() => {
     const ids = downloaders.map((downloader) => downloader.id);
