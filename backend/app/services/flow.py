@@ -1,5 +1,4 @@
 import base64
-import datetime
 import io
 import zipfile
 from collections.abc import Mapping
@@ -282,9 +281,7 @@ class FlowGraphService(BaseService[FlowGraph], model=FlowGraph):
         # generate the revision number
         now = timezone.now()
         if graph.editable or not graph.revision:
-            revision = int(
-                now.timestamp() - int(datetime.datetime(2020, 1, 1).timestamp())
-            )
+            revision = int(now.timestamp())
             if graph.revision and graph.revision >= revision:
                 revision = graph.revision + 1
             graph.revision = revision

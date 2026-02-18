@@ -15,7 +15,7 @@
   } from '$lib/components';
   import { enumToOptions, GraphCategory } from '$lib/enums';
   import { createLoading, createSortField } from '$lib/helpers';
-  import { _ } from '$lib/i18n';
+  import { _, dateTime } from '$lib/i18n';
   import { icons } from '$lib/icons';
   import type { FlowGraph, FlowRepo, FlowTemplate, OptionValue, Page, Resp } from '$lib/types';
   import { untrack } from 'svelte';
@@ -198,7 +198,7 @@
     </div>
     <div class="divider mx-2 my-0 h-0"></div>
     <div class="flex justify-between gap-2 p-2">
-      <div class="flex-center pl-2 text-xs font-semibold opacity-50">v{tmpl.revision}</div>
+      <div class="flex-center pl-2 text-xs font-semibold opacity-50">{$dateTime(tmpl.revision * 1000)}</div>
       <div class="flex-center gap-1">
         <Button
           icon={icons.link}
