@@ -147,7 +147,6 @@
       "category": "Category",
       "username": "Username",
       "password": "Password",
-      "revision": "Revision",
       "description": "Description",
       "average_time": "Average Time",
       "last_execution": "Last Execution",

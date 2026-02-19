@@ -147,7 +147,6 @@
       "category": "类别",
       "username": "用户名",
       "password": "密码",
-      "revision": "版本",
       "description": "描述",
       "average_time": "平均耗时",
       "last_execution": "上次执行",

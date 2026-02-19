@@ -8,19 +8,21 @@
     Cell,
     Checkbox,
     DataView,
+    FlowLogs,
     GraphBasics,
     GraphEditor,
     HCell,
     Paginator,
     Search,
     Select,
+    Status,
     alert,
     confirm,
     type PaginatorProps
   } from '$lib/components';
   import { GraphCategory, GraphState, enumToOptions } from '$lib/enums';
   import { createLoading, createSortField } from '$lib/helpers';
-  import { _, dateTime } from '$lib/i18n';
+  import { _, dateTime, milliseconds } from '$lib/i18n';
   import { icons } from '$lib/icons';
   import type { FlowGraph, OptionValue, Page, Resp } from '$lib/types';
   import { untrack } from 'svelte';
@@ -32,6 +34,7 @@
   let graphEditor: GraphEditor;
   let headerCheckbox: Checkbox;
   let zipInput: HTMLInputElement;
+  let flowLogs: FlowLogs;
 
   const pagination: PaginatorProps = $state({ current: 1, size: 15, onchange: search });
   const ordering = createSortField();
@@ -200,10 +203,10 @@
     <HCell width="2rem">
       <Checkbox batch={graphs.filter((g) => g.state !== 'drafting').length} bind:this={headerCheckbox} />
     </HCell>
-    <HCell width={['40%', '55%']} text={$_('model.field.name')} sort={ordering.bind('name')} />
+    <HCell width={['35%', '55%']} text={$_('model.field.name')} sort={ordering.bind('name')} />
     <HCell width={['15%', '45%']} text={$_('model.field.category')} sort={ordering.bind('category')} />
-    <HCell width={['18%', null]} text={$_('model.field.updated')} sort={ordering.bind('updated_at')} />
-    <HCell width={['12%', null]} text={$_('model.field.revision')} />
+    <HCell width={['20%', null]} text={$_('model.field.updated')} sort={ordering.bind('updated_at')} />
+    <HCell width={['15%', null]} text={$_('model.field.average_time')} />
     <HCell width={['15%', '4rem']} text={$_('model.field.state')} sort={ordering.bind('state')} />
     <HCell actions />
   {/snippet}
@@ -220,10 +223,10 @@
       <Badge icon={category.icon} iconColor={category.iconColor}>{$_(category.label)}</Badge>
     </Cell>
     <Cell text={$dateTime(graph.updated_at)} />
-    <Cell
-      text={graph.revision ? `v${graph.revision}` : null}
-      class={graph.editable ? '' : 'opacity-50 text-shadow-xs'}
-    />
+    <Cell class="max-lg:hidden">
+      <Status rate={graph.success_rate} />
+      {$milliseconds(graph.average_time)}
+    </Cell>
     <Cell class="max-lg:pl-3">
       {@const state = GraphState[graph.state]}
       <Badge icon={state.icon} iconColor={state.iconColor} dashed={drafting}>
@@ -238,6 +241,18 @@
           onclick: () => goto(`/workflows/graphs/${graph.editable ? '' : 'r/'}${graph.id}`)
         },
         {
+          condition: !drafting,
+          icon: icons.back,
+          text: $_('action.retract', $_('model.graph')),
+          onclick: () => {
+            confirm({
+              icon: icons.back,
+              title: `${$_('action.retract', $_('model.graph'))} [${graph.name}]`,
+              onconfirm: () => retract(graph.id)
+            });
+          }
+        },
+        {
           condition: drafting,
           icon: icons.deleteDismiss,
           text: $_('action.delete', $_('model.graph')),
@@ -250,16 +265,10 @@
           }
         },
         {
-          condition: !drafting,
-          icon: icons.back,
-          text: $_('action.retract', $_('model.graph')),
-          onclick: () => {
-            confirm({
-              icon: icons.back,
-              title: `${$_('action.retract', $_('model.graph'))} [${graph.name}]`,
-              onconfirm: () => retract(graph.id)
-            });
-          }
+          condition: !!graph.last_execution,
+          icon: icons.slideSearch,
+          text: $_('action.view', $_('model.logs')),
+          onclick: () => flowLogs.showModal(graph.id)
         }
       ]}
     />
@@ -270,3 +279,5 @@
 </DataView>
 
 <GraphEditor bind:this={graphEditor} onsave={(result) => goto(`${page.url.pathname}/${result.id}`)} />
+
+<FlowLogs bind:this={flowLogs} />
