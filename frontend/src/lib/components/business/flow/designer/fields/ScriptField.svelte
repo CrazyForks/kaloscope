@@ -135,6 +135,8 @@ def execute(node_id, node_data, context):
     {$label(field.label)}
   </Label>
   {#key data.language}
+    <!-- eslint-disable svelte/no-unused-svelte-ignore -->
+    <!-- svelte-ignore binding_property_non_reactive -->
     <CodeMirror
       bind:document={data.code}
       language={data.support}

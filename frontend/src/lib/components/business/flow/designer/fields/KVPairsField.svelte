@@ -41,7 +41,9 @@
       </button>
     </div>
     {#each data as entry, index (index)}
+      <!-- eslint-disable svelte/no-unused-svelte-ignore -->
       <div class="flex items-center gap-2">
+        <!-- svelte-ignore binding_property_non_reactive -->
         <input
           type="text"
           class="nodrag input input-sm w-1/2"
@@ -50,6 +52,7 @@
           oninput={() => updateNodeData(field.nodeId, { [field.id]: data })}
         />
         <span>:</span>
+        <!-- svelte-ignore binding_property_non_reactive -->
         <input
           type="text"
           class="nodrag input input-sm w-1/2"

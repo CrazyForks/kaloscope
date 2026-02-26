@@ -99,10 +99,12 @@
   }
 
   // load template if data is empty and template is set
+  let mounted = $state(false);
   onMount(() => {
     if (!data && field.template) {
       data = loadTemplate(field.template);
     }
+    mounted = true;
   });
 </script>
 
@@ -126,23 +128,25 @@
 {/if}
 
 {#snippet code(_class?: string)}
-  <CodeMirror
-    bind:document={data}
-    language={languageSupport(field.language)}
-    placeholder={$placeholder(field.placeholder)}
-    tabSize={field.tabsize}
-    lineLength={field.lineLength}
-    readOnly={field.readonly}
-    darkMode={field.darkmode}
-    title={$label(field.label)}
-    copier={field.copier}
-    resetter={field.resetter}
-    formatter={field.formatter}
-    evaluator={field.language === 'jinja2'}
-    minWidth={field.width}
-    maxWidth={field.width}
-    class="{validatorClass} {_class}"
-    editorClass="nodrag nowheel"
-    onchange={() => updateNodeData(field.nodeId, { [field.id]: data })}
-  />
+  {#if mounted}
+    <CodeMirror
+      bind:document={data}
+      language={languageSupport(field.language)}
+      placeholder={$placeholder(field.placeholder)}
+      tabSize={field.tabsize}
+      lineLength={field.lineLength}
+      readOnly={field.readonly}
+      darkMode={field.darkmode}
+      title={$label(field.label)}
+      copier={field.copier}
+      resetter={field.resetter}
+      formatter={field.formatter}
+      evaluator={field.language === 'jinja2'}
+      minWidth={field.width}
+      maxWidth={field.width}
+      class="{validatorClass} {_class}"
+      editorClass="nodrag nowheel"
+      onchange={() => updateNodeData(field.nodeId, { [field.id]: data })}
+    />
+  {/if}
 {/snippet}

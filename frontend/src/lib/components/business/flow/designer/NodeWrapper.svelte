@@ -2,8 +2,7 @@
   import { _ } from '$lib/i18n';
   import { icons } from '$lib/icons';
   import type { NodeSchema } from '$lib/types';
-  import { useEdges, useNodes, useStore, useSvelteFlow, type NodeProps } from '@xyflow/svelte';
-  import { onMount } from 'svelte';
+  import { useEdges, useNodes, useStore, type NodeProps } from '@xyflow/svelte';
   import NodeHandle from './NodeHandle.svelte';
   import * as _fields from './fields';
 
@@ -14,16 +13,6 @@
   // get node props
   let { id, data }: NodeProps = $props();
   const schema: NodeSchema = $derived(data.$schema as NodeSchema);
-
-  // update node data with default values
-  const { updateNodeData } = useSvelteFlow();
-  onMount(() => {
-    for (const field of schema.fields) {
-      updateNodeData(id, {
-        [field.id]: (data[field.id] = data[field.id] ?? field.default)
-      });
-    }
-  });
 
   // get all nodes and edges
   const nodes = useNodes();
@@ -72,7 +61,7 @@
   <div class="relative -mt-px flex flex-col rounded-b-box p-3 {bodyClass}">
     {#each schema.fields as field (field.id)}
       {@const Field = fields[field.field_type]}
-      <Field nodeId={id} data={data[field.id]} {...field} />
+      <Field nodeId={id} {...field} data={data[field.id] ?? field.default} />
     {/each}
     {#each schema.handles as handle (handle.id)}
       <NodeHandle nodeId={id} {...handle} />

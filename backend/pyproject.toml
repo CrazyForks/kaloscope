@@ -15,7 +15,7 @@ dependencies = [
   "watchdog (>=6.0.0,<7.0.0)",
   "jinja2 (>=3.1.6,<4.0.0)",
   "orjson (>=3.11.7,<4.0.0)",
-  "jsonpath-ng (>=1.7.0,<2.0.0)",
+  "jsonpath-ng (>=1.8.0,<2.0.0)",
   "lxml (>=6.0.2,<7.0.0)",
   "lxml-stubs (>=0.5.1,<0.6.0)",
   "pyyaml (>=6.0.3,<7.0.0)",
@@ -36,7 +36,7 @@ packages = [{ include = "app" }]
 ruff = "^0.15.2"
 pytest = "^9.0.2"
 pre-commit = "^4.5.1"
-commitizen = "^4.13.8"
+commitizen = "^4.13.9"
 pip-licenses = "^5.5.1"
 
 [tool.tortoise]
