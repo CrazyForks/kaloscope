@@ -16,14 +16,14 @@
     maxlength: number;
   } = $props();
 
-  // svelte-ignore state_referenced_locally
-  // eslint-disable-next-line svelte/prefer-writable-derived
-  let url: string = $state(data);
-  let urlInput: HTMLInputElement;
-  let secure: boolean = $state(true);
-
   const HTTP = 'http://';
   const HTTPS = 'https://';
+  let secure: boolean = $state(true);
+
+  // svelte-ignore state_referenced_locally
+  let url: string = $state(standardize(data));
+  let urlInput: HTMLInputElement;
+
   const { updateNodeData } = useSvelteFlow();
   const { label, tooltip, placeholder } = nodeFormatter;
 
@@ -66,19 +66,17 @@
       [field.id]: `${secure ? HTTPS : HTTP}${url}`
     });
   }
-
-  $effect(() => {
-    url = standardize(data);
-  });
 </script>
 
 <fieldset class="fieldset">
   <Label required={field.required} tip={$tooltip(field.tooltip)}>
     {$label(field.label)}
   </Label>
-  <label class="input input-sm w-full gap-0">
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <label class="input input-sm w-full gap-0" onclick={(e) => e.preventDefault()}>
     <button
-      class="cursor-pointer opacity-80"
+      class="cursor-pointer pt-px opacity-80"
       onclick={() => {
         secure = !secure;
         updateFieldData();
