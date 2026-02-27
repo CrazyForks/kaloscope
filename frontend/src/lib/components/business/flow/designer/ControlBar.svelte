@@ -309,7 +309,7 @@
       } else if (event.code === 'KeyD') {
         event.preventDefault();
         prepublish();
-      } else if (event.code === 'KeyZ') {
+      } else if (event.code === 'KeyU') {
         event.shiftKey ? redo() : undo();
       }
     }
@@ -399,8 +399,8 @@
           onclick={() => {
             window.dispatchEvent(
               new KeyboardEvent('keydown', {
-                key: 'z',
-                code: 'KeyZ',
+                key: 'u',
+                code: 'KeyU',
                 ctrlKey: true,
                 metaKey: true,
                 shiftKey: false
@@ -416,8 +416,8 @@
           onclick={() => {
             window.dispatchEvent(
               new KeyboardEvent('keydown', {
-                key: 'z',
-                code: 'KeyZ',
+                key: 'u',
+                code: 'KeyU',
                 ctrlKey: true,
                 metaKey: true,
                 shiftKey: true

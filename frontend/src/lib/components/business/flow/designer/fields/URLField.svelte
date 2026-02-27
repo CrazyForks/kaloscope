@@ -21,6 +21,7 @@
   let secure: boolean = $state(true);
 
   // svelte-ignore state_referenced_locally
+  // eslint-disable-next-line svelte/prefer-writable-derived
   let url: string = $state(standardize(data));
   let urlInput: HTMLInputElement;
 
@@ -67,6 +68,11 @@
       [field.id]: `${secure ? HTTPS : HTTP}${url}`
     });
   }
+
+  $effect(() => {
+    // standardize the URL when the data changes externally
+    url = standardize(data);
+  });
 </script>
 
 <fieldset class="fieldset">

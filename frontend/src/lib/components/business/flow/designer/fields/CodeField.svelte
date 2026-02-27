@@ -130,7 +130,7 @@
 {#snippet code(_class?: string)}
   {#if mounted}
     <CodeMirror
-      bind:document={data}
+      document={data}
       language={languageSupport(field.language)}
       placeholder={$placeholder(field.placeholder)}
       tabSize={field.tabsize}
@@ -149,7 +149,6 @@
       onchange={(doc) => {
         updateNodeData(field.nodeId, { [field.id]: doc });
       }}
-      debounceTime={100}
     />
   {/if}
 {/snippet}

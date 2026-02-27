@@ -239,7 +239,7 @@
     formatter = true,
     evaluator = false,
     onchange,
-    debounceTime = 0
+    debounceTime = 100
   }: CodeMirrorProps = $props();
 
   let editor: HTMLDivElement;
@@ -366,8 +366,12 @@
    */
   const updateListener: Extension = EditorView.updateListener.of((update) => {
     if (update.docChanged) {
-      document = update.state.doc.toString();
-      debounceTime > 0 ? _onchange() : onchange?.(document);
+      if (onchange) {
+        debounceTime > 0 ? _onchange() : onchange(update.state.doc.toString());
+      } else {
+        // if no onchange callback is provided, update the document prop directly
+        document = update.state.doc.toString();
+      }
     }
   });
 
@@ -424,9 +428,9 @@
 
 <svelte:window
   onkeydown={(event) => {
-    if ((event.ctrlKey || event.metaKey) && event.code === 'KeyZ') {
+    if ((event.ctrlKey || event.metaKey) && event.code === 'KeyU') {
       // update the document when undo/redo is triggered
-      setTimeout(() => setDocument(document), debounceTime);
+      setTimeout(() => setDocument(document), 0);
     }
   }}
 />
@@ -487,7 +491,7 @@
   <Modal title={title || languageName} maxWidth="80rem" class="nodrag nowheel cursor-auto" bind:this={largerView}>
     <CodeMirror
       {language}
-      bind:document
+      {document}
       placeholder={_placeholder}
       {tabSize}
       {lineLength}
@@ -501,7 +505,7 @@
       {copier}
       {resetter}
       {formatter}
-      onchange={() => replace(editorView, document)}
+      onchange={(doc) => replace(editorView, doc)}
     />
   </Modal>
 {/if}
@@ -516,7 +520,7 @@
   >
     <CodeMirror
       {language}
-      bind:document
+      {document}
       placeholder={_placeholder}
       {tabSize}
       {lineLength}
@@ -529,8 +533,8 @@
       {copier}
       {resetter}
       {formatter}
-      onchange={() => {
-        replace(editorView, document);
+      onchange={(doc) => {
+        replace(editorView, doc);
         _evaluate();
       }}
     />
@@ -548,8 +552,11 @@
           maxWidth="100%"
           enlarger={false}
           class="rounded-t-none border-t-0 pt-px"
-          bind:document={evalDoc}
-          onchange={_evaluate}
+          document={evalDoc}
+          onchange={(doc) => {
+            evalDoc = doc;
+            _evaluate();
+          }}
         />
       </div>
       <CodeMirror
