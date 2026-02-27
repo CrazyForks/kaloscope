@@ -151,10 +151,10 @@ def execute(node_id, node_data, context):
       minWidth="28rem"
       class={validatorClass}
       editorClass="nodrag nowheel"
-      onchange={() =>
-        updateNodeData(field.nodeId, {
-          [field.id]: { language: data.language, code: data.code }
-        })}
+      onchange={(doc) => {
+        updateNodeData(field.nodeId, { [field.id]: { language: data.language, code: doc } });
+      }}
+      debounceTime={100}
     />
   {/key}
 </fieldset>

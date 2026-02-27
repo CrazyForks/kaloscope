@@ -53,6 +53,8 @@
     evaluator: boolean;
     /** The callback function when the document changes. */
     onchange: (doc: string) => void;
+    /** The debounce time for the update listener in milliseconds. */
+    debounceTime: number;
   }>;
 
   /**
@@ -236,7 +238,8 @@
     resetter = true,
     formatter = true,
     evaluator = false,
-    onchange
+    onchange,
+    debounceTime = 0
   }: CodeMirrorProps = $props();
 
   let editor: HTMLDivElement;
@@ -250,9 +253,13 @@
   let evalName: string | null = $state(null);
   let evalDoc: string | undefined = $state(undefined);
 
-  /**
-   * Evaluate the document in the evaluator view.
-   */
+  // trigger the onchange callback with debounce
+  // svelte-ignore state_referenced_locally
+  const _onchange = debounce(() => {
+    onchange?.(editorView.state.doc.toString());
+  }, debounceTime);
+
+  // evaluate the document in the evaluator view
   const _evaluate = debounce(() => {
     if (!document || !evalDoc) {
       evalResult?.setDocument('');
@@ -360,14 +367,12 @@
   const updateListener: Extension = EditorView.updateListener.of((update) => {
     if (update.docChanged) {
       document = update.state.doc.toString();
-      onchange?.(document);
+      debounceTime > 0 ? _onchange() : onchange?.(document);
     }
   });
 
   /**
    * An extension to handle the tab key.
-   *
-   * https://codemirror.net/examples/tab/
    */
   const tabKeyHandler: Extension = $derived([keymap.of([indentWithTab]), indentUnit.of(' '.repeat(tabSize))]);
 
@@ -421,7 +426,7 @@
   onkeydown={(event) => {
     if ((event.ctrlKey || event.metaKey) && event.code === 'KeyZ') {
       // update the document when undo/redo is triggered
-      setTimeout(() => setDocument(document), 0);
+      setTimeout(() => setDocument(document), debounceTime);
     }
   }}
 />

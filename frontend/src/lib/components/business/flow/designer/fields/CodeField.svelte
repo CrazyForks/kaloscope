@@ -146,7 +146,10 @@
       maxWidth={field.width}
       class="{validatorClass} {_class}"
       editorClass="nodrag nowheel"
-      onchange={() => updateNodeData(field.nodeId, { [field.id]: data })}
+      onchange={(doc) => {
+        updateNodeData(field.nodeId, { [field.id]: doc });
+      }}
+      debounceTime={100}
     />
   {/if}
 {/snippet}
