@@ -186,6 +186,7 @@
   import { debounce } from '$lib/utils';
   import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
   import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+  import { json } from '@codemirror/lang-json';
   import {
     bracketMatching,
     defaultHighlightStyle,
@@ -566,6 +567,7 @@
         maxWidth="100%"
         enlarger={false}
         readOnly={true}
+        language={json()}
         bind:this={evalResult}
       />
     </div>

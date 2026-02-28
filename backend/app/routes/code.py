@@ -53,9 +53,7 @@ async def evaluate(_, body: EvalRequest) -> HTTPResponse:
             # if a document name is provided, use it as the key in the context
             context = {}
             for key in reversed(doc_name.split(".")):
-                context = {
-                    key: context if context else (json.try_loads(document) or document)
-                }
+                context = {key: context if context else document}
         else:
             # otherwise, parse the document as JSON and use it as the context
             context = json.loads(document)

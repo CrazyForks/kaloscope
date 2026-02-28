@@ -30,6 +30,7 @@ ENV = jinja2.Environment(
     lstrip_blocks=True,
     finalize=lambda x: x if x is not None else "",
 )
+ENV.policies["json.dumps_kwargs"] = {"ensure_ascii": False}
 
 # cache for compiled expressions
 JSONPATH_CACHE = {}
