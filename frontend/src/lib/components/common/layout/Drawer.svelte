@@ -34,7 +34,7 @@
   <div class="drawer-content flex items-start justify-center">
     {@render children()}
   </div>
-  <div class="drawer-side layer-1 sm:top-(--ks-navbar-h) sm:layer-4 sm:max-h-(--ks-lvh)">
+  <div class="drawer-side layer-1 overscroll-none sm:top-(--ks-navbar-h) sm:layer-4 sm:max-h-(--ks-lvh)">
     <label for="drawer" class="drawer-overlay"></label>
     {@render side()}
   </div>

@@ -194,7 +194,9 @@
 
 @utility btn-submit {
   --btn-color: var(--color-active);
-  --btn-fg: var(--color-neutral-content);
+  &:not(:disabled, [disabled], .btn-disabled) {
+    --btn-fg: var(--color-neutral-content);
+  }
 }
 
 @utility item-active {
