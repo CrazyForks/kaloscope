@@ -62,7 +62,7 @@ async def evaluate(_, body: EvalRequest) -> HTTPResponse:
 
         # render the template with the context
         result = render(body.template, context)
-        if json_result := json.try_loads(result):
+        if json_result := json.try_loads(result, with_comments=True):
             return text(json.pretty(json_result))
         return text(result)
     except Exception:

@@ -190,12 +190,14 @@
       ratio={coverRatio ?? '16/9'}
       class="group-hover:opacity-80 [&_div]:rounded-b-none {transClass}"
     />
-    <div class="absolute bottom-0 h-8 w-full bg-linear-to-t from-black/50 to-transparent">
-      <div class="flex h-full items-end justify-between gap-4 px-2 pb-1 text-xs text-white">
-        <span class="whitespace-nowrap">{rsrc.category}</span>
-        <span class="truncate" title={rsrc.brief}>{rsrc.brief}</span>
+    {#if rsrc.category || rsrc.brief}
+      <div class="absolute bottom-0 h-8 w-full bg-linear-to-t from-black/50 to-transparent">
+        <div class="flex h-full items-end justify-between gap-4 px-2 pb-1 text-xs text-white">
+          <span class="whitespace-nowrap">{rsrc.category}</span>
+          <span class="truncate" title={rsrc.brief}>{rsrc.brief}</span>
+        </div>
       </div>
-    </div>
+    {/if}
   </div>
   <div class="flex flex-col gap-2 p-2">
     <!-- svelte-ignore a11y_click_events_have_key_events -->

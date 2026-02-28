@@ -209,34 +209,6 @@
   }
 
   /**
-   * Publish the flow graph.
-   */
-  function publish() {
-    if (publishing || !publishable) {
-      return;
-    }
-    // save and publish the flow graph
-    const data = { nodes, edges };
-    const startTime = new Date().getTime();
-    publishing = true;
-    api
-      .post(`flow/graph/${graph?.id}/publish`, { json: data })
-      .json<Resp<FlowGraph>>()
-      .then((resp) => {
-        const timeout = Math.max(0, 450 - (new Date().getTime() - startTime));
-        setTimeout(() => {
-          graph = resp.data;
-          jsonGraph = JSON.stringify(data);
-          savedHistoryId = historyId;
-          publishing = false;
-        }, timeout);
-      })
-      .catch(() => {
-        publishing = false;
-      });
-  }
-
-  /**
    * Function to be called before the flow graph is published.
    */
   function prepublish() {
@@ -253,11 +225,39 @@
       }
     }
     // confirm the publishing action
+    publishing = true;
     confirm({
       icon: icons.directionUpRight,
       title: $_('flow.publish'),
-      onconfirm: () => publish()
+      onconfirm: () => publish(),
+      oncancel: () => {
+        publishing = false;
+      }
     });
+  }
+
+  /**
+   * Publish the flow graph.
+   */
+  function publish() {
+    // save and publish the flow graph
+    const data = { nodes, edges };
+    const startTime = new Date().getTime();
+    api
+      .post(`flow/graph/${graph?.id}/publish`, { json: data })
+      .json<Resp<FlowGraph>>()
+      .then((resp) => {
+        const timeout = Math.max(0, 450 - (new Date().getTime() - startTime));
+        setTimeout(() => {
+          graph = resp.data;
+          jsonGraph = JSON.stringify(data);
+          savedHistoryId = historyId;
+          publishing = false;
+        }, timeout);
+      })
+      .catch(() => {
+        publishing = false;
+      });
   }
 
   let leaving = false;
