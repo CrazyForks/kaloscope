@@ -1,5 +1,14 @@
 <script lang="ts" module>
+  import { goto } from '$app/navigation';
   import type { Favorite, IndexerConfig, Page, Resource, Resp, ViewMode } from '$lib/types';
+
+  type SearchHitProps = {
+    indexerId?: string | number;
+    indexerConfig: IndexerConfig;
+    mode: ViewMode;
+    rsrc: Resource;
+    coverRatio?: string | null;
+  };
 
   /**
    * Calculate the height for a cover image based on the given aspect ratio.
@@ -11,6 +20,17 @@
     const r = Number(w) / Number(h);
     if (Number.isNaN(r) || r >= 1) return '3.5rem';
     return `${(3.5 / r).toFixed(4)}rem`;
+  }
+
+  /**
+   * Navigate to the global search page with the given title as the keyword.
+   *
+   * @param title - The title to search for.
+   */
+  function globalSearch(title: string | null | undefined) {
+    if (title) {
+      goto(`/websearch/global?restore=false&keyword=${encodeURIComponent(title)}`);
+    }
   }
 
   /**
@@ -47,19 +67,11 @@
 </script>
 
 <script lang="ts">
-  import { goto } from '$app/navigation';
   import { api } from '$lib/api';
   import { Button, Cell, Image, Uploader, downloadPrompt } from '$lib/components';
   import { _ } from '$lib/i18n';
   import { icons } from '$lib/icons';
 
-  type SearchHitProps = {
-    indexerId?: string | number;
-    indexerConfig: IndexerConfig;
-    mode: ViewMode;
-    rsrc: Resource;
-    coverRatio?: string | null;
-  };
   let { indexerId, indexerConfig, mode, rsrc, coverRatio }: SearchHitProps = $props();
   let detailsConfig = $derived(indexerConfig.details);
 
@@ -165,6 +177,11 @@
         icon: icons.download,
         text: $_('action.download', ''),
         onclick: () => downloadPrompt(rsrc.link)
+      },
+      {
+        icon: icons.search,
+        text: $_('action.search', ''),
+        onclick: () => globalSearch(rsrc.title)
       }
     ]}
   />
@@ -176,6 +193,9 @@
   {@const btnClass = 'hover:bg-base-300 hover:text-base-content border-0 bg-black/60 text-white'}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div tabindex="0" role="button" class="group relative {pointerClass}" onclick={() => gotoDetails(rsrc)}>
+    {#if rsrc.rating}
+      <span class="absolute top-0 left-0 z-1 px-1 text-white opacity-80 text-stroke">{rsrc.rating}</span>
+    {/if}
     <div class="absolute top-0 right-0 z-1 flex gap-2 p-1 opacity-0 group-hover:opacity-100 {transClass}">
       {#if detailsConfig && rsrc.favorite !== undefined}
         <Button
@@ -197,6 +217,14 @@
           }}
         />
       {/if}
+      <Button
+        icon={icons.search}
+        class={btnClass}
+        onclick={(event) => {
+          event.stopPropagation();
+          globalSearch(rsrc.title);
+        }}
+      />
     </div>
     <Image
       src={rsrc.cover}

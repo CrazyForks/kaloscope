@@ -76,9 +76,16 @@
       urlparams.set({ ...$urlparams, [fromUrl.pathname]: fromUrl.search });
     }
     // restore the URL parameters for the next page
-    let searchParams = $urlparams[toUrl.pathname];
-    if (searchParams && searchParams !== toUrl.search) {
-      toUrl.search = searchParams;
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const toSearchParams = new URLSearchParams(toUrl.search);
+    if (toSearchParams.get('restore') === 'false') {
+      toSearchParams.delete('restore');
+      toUrl.search = toSearchParams.toString();
+    } else {
+      let searchParams = $urlparams[toUrl.pathname];
+      if (searchParams && searchParams !== toUrl.search) {
+        toUrl.search = searchParams;
+      }
     }
   });
 
