@@ -42,6 +42,7 @@
         const config = (await api.get(`flow/indexer/${id}/config`).json<Resp<IndexerConfig>>()).data;
         const { login } = config.auth ?? {};
         const { display } = config.board ?? {};
+
         // check if login is required
         if (login?.required) {
           const resp = await api.get(`flow/indexer/${id}/auth`).json<Resp<IndexerAuth>>();
@@ -49,6 +50,7 @@
             return;
           }
         }
+
         // create a new board object
         const modes = display?.view_modes ?? [];
         const viewModes = (Array.isArray(modes) && modes.length > 0 ? modes : ['table']) as ViewModes;
@@ -66,6 +68,7 @@
         };
         boards[id] = board;
       }
+
       // set the loading state
       boards[id].loading = false;
       setTimeout(() => {
@@ -73,11 +76,19 @@
           boards[id].loading = true;
         }
       }, 500);
+
       // load the resources
       const resp = await api
         .post(`flow/graph/${id}/execute`, { json: { $start: 'board_start' } })
         .json<Resp<Resources[]>>();
       board.resources = resp.data || [];
+
+      // set the active tab based on the calendar config
+      const { calendar } = board.config.board ?? {};
+      if (calendar?.week && board.resources.length === 7) {
+        const weekStart = calendar.week_start ?? 0;
+        board.activeId = (new Date().getDay() - weekStart + 7) % 7;
+      }
     } catch (error) {
       console.error(error);
       board.resources = [];

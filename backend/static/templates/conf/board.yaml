@@ -3,3 +3,7 @@ display:
     - table
     - grid
   cover_ratio: 16/9
+
+calendar:
+  week: false
+  week_start: 0

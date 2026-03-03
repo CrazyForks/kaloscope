@@ -496,6 +496,10 @@ export type IndexerConfig = Optional<{
       view_modes: string[];
       cover_ratio: string;
     }>;
+    calendar: Optional<{
+      week: boolean;
+      week_start: number;
+    }>;
   }>;
 
   details: Optional<{
