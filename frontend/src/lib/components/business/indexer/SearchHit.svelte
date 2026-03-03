@@ -9,6 +9,7 @@
     mode: ViewMode;
     rsrc: Resource;
     coverRatio?: string | null;
+    searchButton?: boolean;
   };
 
   /**
@@ -72,7 +73,7 @@
   import { _ } from '$lib/i18n';
   import { icons } from '$lib/icons';
 
-  let { indexerId, indexerConfig, mode, rsrc, coverRatio }: SearchHitProps = $props();
+  let { indexerId, indexerConfig, mode, rsrc, coverRatio, searchButton }: SearchHitProps = $props();
   let detailsConfig = $derived(indexerConfig.details);
 
   /**
@@ -187,6 +188,7 @@
         onclick: () => downloadPrompt(rsrc.link)
       },
       {
+        condition: !!searchButton,
         icon: icons.search,
         text: $_('action.search', ''),
         onclick: () => globalSearch(rsrc.title)
@@ -223,14 +225,16 @@
           }}
         />
       {/if}
-      <Button
-        icon={icons.search}
-        class={btnClass}
-        onclick={(event) => {
-          event.stopPropagation();
-          globalSearch(rsrc.title);
-        }}
-      />
+      {#if searchButton}
+        <Button
+          icon={icons.search}
+          class={btnClass}
+          onclick={(event) => {
+            event.stopPropagation();
+            globalSearch(rsrc.title);
+          }}
+        />
+      {/if}
     </div>
     <Image
       src={rsrc.cover}

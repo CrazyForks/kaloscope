@@ -142,6 +142,7 @@
                   <SearchHit
                     mode="table"
                     {rsrc}
+                    searchButton
                     indexerId={board.id}
                     indexerConfig={board.config}
                     coverRatio={board.coverRatio}
@@ -153,6 +154,7 @@
                   <SearchHit
                     mode="grid"
                     {rsrc}
+                    searchButton
                     indexerId={board.id}
                     indexerConfig={board.config}
                     coverRatio={board.coverRatio}
