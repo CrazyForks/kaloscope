@@ -26,7 +26,7 @@ dependencies = [
   "opencc (>=1.2.0,<2.0.0)",
   "torrentool (>=1.2.0,<2.0.0)",
   "gitpython (>=3.1.46,<4.0.0)",
-  "pytz (>=2025.2,<2026.0)"
+  "pytz (>=2026.1.post1,<2027.0)"
 ]
 
 [tool.poetry]
@@ -34,7 +34,7 @@ package-mode = false
 packages = [{ include = "app" }]
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.15.2"
+ruff = "^0.15.4"
 pytest = "^9.0.2"
 pre-commit = "^4.5.1"
 commitizen = "^4.13.9"
