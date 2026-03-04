@@ -199,6 +199,13 @@
   }
 }
 
+@utility menu-glass {
+  @apply glass bg-active text-neutral-content;
+  background-image:
+    linear-gradient(135deg, oklch(100% 0 0 / 30%) 0%, oklch(0% 0 0 / 0%) 100%),
+    linear-gradient(100deg, oklch(100% 0 0 / 5%) 18%, oklch(0% 0 0 / 0%) 18%);
+}
+
 @utility item-active {
   @apply bg-active/80 text-neutral-content;
   box-shadow:
