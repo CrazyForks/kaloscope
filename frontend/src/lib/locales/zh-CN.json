@@ -84,7 +84,6 @@
     },
     "graph_category": {
       "indexer": "索引器",
-      "download": "下载事件",
       "ingest": "入库事件",
       "schedule": "定时任务"
     },
@@ -380,8 +379,6 @@
         "search_end": "搜索 API",
         "details_start": "详情 API",
         "details_end": "详情 API",
-        "download_start": "开始",
-        "download_end": "结束",
         "ingest_start": "开始",
         "movie": "电影",
         "tv_show": "电视剧",

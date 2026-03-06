@@ -208,7 +208,6 @@ export type Downloader = {
   version: string | null;
   priority: number;
   status: 'up' | 'down' | 'unknown';
-  triggers: FlowTrigger[];
 };
 
 /**

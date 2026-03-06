@@ -25,7 +25,6 @@ from app.models.base import Pageable, RequestFilesMixin, TortoiseModel
 # -------------------- Enumerations -------------------- #
 class GraphCategory(StrEnum):
     INDEXER = auto()
-    DOWNLOAD = auto()
     INGEST = auto()
     SCHEDULE = auto()
 

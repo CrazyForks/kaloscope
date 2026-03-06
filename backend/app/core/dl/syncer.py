@@ -11,8 +11,6 @@ from tortoise import timezone
 
 from app.core.dl.adapter import load_config
 from app.models.download import Downloader, DownloadState, DownloadTask
-from app.models.flow import GraphCategory
-from app.services.flow import FlowTriggerService
 
 
 @dataclass(frozen=True)
@@ -122,7 +120,7 @@ class DLSyncer:
                 )
                 for downloader_id, tasks in groupby(all, key=lambda t: t.downloader_id):
                     downloader = await Downloader.get(id=downloader_id)
-                    await sync_tasks(self._app, downloader, list(tasks))
+                    await sync_tasks(downloader, list(tasks))
 
                 await asyncio.sleep(1)
             except asyncio.CancelledError:
@@ -134,11 +132,10 @@ class DLSyncer:
                 self._last_sync = datetime.now()
 
 
-async def sync_tasks(app: Sanic, downloader: Downloader, tasks: list[DownloadTask]):
+async def sync_tasks(downloader: Downloader, tasks: list[DownloadTask]):
     """Synchronize the download tasks with the specified downloader.
 
     Args:
-        app: The Sanic application.
         downloader: The downloader.
         tasks: The download tasks.
     """
@@ -212,31 +209,3 @@ async def sync_tasks(app: Sanic, downloader: Downloader, tasks: list[DownloadTas
             completed_size=completed_size,
             completed_at=completed_at,
         )
-        if state == DownloadState.COMPLETED:
-            app.add_task(fire_triggers(downloader, task.id))
-
-
-async def fire_triggers(downloader: Downloader, task_id: int):
-    """Fire the flow triggers for the completed download task.
-
-    Args:
-        downloader: The downloader.
-        task_id: The download task ID.
-    """
-    # get the download task
-    task = await DownloadTask.get(id=task_id)
-    # fire the flow triggers
-    await FlowTriggerService.fire(
-        GraphCategory.DOWNLOAD,
-        task.downloader_id,
-        bootparams={
-            "downloader_id": task.downloader_id,
-            "downloader_name": downloader.name,
-            "task_id": task.id,
-            "task_dir": task.dir,
-            "task_name": task.name,
-            "info_hash": task.info_hash,
-            "info_hash_v2": task.info_hash_v2,
-            "magnet_link": task.magnet_link,
-        },
-    )

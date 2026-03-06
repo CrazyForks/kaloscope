@@ -18,7 +18,6 @@ from tortoise.fields import (
 
 from app.core.renderer import duration
 from app.models.base import IDs, Pageable, RequestFilesMixin, TortoiseModel
-from app.models.flow import GraphRef
 from app.utils.disk import format_bytes
 
 
@@ -119,7 +118,6 @@ class DownloaderUpsert(BaseModel):
     id: PositiveInt | None = None
     preset: str | None = Field(max_length=16, default=None)
     config: str
-    triggers: list[GraphRef] | None = None
 
 
 class DownloadQuery(Pageable):

@@ -165,8 +165,6 @@
       {@render term($_('download.downloader.port'), downloader.port)}
       <div class="divider my-0"></div>
       {@render term($_('model.field.status'), $_(`status.${downloader.status}`), downloader.status)}
-      <div class="divider my-0"></div>
-      {@render term($_('flow.trigger.count'), downloader.triggers.length)}
     </dl>
   {/snippet}
   {#snippet tail()}

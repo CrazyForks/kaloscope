@@ -74,11 +74,6 @@ export const GraphCategory = createEnum({
     icon: icons.globeSearch,
     iconColor: null
   },
-  download: {
-    label: 'enum.graph_category.download',
-    icon: icons.download,
-    iconColor: null
-  },
   ingest: {
     label: 'enum.graph_category.ingest',
     icon: icons.library,

@@ -20,9 +20,7 @@ from app.models.download import (
     DownloadStats,
     DownloadTask,
 )
-from app.models.flow import FlowTrigger, GraphCategory
 from app.services.base import BaseService
-from app.services.flow import FlowTriggerService
 from app.utils.bittorrent import (
     decode_torrent,
     standardize_magnet,
@@ -112,23 +110,7 @@ class DownloaderService(BaseService[Downloader], model=Downloader):
             )
             await downloader.save()
 
-        # bind the flow triggers to the downloader
-        await FlowTriggerService.bind_triggers(
-            GraphCategory.DOWNLOAD, downloader.id, obj.triggers
-        )
-
         return downloader
-
-    @classmethod
-    @atomic()
-    async def delete(cls, id: int):
-        """Delete a downloader.
-
-        Args:
-            id: The downloader ID.
-        """
-        await Downloader.filter(id=id).delete()
-        await FlowTrigger.filter(category=GraphCategory.DOWNLOAD, rel_id=id).delete()
 
 
 class DownloadDirService(BaseService[DownloadDir], model=DownloadDir):

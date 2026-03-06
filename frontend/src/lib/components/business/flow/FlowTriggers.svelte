@@ -71,7 +71,7 @@
   });
 </script>
 
-<div class="overflow-hidden rounded-box border shadow-md {_class}">
+<div class="overflow-hidden rounded-box border {_class}">
   <div
     class="flex items-center justify-between bg-gradient px-3 py-1"
     style="border-bottom: 1px inset var(--color-border)"

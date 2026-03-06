@@ -84,7 +84,6 @@
     },
     "graph_category": {
       "indexer": "Indexer",
-      "download": "Download",
       "ingest": "Ingest",
       "schedule": "Schedule"
     },
@@ -380,8 +379,6 @@
         "search_end": "Search API",
         "details_start": "Details API",
         "details_end": "Details API",
-        "download_start": "Start",
-        "download_end": "End",
         "ingest_start": "Start",
         "movie": "Movie",
         "tv_show": "TV Show",

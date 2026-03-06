@@ -19,9 +19,7 @@ from app.models.download import (
     DownloadQuery,
     DownloadTask,
 )
-from app.models.flow import GraphCategory
 from app.services.download import DownloaderService, DownloadTaskService
-from app.services.flow import FlowTriggerService
 from app.utils.disk import disk_usage
 
 # subroutes for all download related operations
@@ -33,10 +31,6 @@ async def list_downloaders(_) -> HTTPResponse:
     """List the downloaders."""
     downloaders = await DownloaderService.dump_list(await Downloader.all())
     for downloader in downloaders:
-        # attach the list of flow triggers
-        downloader["triggers"] = await FlowTriggerService.get_triggers(
-            GraphCategory.DOWNLOAD, downloader["id"]
-        )
         # check if the downloader is up or down
         adapter = load_config(downloader["config"])
         if not adapter.methods.get("version"):
@@ -75,13 +69,7 @@ async def upsert_downloader(_, body: DownloaderUpsert) -> HTTPResponse:
 @validate(json=IDs)
 async def delete_downloaders(_, body: IDs) -> HTTPResponse:
     """Delete the downloaders."""
-    for id in body.ids:
-        try:
-            await DownloaderService.delete(int(id))
-        except Exception as e:
-            if len(body.ids) == 1:
-                raise e
-            logger.error("Failed to delete the downloader: %s", id, exc_info=True)
+    await Downloader.filter(id__in=body.ids).delete()
     return empty()
 
 

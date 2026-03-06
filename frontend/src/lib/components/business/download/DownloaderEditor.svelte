@@ -1,12 +1,11 @@
 <script lang="ts" module>
-  import type { Downloader, FlowTrigger, Resp } from '$lib/types';
+  import type { Downloader, Resp } from '$lib/types';
 
   type DownloaderEditorProps = Partial<{
     id: number;
     preset: string;
     exists: string[];
     config: string;
-    triggers: FlowTrigger[];
     onsave: (result: Downloader) => void;
   }>;
 
@@ -49,14 +48,14 @@ methods:
 <script lang="ts">
   import { enhance } from '$app/forms';
   import { api } from '$lib/api';
-  import { CodeMirror, FlowTriggers, Label, Modal, confirm } from '$lib/components';
+  import { CodeMirror, Label, Modal, confirm } from '$lib/components';
   import { createLoading } from '$lib/helpers';
   import { _ } from '$lib/i18n';
   import { icons } from '$lib/icons';
   import { yaml } from '@codemirror/lang-yaml';
   import { onMount } from 'svelte';
 
-  let { id, preset = '', exists = [], config = CONFIG_TEMPLATE, triggers, onsave }: DownloaderEditorProps = $props();
+  let { id, preset = '', exists = [], config = CONFIG_TEMPLATE, onsave }: DownloaderEditorProps = $props();
   let codeMirror: CodeMirror;
 
   // the modal dialog instance
@@ -78,7 +77,6 @@ methods:
     const jsonData: Record<string, any> = Object.fromEntries(data);
     jsonData.id = id;
     jsonData.config = config;
-    jsonData.triggers = triggers;
     api
       .post('download/manager/upsert', { json: jsonData })
       .json<Resp<Downloader>>()
@@ -158,7 +156,6 @@ methods:
         bind:this={codeMirror}
         bind:document={config}
       />
-      <FlowTriggers class="mt-4" category="download" {triggers} onchange={(newTriggers) => (triggers = newTriggers)} />
     </fieldset>
     <div class="modal-action">
       <button type="button" class="btn" onclick={() => modal.close()}>

@@ -210,7 +210,7 @@
   @apply glass bg-emphasis text-neutral-content;
   background-image:
     linear-gradient(135deg, oklch(100% 0 0 / 30%) 0%, oklch(0% 0 0 / 0%) 100%),
-    linear-gradient(100deg, oklch(100% 0 0 / 5%) 18%, oklch(0% 0 0 / 0%) 18%);
+    linear-gradient(100deg, oklch(100% 0 0 / 5%) 17%, oklch(0% 0 0 / 0%) 17%);
 }
 
 @utility text-stroke {
