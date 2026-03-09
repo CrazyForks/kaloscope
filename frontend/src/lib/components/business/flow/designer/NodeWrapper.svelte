@@ -3,6 +3,7 @@
   import { icons } from '$lib/icons';
   import type { NodeSchema } from '$lib/types';
   import { useEdges, useNodes, useStore, type NodeProps } from '@xyflow/svelte';
+  import { v7 as uuidv7 } from 'uuid';
   import NodeHandle from './NodeHandle.svelte';
   import * as _fields from './fields';
 
@@ -38,6 +39,29 @@
   );
 
   /**
+   * Copy the node with a new ID and offset position.
+   *
+   * @param event - The click event.
+   */
+  function copyNode(event: MouseEvent) {
+    event.stopPropagation();
+    const node = nodes.current.find((node) => node.id === id);
+    if (!node) {
+      return;
+    }
+    nodes.current = [
+      ...nodes.current,
+      {
+        ...node,
+        id: uuidv7(),
+        position: { x: node.position.x + 30, y: node.position.y + 30 },
+        data: $state.snapshot(node.data),
+        selected: false
+      }
+    ];
+  }
+
+  /**
    * Delete the node and all connected edges.
    *
    * @param event - The click event.
@@ -51,10 +75,19 @@
 
 <div class="group relative w-max min-w-80 rounded-box transition-all {shadowClass} {borderClass}">
   <div class="absolute z-1 size-full bg-transparent {interactive ? 'hidden' : ''}"></div>
-  <div class="flex items-center gap-2 rounded-t-box p-2 text-lg font-medium {titleClass}">
+  <div class="flex items-center gap-2 rounded-t-box p-2 {titleClass}">
     <iconify-icon icon={schema.icon in icons ? icons[schema.icon] : icons.box3d} width="1.5rem"></iconify-icon>
-    {$_(`flow.node.name.${schema.node_type}`, { default: schema.name })}
-    <button class="btn ml-auto btn-square btn-subtle btn-sm" aria-label="Delete" onclick={(event) => deleteNode(event)}>
+    <span class="mr-auto text-lg font-medium">
+      {$_(`flow.node.name.${schema.node_type}`, { default: schema.name })}
+    </span>
+    <!-- copy button -->
+    {#if schema.group !== 'start'}
+      <button class="btn btn-square btn-subtle btn-sm" aria-label="Copy" onclick={(event) => copyNode(event)}>
+        <iconify-icon icon={icons.documentCopy} width="1.25rem"></iconify-icon>
+      </button>
+    {/if}
+    <!-- delete button -->
+    <button class="btn btn-square btn-subtle btn-sm" aria-label="Delete" onclick={(event) => deleteNode(event)}>
       <iconify-icon icon={icons.delete} width="1.25rem"></iconify-icon>
     </button>
   </div>
