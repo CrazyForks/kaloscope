@@ -42,7 +42,7 @@ class TVShowEventFilter(EventFilter):
         Returns:
             The list of hierarchy levels.
         """
-        return [3]
+        return [1, 2, 3]
 
 
 _FILTERS[LibType.TV_SHOW] = TVShowEventFilter()

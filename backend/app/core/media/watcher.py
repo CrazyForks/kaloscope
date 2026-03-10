@@ -8,6 +8,7 @@ from queue import Queue
 
 from sanic import Sanic
 from sanic.log import logger
+from send2trash import send2trash
 from tortoise.transactions import in_transaction
 from watchdog.events import (
     EVENT_TYPE_CREATED,
@@ -386,7 +387,14 @@ async def _handle_deleted(event: MediaEvent):
         await MediaItem.filter(lib_id=lib_id, meta=src_path).update(meta=None)
     else:
         # delete the media item
-        await MediaItem.filter(lib_id=lib_id, path=src_path).delete()
+        item = await MediaItem.filter(lib_id=lib_id, path=src_path).get_or_none()
+        if item is not None:
+            await item.delete()
+            # delete the NFO file if it exists
+            if item.meta:
+                meta_path = Path(item.meta)
+                if meta_path.exists() and meta_path.is_file():
+                    send2trash(meta_path)
 
 
 async def _handle_created(event: MediaEvent) -> MediaItem | None:
@@ -413,7 +421,7 @@ async def _handle_moved(event: MediaEvent) -> MediaItem | None:
     if not dest_path.exists():
         return None
 
-    # parse the NFO file if it exists
+    # check if the destination path is an NFO file
     if NFOParser.is_nfo(dest_path):
         await _parse_nfo(event.lib, dest_path)
         return None

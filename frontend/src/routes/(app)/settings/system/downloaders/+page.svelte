@@ -71,7 +71,7 @@
   uniqueKey="id"
   class="pull-to-refresh"
   gridClass="grid-cols-sparse"
-  itemClass="rounded-field border shadow-sm hover:shadow-lg"
+  itemClass="z-1 rounded-field border shadow-sm hover:shadow-lg"
   tailClass="rounded-field border-1 border-dashed duration-300 opacity-20 hover:opacity-50 hover:shadow-lg"
   ondragged={(data) => {
     downloaders = data;
