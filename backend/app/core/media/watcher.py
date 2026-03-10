@@ -160,12 +160,15 @@ class LibWatcher:
             events.put(event)
         return events
 
-    async def _scan_directory(self, lib: MediaLib, events: Queue):
+    async def _scan_directory(
+        self, lib: MediaLib, events: Queue, *, initialize: bool = False
+    ):
         """Scan the directory for existing files and create events.
 
         Args:
             lib: The media library instance.
             events: The queue to store media events.
+            initialize: Whether this is the first time to scan the directory.
         """
 
         async def _create_media_event(sys_event: FileSystemEvent):
@@ -184,37 +187,71 @@ class LibWatcher:
             media_event.lib = lib
             events.put(media_event)
 
+        if not initialize:
+            # get all existing media items for this lib
+            items = await MediaItem.filter(lib_id=lib.id).all()
+            path_items = {item.path: item for item in items}
+            meta_mtimes = {
+                item.meta_path: item.meta_mtime for item in items if item.meta_path
+            }
+            # track which item ids still have their media file on disk
+            existing_ids: list[int] = []
+
         nfo_events = []
         filter = get_filter(lib.lib_type)
-        # find all files in the library directory that match the filter
         for depth in filter.hierarchies():
             pattern = "/".join("*" * depth) + ".*"
             for file in Path(lib.dir).glob(pattern):
                 if not file.is_file():
                     continue
+
                 src_path = str(file.resolve())
                 sys_event = filter.do_filter(
                     FileCreatedEvent(src_path), base_path=lib.dir
                 )
-                if sys_event is not None:
-                    if NFOParser.is_nfo(src_path):
+                if sys_event is None:
+                    continue
+
+                if NFOParser.is_nfo(src_path):
+                    # handle NFO file
+                    if initialize or (meta_mtime := meta_mtimes.get(src_path)) is None:
                         # delay the NFO file event creation
                         nfo_events.append(sys_event)
                     else:
-                        # create a media event for the file
+                        # check if mtime has been updated
+                        mtime = datetime.fromtimestamp(file.stat().st_mtime, tz=UTC)
+                        if mtime > meta_mtime:
+                            nfo_events.append(FileModifiedEvent(src_path))
+                else:
+                    # handle media file
+                    if initialize or (media_item := path_items.get(src_path)) is None:
                         await _create_media_event(sys_event)
+                    else:
+                        existing_ids.append(media_item.id)
+                        if media_item.meta_path:
+                            # check if the NFO file has been deleted
+                            meta_path = Path(media_item.meta_path)
+                            if not meta_path.exists():
+                                nfo_events.append(
+                                    FileDeletedEvent(media_item.meta_path)
+                                )
 
         # create media events for NFO files
-        if nfo_events:
-            for sys_event in nfo_events:
-                await _create_media_event(sys_event)
+        for nfo_event in nfo_events:
+            await _create_media_event(nfo_event)
+
+        # create deletion events for missing media items
+        if not initialize:
+            for item in items:
+                if item.id not in set(existing_ids):
+                    await _create_media_event(FileDeletedEvent(item.path))
 
     async def add_observer(self, lib: MediaLib, *, initialize: bool = False):
         """Add a directory observer to monitor the specified path.
 
         Args:
             lib: The media library that will be monitored.
-            initialize: Whether to scan the directory for existing files.
+            initialize: Whether this is the first time to initialize the observer.
         """
         if self._watcher_lock.acquire(block=False):
             try:
@@ -230,8 +267,9 @@ class LibWatcher:
                     # create a task to consume events
                     self._app.add_task(self._event_consumer(events), name=encrypt(path))
                     # scan the directory for existing files
-                    if initialize:
-                        self._app.add_task(self._scan_directory(lib, events))
+                    self._app.add_task(
+                        self._scan_directory(lib, events, initialize=initialize)
+                    )
                     self._observing_paths.append(path)
             finally:
                 self._watcher_lock.release()
