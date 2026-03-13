@@ -20,7 +20,7 @@ from app.models.flow import GraphRef
 from app.utils.disk import is_directory
 
 
-# -------------------- Enumerations -------------------- #
+# -------------------- Enumerations --------------------
 class LibType(StrEnum):
     MOVIE = auto()
     TV_SHOW = auto()
@@ -44,7 +44,7 @@ class Language(StrEnum):
     ZH_CN = "zh-CN"
 
 
-# -------------------- ORM Models -------------------- #
+# -------------------- ORM Models --------------------
 class MediaLib(TortoiseModel):
     lib_type = CharEnumField(max_length=16, enum_type=LibType)
     name = CharField(max_length=64, unique=True)
@@ -112,7 +112,7 @@ class MediaEvent(TortoiseModel):
         ordering = ["created_at"]
 
 
-# -------------------- Pydantic Models -------------------- #
+# -------------------- Pydantic Models --------------------
 class MediaLibUpsert(BaseModel):
     id: PositiveInt | None = None
     lib_type: LibType | None = None

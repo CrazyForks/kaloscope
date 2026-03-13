@@ -21,7 +21,7 @@ from app.models.base import IDs, Pageable, RequestFilesMixin, TortoiseModel
 from app.utils.disk import format_bytes
 
 
-# -------------------- Enumerations -------------------- #
+# -------------------- Enumerations --------------------
 class DownloadState(StrEnum):
     DOWNLOADING = auto()
     PAUSED = auto()
@@ -29,7 +29,7 @@ class DownloadState(StrEnum):
     ERROR = auto()
 
 
-# -------------------- ORM Models -------------------- #
+# -------------------- ORM Models --------------------
 class Downloader(TortoiseModel):
     preset = CharField(max_length=16, unique=True, null=True)
     config = TextField()
@@ -113,7 +113,7 @@ class DownloadTask(TortoiseModel):
         computed = ("ratio", "estimate")
 
 
-# -------------------- Pydantic Models -------------------- #
+# -------------------- Pydantic Models --------------------
 class DownloaderUpsert(BaseModel):
     id: PositiveInt | None = None
     preset: str | None = Field(max_length=16, default=None)

@@ -4,7 +4,7 @@ from tortoise.fields import BooleanField, CharField, IntField, TextField
 from app.models.base import Pageable, TortoiseModel
 
 
-# -------------------- ORM Models -------------------- #
+# -------------------- ORM Models --------------------
 class GlobalVariable(TortoiseModel):
     key = CharField(max_length=64, unique=True)
     value = CharField(max_length=4096)
@@ -28,7 +28,7 @@ class GlobalCookie(TortoiseModel):
         unique_together = (("name", "domain", "path"),)
 
 
-# -------------------- Pydantic Models -------------------- #
+# -------------------- Pydantic Models --------------------
 class VariableQuery(Pageable):
     key: str | None = None
 

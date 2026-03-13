@@ -1,4 +1,4 @@
-"""Unit tests for crypto utility functions."""
+"""Unit tests for the crypto utility."""
 
 import pytest
 

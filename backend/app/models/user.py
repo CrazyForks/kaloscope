@@ -17,13 +17,13 @@ from app.models.base import Pageable, RequestFilesMixin, TortoiseModel
 from app.models.flow import FlowGraph
 
 
-# -------------------- Enumerations -------------------- #
+# -------------------- Enumerations --------------------
 class UserRole(StrEnum):
     USER = auto()
     ADMIN = auto()
 
 
-# -------------------- ORM Models -------------------- #
+# -------------------- ORM Models --------------------
 class User(TortoiseModel):
     username = CharField(max_length=64, unique=True)
     password = CharField(max_length=64)
@@ -85,7 +85,7 @@ class UserHistory(TortoiseModel):
         exclude = ("user",)
 
 
-# -------------------- Pydantic Models -------------------- #
+# -------------------- Pydantic Models --------------------
 class UserInfo(BaseModel):
     id: PositiveInt
     login_id: str

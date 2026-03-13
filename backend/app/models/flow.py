@@ -22,7 +22,7 @@ from tortoise.fields import (
 from app.models.base import Pageable, RequestFilesMixin, TortoiseModel
 
 
-# -------------------- Enumerations -------------------- #
+# -------------------- Enumerations --------------------
 class GraphCategory(StrEnum):
     INDEXER = auto()
     INGEST = auto()
@@ -55,7 +55,7 @@ class IntervalUnit(StrEnum):
     SECONDS = "seconds"
 
 
-# -------------------- ORM Models -------------------- #
+# -------------------- ORM Models --------------------
 class FlowRepository(TortoiseModel):
     repo_name = CharField(max_length=255, unique=True)
     repo_url = CharField(max_length=255)
@@ -277,7 +277,7 @@ class FlowFootprint(TortoiseModel):
         table = "flow_footprint"
 
 
-# -------------------- Pydantic Models -------------------- #
+# -------------------- Pydantic Models --------------------
 class RepositoryAdd(BaseModel):
     repo: str = Field(min_length=1, max_length=255)
 
