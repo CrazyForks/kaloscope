@@ -11,6 +11,7 @@ from app.core.media.handlers.base import (
 from app.models.media import LibType, MediaLib, NFOType
 from app.services.media import MediaItemService
 from app.utils.extractor import extract_title, extract_year
+from app.utils.xml import get_decimal, get_integer, get_text
 
 
 class MovieMediaHandler(MediaHandler):
@@ -52,12 +53,12 @@ class MovieMediaHandler(MediaHandler):
         """
         meta = MediaMeta()
         movie = data.getroot()
-        meta.title = self.get_text(movie, "title")
-        meta.year = self.get_integer(movie, "year")
+        meta.title = get_text(movie, "title")
+        meta.year = get_integer(movie, "year")
         art = movie.find("art")
-        meta.cover = self.get_text(art, "poster")
-        meta.backdrop = self.get_text(art, "fanart")
-        meta.rating = self.get_decimal(movie, "rating")
+        meta.cover = get_text(art, "poster")
+        meta.backdrop = get_text(art, "fanart")
+        meta.rating = get_decimal(movie, "rating")
         return meta
 
     async def gen_items(self, lib: MediaLib, path: Path) -> list[MetaKeywords]:
