@@ -26,8 +26,7 @@ NFO_MIME_TYPE = "text/x-nfo"
 class MetaKeywords:
     """The keywords for a media item parsed from the file path."""
 
-    item_path: Path = field(kw_only=False)
-    item_name: str = field(kw_only=False)
+    path: Path = field(kw_only=False)
     nfo_path: Path | None = None
     nfo_type: NFOType | None = None
     language: Language | None = None
@@ -35,6 +34,19 @@ class MetaKeywords:
     year: int | None = None
     season: int | None = None
     episode: int | None = None
+
+    @property
+    def item_path(self) -> str:
+        return str(self.path.resolve())
+
+    @property
+    def item_name(self) -> str:
+        return self.path.name if self.path.is_dir() else self.path.stem
+
+    @property
+    def item_dir(self) -> str:
+        dir = self.path if self.path.is_dir() else self.path.parent
+        return str(dir.resolve())
 
 
 @dataclass(kw_only=True)
@@ -67,11 +79,7 @@ class MediaHandler(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def extract_keywords(self, path: Path) -> MetaKeywords:
-        raise NotImplementedError
-
-    @abstractmethod
-    def gen_items(self, lib: MediaLib, path: Path) -> list[MetaKeywords]:
+    async def gen_items(self, lib: MediaLib, path: Path) -> list[MetaKeywords]:
         raise NotImplementedError
 
     @classmethod

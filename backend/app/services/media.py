@@ -2,7 +2,7 @@ from tortoise.expressions import Q
 from tortoise.transactions import atomic
 
 from app.core.exceptions import ErrorCode, KaloscopeException
-from app.core.media.watcher import LibWatcher
+from app.core.media.handlers.base import MetaKeywords
 from app.models.flow import FlowTrigger, GraphCategory
 from app.models.media import MediaItem, MediaLib, MediaLibUpsert
 from app.services.base import BaseService
@@ -68,7 +68,8 @@ class MediaLibService(BaseService[MediaLib], model=MediaLib):
                 priority=(max(priorities) + 1 if len(priorities) > 0 else 1),
             )
             await lib.save()
-            watcher: LibWatcher = cls.app_ctx().watcher
+            # add the observer
+            watcher = cls.app_ctx().watcher
             await watcher.add_observer(lib, initialize=True)
 
         # bind the flow triggers to the media library
@@ -90,11 +91,36 @@ class MediaLibService(BaseService[MediaLib], model=MediaLib):
         await MediaLib.filter(id=id).delete()
         await FlowTrigger.filter(category=GraphCategory.INGEST, rel_id=id).delete()
         # remove the observer
-        watcher: LibWatcher = cls.app_ctx().watcher
+        watcher = cls.app_ctx().watcher
         await watcher.remove_observer(lib.dir)
 
 
 class MediaItemService(BaseService[MediaItem], model=MediaItem):
     """The service class for all media item related operations."""
 
-    pass
+    @classmethod
+    async def create(
+        cls, lib_id: int, parent_id: int | None, m: MetaKeywords
+    ) -> MediaItem:
+        """Get or create a media item.
+
+        Args:
+            lib_id: The media library ID.
+            parent_id: The parent media item ID, if any.
+            m: The metadata keywords for the media item.
+
+        Returns:
+            The media item instance.
+        """
+        item, _ = await MediaItem.get_or_create(
+            lib_id=lib_id,
+            path=m.item_path,
+            defaults={
+                "dir": m.item_dir,
+                "name": m.item_name,
+                "parent_id": parent_id,
+                # only top-level items are visible
+                "visible": parent_id is None,
+            },
+        )
+        return item

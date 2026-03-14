@@ -481,20 +481,22 @@ async def _handle_created(event: MediaEvent) -> MediaItem | None:
         await _parse_nfo(event.lib, path)
         return None
 
-    # get or create the destination media item
-    item, _ = await MediaItem.get_or_create(
-        lib_id=event.lib_id,
-        path=str(path.resolve()),
-        defaults={
-            "dir": str(path.parent.resolve()),
-            "name": path.stem,
-        },
-    )
-    item.lib = event.lib
+    handler = get_handler(event.lib.lib_type)
+    await handler.gen_items(event.lib, path)
+    # # get or create the destination media item
+    # item, _ = await MediaItem.get_or_create(
+    #     lib_id=event.lib_id,
+    #     path=str(path.resolve()),
+    #     defaults={
+    #         "dir": str(path.parent.resolve()),
+    #         "name": path.stem,
+    #     },
+    # )
+    # item.lib = event.lib
 
-    # parse the NFO file if it exists
-    nfo_path = Path(item.dir) / f"{item.name}.nfo"
-    if nfo_path.exists() and nfo_path.is_file():
-        await _parse_nfo(event.lib, nfo_path)
+    # # parse the NFO file if it exists
+    # nfo_path = Path(item.dir) / f"{item.name}.nfo"
+    # if nfo_path.exists() and nfo_path.is_file():
+    #     await _parse_nfo(event.lib, nfo_path)
 
-    return item
+    # return item

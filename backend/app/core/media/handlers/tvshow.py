@@ -56,18 +56,7 @@ class TVShowMediaHandler(MediaHandler):
         """
         return MediaMeta()
 
-    def extract_keywords(self, path: Path) -> MetaKeywords:
-        """Extract the metadata keywords for a TV show from the file path.
-
-        Args:
-            path: The path to extract from.
-
-        Returns:
-            The extracted metadata keywords.
-        """
-        return MetaKeywords(path, path.stem)
-
-    def gen_items(self, lib: MediaLib, path: Path) -> list[MetaKeywords]:
+    async def gen_items(self, lib: MediaLib, path: Path) -> list[MetaKeywords]:
         """Generate the media items for a TV show.
 
         Args:
