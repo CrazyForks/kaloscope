@@ -1,3 +1,0 @@
-specific:
-  media_type: video # video | audio | image | text
-  video_type: # mp4 | flv | hls

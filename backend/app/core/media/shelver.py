@@ -13,7 +13,7 @@ from app.core.renderer import render
 from app.models.media import MediaItem, MediaLib, NFOType
 
 # the path to the NFO templates
-TEMPLATES_PATH = Path(__file__).resolve().parents[3] / "static/templates/nfo"
+TEMPLATES_PATH = Path(__file__).resolve().parents[3] / "static/templates"
 
 
 def is_nfo(path: Path | str) -> bool:

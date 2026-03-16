@@ -56,6 +56,7 @@
 
   // the filters modal dialog
   let filtersModal: Filters | null = $state(null);
+  let showFilters: boolean = $derived(!!schema && Object.entries(schema).some(([, filter]) => !!filter.type));
 
   // whether the input is in composition mode
   let compositing: boolean = false;
@@ -122,7 +123,7 @@
     oncompositionend={() => ((compositing = false), !manual && _onsearch(_value))}
   />
 
-  {#if schema && Object.keys(schema).length > 0}
+  {#if showFilters}
     {@const filtered = filters && filters !== '{}'}
     <button class={btnClass} aria-label="Filter" onclick={() => filtersModal?.showModal()}>
       <iconify-icon
@@ -139,6 +140,6 @@
   {/if}
 </label>
 
-{#if schema}
+{#if schema && showFilters}
   <Filters bind:this={filtersModal} {schema} value={filters} onclose={(value) => onfilter?.(value)} />
 {/if}

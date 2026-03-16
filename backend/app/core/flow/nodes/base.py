@@ -2,7 +2,6 @@ import re
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum, auto
-from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
 import yaml
@@ -12,8 +11,6 @@ from app.core.flow.context import OUTPUT_KEY, Context
 from app.core.flow.fields import DividerField, Field
 from app.core.flow.handles import DefaultHandles, Handle, InputHandle, OutputHandle
 from app.models.flow import FlowGraph, GraphCategory
-
-TEMPLATES_PATH = Path(__file__).resolve().parents[4] / "static/templates"
 
 N = TypeVar("N", bound="Node")
 

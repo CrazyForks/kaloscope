@@ -1,7 +1,18 @@
 from app.core.flow.fields import CodeField
 from app.core.flow.handles import OutputHandle
-from app.core.flow.nodes.base import TEMPLATES_PATH, Node, start_node
+from app.core.flow.nodes.base import Node, start_node
 from app.models.flow import GraphCategory
+
+AUTH_CONFIG = """
+login:
+  mode: password # password | captcha | qrcode
+  required: false
+
+cookie:
+  domain:
+  path: /
+  name:
+""".lstrip()
 
 
 @start_node(order=1, icon="key", categories=(GraphCategory.INDEXER,))
@@ -17,7 +28,7 @@ class AuthStartNode(Node):
         "config",
         language="yaml",
         darkmode=True,
-        default=TEMPLATES_PATH / "conf/auth.yaml",
+        default=AUTH_CONFIG,
     )
 
     class Handles:

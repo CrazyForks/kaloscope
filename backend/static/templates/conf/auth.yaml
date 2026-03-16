@@ -1,8 +1,0 @@
-login:
-  mode: password # password | captcha | qrcode
-  required: false
-
-cookie:
-  domain:
-  path: /
-  name:

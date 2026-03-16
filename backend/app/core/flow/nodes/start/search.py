@@ -1,7 +1,25 @@
 from app.core.flow.fields import CodeField
 from app.core.flow.handles import OutputHandle
-from app.core.flow.nodes.base import TEMPLATES_PATH, Node, start_node
+from app.core.flow.nodes.base import Node, start_node
 from app.models.flow import GraphCategory
+
+SEARCH_CONFIG = """
+display:
+  page_size: 20
+  view_modes:
+    - table
+    - grid
+  cover_ratio: 16/9
+
+keyword:
+  global: true
+  required: false
+
+filters:
+  key:
+    type: # text | calendar | radio | checkbox
+    label:
+""".lstrip()
 
 
 @start_node(order=3, icon="boxMultipleSearch", categories=(GraphCategory.INDEXER,))
@@ -17,7 +35,7 @@ class SearchStartNode(Node):
         "config",
         language="yaml",
         darkmode=True,
-        default=TEMPLATES_PATH / "conf/search.yaml",
+        default=SEARCH_CONFIG,
     )
 
     class Handles:
