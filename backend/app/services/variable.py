@@ -1,5 +1,4 @@
 from tortoise.expressions import Q
-from tortoise.transactions import atomic
 
 from app.core.exceptions import ErrorCode, KaloscopeException
 from app.models.general import GlobalVariable, VariableUpsert
@@ -11,7 +10,6 @@ class VariableService(BaseService[GlobalVariable], model=GlobalVariable):
     """The service class for all global variable related operations."""
 
     @classmethod
-    @atomic()
     async def upsert(cls, var: VariableUpsert) -> GlobalVariable:
         """Create or update a global variable.
 

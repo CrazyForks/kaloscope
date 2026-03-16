@@ -12,6 +12,7 @@ from app.core.config import KaloscopeConfig
 from app.core.exceptions import ErrorCode, KaloscopeException
 from app.core.middleware import SessionHolder
 from app.models.base import KVPair
+from app.models.flow import IndexerResource
 from app.models.user import User, UserFavorite, UserInfo, UserRole
 from app.services.base import BaseService
 from app.utils.crypto import encrypt
@@ -175,4 +176,33 @@ class UserService(BaseService[User], model=User):
 class UserFavoriteService(BaseService[UserFavorite], model=UserFavorite):
     """The service class for all user favorite related operations."""
 
-    pass
+    @classmethod
+    async def favorite(cls, user_id: int, indexer_id: int, rsrc: IndexerResource):
+        """Add a new favorite for the user.
+
+        Args:
+            user_id: The user ID.
+            indexer_id: The indexer ID.
+            rsrc: The resource to favorite.
+        """
+        data = rsrc.rsrc or {}
+        data.pop("favorite", None)
+        await UserFavorite.update_or_create(
+            user_id=user_id,
+            indexer_id=indexer_id,
+            rsrc_id=rsrc.rsrc_id,
+            defaults={"rsrc": data, "url": rsrc.url},
+        )
+
+    @classmethod
+    async def unfavorite(cls, user_id: int, indexer_id: int, rsrc_id: str):
+        """Remove a favorite of the user.
+
+        Args:
+            user_id: The user ID.
+            indexer_id: The indexer ID.
+            rsrc_id: The resource ID to unfavorite.
+        """
+        await UserFavorite.filter(
+            user_id=user_id, indexer_id=indexer_id, rsrc_id=rsrc_id
+        ).delete()

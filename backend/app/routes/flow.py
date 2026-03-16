@@ -27,13 +27,14 @@ from app.models.flow import (
     TmplQuery,
 )
 from app.models.general import GlobalCookie
-from app.models.user import UserFavorite, UserInfo
+from app.models.user import UserInfo
 from app.services.flow import (
     FlowGraphService,
     FlowLogService,
     FlowRepositoryService,
     FlowTemplateService,
 )
+from app.services.user import UserFavoriteService
 
 # subroutes for all flow related operations
 flow = Blueprint("flow", url_prefix="/flow")
@@ -320,13 +321,7 @@ async def favorite_resource(
     """Favorite the resource."""
     if body.rsrc is not None:
         user: UserInfo = request.ctx.user
-        await UserFavorite.create(
-            user_id=user.id,
-            indexer_id=id,
-            rsrc_id=body.rsrc_id,
-            rsrc=body.rsrc,
-            url=body.url,
-        )
+        await UserFavoriteService.favorite(user.id, id, body)
     return empty()
 
 
@@ -337,11 +332,7 @@ async def unfavorite_resource(
 ) -> HTTPResponse:
     """Unfavorite the resource."""
     user: UserInfo = request.ctx.user
-    await UserFavorite.filter(
-        user_id=user.id,
-        indexer_id=id,
-        rsrc_id=body.rsrc_id,
-    ).delete()
+    await UserFavoriteService.unfavorite(user.id, id, body.rsrc_id)
     return empty()
 
 

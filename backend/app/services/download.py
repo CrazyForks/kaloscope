@@ -63,7 +63,6 @@ class DownloaderService(BaseService[Downloader], model=Downloader):
         await Downloader.bulk_update(downloaders, fields=["priority"])
 
     @classmethod
-    @atomic()
     async def upsert(cls, obj: DownloaderUpsert) -> Downloader:
         """Create or update a downloader.
 
