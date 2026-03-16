@@ -45,7 +45,7 @@
   }
 </script>
 
-<Modal icon={icons.personAdd} title={$_('action.add', $_('model.user'))} bind:this={modal}>
+<Modal icon={icons.personAdd} title={$_('action.add', $_('entity.user'))} bind:this={modal}>
   <form
     method="post"
     use:enhance={({ formElement, formData, cancel }) => {
@@ -54,12 +54,12 @@
     }}
   >
     <fieldset class="fieldset">
-      <Label required>{$_('model.field.username')}</Label>
+      <Label required>{$_('field.username')}</Label>
       <label class="input w-full">
         <iconify-icon icon={icons.user}></iconify-icon>
-        <input placeholder={$_('model.field.username')} class="grow" bind:value={username} {...schema.username} />
+        <input placeholder={$_('field.username')} class="grow" bind:value={username} {...schema.username} />
       </label>
-      <Label required>{$_('model.field.password')}</Label>
+      <Label required>{$_('field.password')}</Label>
       <label class="input w-full">
         <iconify-icon icon={icons.key}></iconify-icon>
         <input placeholder={$_('password.initial')} class="grow" {...schema.password} />

@@ -80,20 +80,20 @@
 
 <DataView dvh loading={$loading} data={users}>
   {#snippet filters()}
-    <Search label={$_('model.field.username')} bind:value={username} onsearch={() => search()} />
+    <Search label={$_('field.username')} bind:value={username} onsearch={() => search()} />
   {/snippet}
   {#snippet actions()}
     <Button
       size="md"
       icon={icons.personAdd}
-      text={$_('action.add', $_('model.user'))}
+      text={$_('action.add', $_('entity.user'))}
       onclick={() => userCreator.showModal()}
     />
   {/snippet}
   {#snippet header()}
-    <HCell width={['30%', '60%']} text={$_('model.field.username')} sort={ordering.bind('username')} />
-    <HCell width={['20%', '40%']} text={$_('model.field.role')} />
-    <HCell width={['25%', null]} text={$_('model.field.created')} sort={ordering.bind('created_at')} />
+    <HCell width={['30%', '60%']} text={$_('field.username')} sort={ordering.bind('username')} />
+    <HCell width={['20%', '40%']} text={$_('field.role')} />
+    <HCell width={['25%', null]} text={$_('field.created')} sort={ordering.bind('created_at')} />
     <HCell width={['25%', null]} text={$_('session.activity')} />
     <HCell actions />
   {/snippet}
@@ -118,11 +118,11 @@
         {
           disabled: user.role === 'admin',
           icon: icons.deleteDismiss,
-          text: $_('action.delete', $_('model.user')),
+          text: $_('action.delete', $_('entity.user')),
           onclick: () => {
             confirm({
               icon: icons.deleteDismiss,
-              title: `${$_('action.delete', $_('model.user'))} [${user.username}]`,
+              title: `${$_('action.delete', $_('entity.user'))} [${user.username}]`,
               onconfirm: () => del(user.id)
             });
           }

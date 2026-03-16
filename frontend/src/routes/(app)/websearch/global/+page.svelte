@@ -192,7 +192,7 @@
   <div class="flex-center px-2">
     <Search
       manual
-      label={$_('model.field.keyword')}
+      label={$_('field.keyword')}
       bind:value={query.keyword}
       onsearch={() => {
         if (Object.keys(tabs).length === 0) {

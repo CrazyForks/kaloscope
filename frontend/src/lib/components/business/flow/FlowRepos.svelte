@@ -103,7 +103,7 @@
 
 <Modal
   icon={icons.cloudCube}
-  title={$_('action.edit', $_('model.sources'))}
+  title={$_('action.edit', $_('entity.sources'))}
   onclose={() => onclose?.(changed)}
   bind:this={modal}
 >
@@ -124,13 +124,13 @@
           </span>
           <Button
             icon={icons.subtractCircle}
-            text={$_('action.delete', $_('model.source'))}
+            text={$_('action.delete', $_('entity.source'))}
             disabled={repo.loading !== undefined}
             loading={repo.loading}
             onclick={() => {
               confirm({
                 icon: icons.subtractCircle,
-                title: `${$_('action.delete', $_('model.source'))} [${repo.repo_name}]`,
+                title: `${$_('action.delete', $_('entity.source'))} [${repo.repo_name}]`,
                 onconfirm: () => deleteRepo(repo)
               });
             }}
@@ -143,13 +143,13 @@
     ghost={false}
     square={false}
     icon={icons.addCircle}
-    text={$_('action.add', $_('model.source'))}
+    text={$_('action.add', $_('entity.source'))}
     disabled={$loading !== null}
     loading={$loading}
     onclick={() => {
       prompt({
         icon: icons.box3d,
-        title: $_('action.add', $_('model.source')),
+        title: $_('action.add', $_('entity.source')),
         message: $_('flow.tmpl.confirm_repo'),
         onconfirm: (url) => addRepo(url)
       });

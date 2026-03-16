@@ -77,21 +77,21 @@
 
 <DataView dvh loading={$loading} data={variables}>
   {#snippet filters()}
-    <Search label={$_('model.field.name')} bind:value={key} onsearch={() => search()} />
+    <Search label={$_('field.name')} bind:value={key} onsearch={() => search()} />
   {/snippet}
   {#snippet actions()}
     <Button
       size="md"
       icon={icons.addCircle}
-      text={$_('action.add', $_('model.variable'))}
+      text={$_('action.add', $_('entity.variable'))}
       onclick={() => creator?.showModal()}
     />
   {/snippet}
   {#snippet header()}
-    <HCell width={['25%', '50%']} text={$_('model.field.name')} sort={ordering.bind('key')} />
-    <HCell width={['25%', '50%']} text={$_('model.field.value')} />
-    <HCell width={['25%', null]} text={$_('model.field.created')} sort={ordering.bind('created_at')} />
-    <HCell width={['25%', null]} text={$_('model.field.updated')} sort={ordering.bind('updated_at')} />
+    <HCell width={['25%', '50%']} text={$_('field.name')} sort={ordering.bind('key')} />
+    <HCell width={['25%', '50%']} text={$_('field.value')} />
+    <HCell width={['25%', null]} text={$_('field.created')} sort={ordering.bind('created_at')} />
+    <HCell width={['25%', null]} text={$_('field.updated')} sort={ordering.bind('updated_at')} />
     <HCell actions />
   {/snippet}
   {#snippet row(variable)}
@@ -122,7 +122,7 @@
       actions={[
         {
           icon: icons.edit,
-          text: $_('action.edit', $_('model.variable')),
+          text: $_('action.edit', $_('entity.variable')),
           onclick: () => {
             selected = variable;
             tick().then(() => updater?.showModal());
@@ -130,11 +130,11 @@
         },
         {
           icon: icons.deleteDismiss,
-          text: $_('action.delete', $_('model.variable')),
+          text: $_('action.delete', $_('entity.variable')),
           onclick: () => {
             confirm({
               icon: icons.deleteDismiss,
-              title: `${$_('action.delete', $_('model.variable'))} [${variable.key}]`,
+              title: `${$_('action.delete', $_('entity.variable'))} [${variable.key}]`,
               onconfirm: () => del(variable.id)
             });
           }

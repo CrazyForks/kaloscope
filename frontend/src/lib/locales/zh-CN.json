@@ -109,7 +109,30 @@
       "next": "下一页"
     }
   },
-  "model": {
+  "field": {
+    "dir": "目录",
+    "file": "文件",
+    "type": "类型",
+    "name": "名称",
+    "value": "值",
+    "role": "角色",
+    "title": "标题",
+    "state": "状态",
+    "status": "状态",
+    "avatar": "头像",
+    "keyword": "关键字",
+    "language": "语言",
+    "category": "类别",
+    "username": "用户名",
+    "password": "密码",
+    "description": "描述",
+    "average_time": "平均耗时",
+    "last_execution": "上次执行",
+    "created": "创建时间",
+    "updated": "更新时间",
+    "actions": "操作"
+  },
+  "entity": {
     "log": "日志",
     "logs": "日志",
     "user": "用户",
@@ -131,35 +154,7 @@
     "download": "下载任务",
     "downloads": "下载任务",
     "media_lib": "媒体库",
-    "media_libs": "媒体库",
-    "field": {
-      "dir": "目录",
-      "file": "文件",
-      "type": "类型",
-      "name": "名称",
-      "value": "值",
-      "role": "角色",
-      "title": "标题",
-      "state": "状态",
-      "status": "状态",
-      "avatar": "头像",
-      "keyword": "关键字",
-      "language": "语言",
-      "category": "类别",
-      "username": "用户名",
-      "password": "密码",
-      "description": "描述",
-      "average_time": "平均耗时",
-      "last_execution": "上次执行",
-      "created": "创建时间",
-      "updated": "更新时间",
-      "actions": "操作"
-    }
-  },
-  "status": {
-    "up": "正常",
-    "down": "异常",
-    "unknown": "未知"
+    "media_libs": "媒体库"
   },
   "action": {
     "add": "新增{0}",
@@ -188,6 +183,11 @@
     "toggle_on": "打开",
     "toggle_off": "关闭",
     "assign_permissions": "分配权限"
+  },
+  "status": {
+    "up": "正常",
+    "down": "异常",
+    "unknown": "未知"
   },
   "session": {
     "os": "操作系统",

@@ -92,11 +92,11 @@
       label={$_('download.downloader.title')}
       onchange={() => search()}
     />
-    <Search label={$_('model.field.name')} bind:value={name} onsearch={() => search()} />
+    <Search label={$_('field.name')} bind:value={name} onsearch={() => search()} />
   {/snippet}
   {#snippet header()}
     <HCell width={['8rem', null]} text={$_('download.downloader.title')} sort={ordering.bind('downloader_id')} />
-    <HCell width="100%" text={$_('model.field.name')} sort={ordering.bind('name')} />
+    <HCell width="100%" text={$_('field.name')} sort={ordering.bind('name')} />
     <HCell actions />
   {/snippet}
   {#snippet row(task)}
@@ -121,7 +121,7 @@
       actions={[
         {
           icon: icons.delete,
-          text: $_('action.delete', $_('model.task')),
+          text: $_('action.delete', $_('entity.task')),
           onclick: () => deleteConfirm.showModal(task.id)
         }
       ]}

@@ -40,7 +40,7 @@
 
 <Modal
   icon={icons.adjustmentsHorizontal}
-  title={$_('model.filters')}
+  title={$_('entity.filters')}
   bind:this={modal}
   onclose={() => onclose?.(JSON.stringify(values))}
 >

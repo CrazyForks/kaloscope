@@ -164,7 +164,7 @@
       <div class="divider my-0"></div>
       {@render term($_('download.downloader.port'), downloader.port)}
       <div class="divider my-0"></div>
-      {@render term($_('model.field.status'), $_(`status.${downloader.status}`), downloader.status)}
+      {@render term($_('field.status'), $_(`status.${downloader.status}`), downloader.status)}
     </dl>
   {/snippet}
   {#snippet tail()}

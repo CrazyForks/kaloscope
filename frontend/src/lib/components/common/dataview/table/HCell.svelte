@@ -54,7 +54,7 @@
   });
 
   // the header cell text
-  let cellText: HCellProps['text'] = $derived(text ?? (actions ? $_('model.field.actions') : ''));
+  let cellText: HCellProps['text'] = $derived(text ?? (actions ? $_('field.actions') : ''));
 </script>
 
 {#if condition}

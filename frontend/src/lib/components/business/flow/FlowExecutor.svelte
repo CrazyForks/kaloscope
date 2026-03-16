@@ -50,7 +50,7 @@
   }
 </script>
 
-<Modal icon={icons.playFilled} title={$_('action.execute', $_('model.graph'))} bind:this={modal}>
+<Modal icon={icons.playFilled} title={$_('action.execute', $_('entity.graph'))} bind:this={modal}>
   <form
     method="post"
     use:enhance={({ cancel }) => {

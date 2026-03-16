@@ -55,7 +55,7 @@
 
 <Modal
   icon={icons.bracesVariable}
-  title={$_(id ? 'action.edit' : 'action.add', $_('model.variable'))}
+  title={$_(id ? 'action.edit' : 'action.add', $_('entity.variable'))}
   bind:this={modal}
 >
   <form
@@ -66,18 +66,12 @@
     }}
   >
     <fieldset class="fieldset">
-      <Label required>{$_('model.field.name')}</Label>
-      <input
-        placeholder={$_('model.field.name')}
-        class="input w-full"
-        bind:value={key}
-        {...schema.key}
-        disabled={!!id}
-      />
-      <Label required>{$_('model.field.value')}</Label>
+      <Label required>{$_('field.name')}</Label>
+      <input placeholder={$_('field.name')} class="input w-full" bind:value={key} {...schema.key} disabled={!!id} />
+      <Label required>{$_('field.value')}</Label>
       <label class="input w-full">
         <input
-          placeholder={$_('model.field.value')}
+          placeholder={$_('field.value')}
           class="grow"
           bind:value
           {...schema.value}

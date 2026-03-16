@@ -79,7 +79,7 @@
 
 <DataView loading={$loading} data={favorites}>
   {#snippet header()}
-    <HCell width="100%" text={$_('model.favorites')} />
+    <HCell width="100%" text={$_('entity.favorites')} />
     <HCell actions />
   {/snippet}
   {#snippet row(favorite)}
@@ -100,11 +100,11 @@
       actions={[
         {
           icon: icons.deleteDismiss,
-          text: $_('action.delete', $_('model.favorite')),
+          text: $_('action.delete', $_('entity.favorite')),
           onclick: () => {
             confirm({
               icon: icons.deleteDismiss,
-              title: $_('action.delete', $_('model.favorite')),
+              title: $_('action.delete', $_('entity.favorite')),
               onconfirm: () => del(favorite)
             });
           }

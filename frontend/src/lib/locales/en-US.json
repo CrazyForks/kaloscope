@@ -109,7 +109,30 @@
       "next": "Next"
     }
   },
-  "model": {
+  "field": {
+    "dir": "Directory",
+    "file": "File",
+    "type": "Type",
+    "name": "Name",
+    "value": "Value",
+    "role": "Role",
+    "title": "Title",
+    "state": "State",
+    "status": "Status",
+    "avatar": "Avatar",
+    "keyword": "Keyword",
+    "language": "Language",
+    "category": "Category",
+    "username": "Username",
+    "password": "Password",
+    "description": "Description",
+    "average_time": "Average Time",
+    "last_execution": "Last Execution",
+    "created": "Created date",
+    "updated": "Updated date",
+    "actions": "Actions"
+  },
+  "entity": {
     "log": "Log",
     "logs": "Logs",
     "user": "User",
@@ -131,35 +154,7 @@
     "download": "Download",
     "downloads": "Downloads",
     "media_lib": "Media Library",
-    "media_libs": "Media Libraries",
-    "field": {
-      "dir": "Directory",
-      "file": "File",
-      "type": "Type",
-      "name": "Name",
-      "value": "Value",
-      "role": "Role",
-      "title": "Title",
-      "state": "State",
-      "status": "Status",
-      "avatar": "Avatar",
-      "keyword": "Keyword",
-      "language": "Language",
-      "category": "Category",
-      "username": "Username",
-      "password": "Password",
-      "description": "Description",
-      "average_time": "Average Time",
-      "last_execution": "Last Execution",
-      "created": "Created date",
-      "updated": "Updated date",
-      "actions": "Actions"
-    }
-  },
-  "status": {
-    "up": "UP",
-    "down": "DOWN",
-    "unknown": "UNKNOWN"
+    "media_libs": "Media Libraries"
   },
   "action": {
     "add": "New {0}",
@@ -188,6 +183,11 @@
     "toggle_on": "On",
     "toggle_off": "Off",
     "assign_permissions": "Permissions"
+  },
+  "status": {
+    "up": "UP",
+    "down": "DOWN",
+    "unknown": "UNKNOWN"
   },
   "session": {
     "os": "OS",

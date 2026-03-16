@@ -68,7 +68,7 @@
   }
 </script>
 
-<Modal icon={icons.flowchart} title={$_(id ? 'action.edit' : 'action.add', $_('model.graph'))} bind:this={modal}>
+<Modal icon={icons.flowchart} title={$_(id ? 'action.edit' : 'action.add', $_('entity.graph'))} bind:this={modal}>
   <form
     method="post"
     use:enhance={({ formElement, formData, cancel }) => {
@@ -124,7 +124,7 @@
       />
     </div>
     <fieldset class="fieldset">
-      <Label required>{$_('model.field.category')}</Label>
+      <Label required>{$_('field.category')}</Label>
       <Select
         options={enumToOptions(GraphCategory, false)}
         bind:value={category}
@@ -132,12 +132,12 @@
         class="w-full"
         name="category"
       />
-      <Label required>{$_('model.field.name')}</Label>
-      <input placeholder={$_('model.field.name')} class="input w-full" bind:value={name} {...schema.name} />
-      <Label>{$_('model.field.description')}</Label>
+      <Label required>{$_('field.name')}</Label>
+      <input placeholder={$_('field.name')} class="input w-full" bind:value={name} {...schema.name} />
+      <Label>{$_('field.description')}</Label>
       <textarea
         rows={5}
-        placeholder={$_('model.field.description')}
+        placeholder={$_('field.description')}
         class="textarea w-full"
         bind:value={description}
         {...schema.description}

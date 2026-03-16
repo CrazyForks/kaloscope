@@ -77,12 +77,12 @@
         }}
       >
         <fieldset class="fieldset">
-          <Label small>{$_('model.field.username')}</Label>
+          <Label small>{$_('field.username')}</Label>
           <label class="input w-full">
             <iconify-icon icon={icons.user}></iconify-icon>
             <input class="grow" {...schema.username} />
           </label>
-          <Label small>{$_('model.field.password')}</Label>
+          <Label small>{$_('field.password')}</Label>
           <label class="input w-full">
             <iconify-icon icon={icons.key}></iconify-icon>
             <input class="grow" {...schema.password} />

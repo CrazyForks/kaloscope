@@ -135,7 +135,7 @@
   });
 </script>
 
-<Modal icon={icons.download} title={$_('action.add', $_('model.download'))} bind:this={_modal}>
+<Modal icon={icons.download} title={$_('action.add', $_('entity.download'))} bind:this={_modal}>
   <form
     method="post"
     enctype="multipart/form-data"

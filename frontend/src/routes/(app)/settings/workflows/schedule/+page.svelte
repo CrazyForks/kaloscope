@@ -80,13 +80,13 @@
 
 <DataView dvh loading={$loading} data={graphs}>
   {#snippet filters()}
-    <Search label={$_('model.field.name')} bind:value={graphName} onsearch={() => search()} />
+    <Search label={$_('field.name')} bind:value={graphName} onsearch={() => search()} />
   {/snippet}
   {#snippet header()}
-    <HCell width={['40%', '100%']} text={$_('model.field.name')} sort={ordering.bind('name')} />
-    <HCell width={['30%', null]} text={$_('model.field.last_execution')} />
-    <HCell width={['20%', null]} text={$_('model.field.average_time')} />
-    <HCell width={['10%', '4rem']} text={$_('model.field.status')} class="justify-center" />
+    <HCell width={['40%', '100%']} text={$_('field.name')} sort={ordering.bind('name')} />
+    <HCell width={['30%', null]} text={$_('field.last_execution')} />
+    <HCell width={['20%', null]} text={$_('field.average_time')} />
+    <HCell width={['10%', '4rem']} text={$_('field.status')} class="justify-center" />
     <HCell actions />
   {/snippet}
   {#snippet row(graph)}
@@ -107,21 +107,21 @@
         {
           disabled: !graph.last_execution,
           icon: icons.slideSearch,
-          text: $_('action.view', $_('model.logs')),
+          text: $_('action.view', $_('entity.logs')),
           onclick: () => flowLogs.showModal(graph.id)
         },
         {
           icon: icons.documentEdit,
-          text: $_('action.edit', $_('model.graph')),
+          text: $_('action.edit', $_('entity.graph')),
           onclick: () => goto(`/settings/workflows/graphs/${graph.editable ? '' : 'r/'}${graph.id}`)
         },
         {
           icon: icons.back,
-          text: $_('action.retract', $_('model.graph')),
+          text: $_('action.retract', $_('entity.graph')),
           onclick: () => {
             confirm({
               icon: icons.back,
-              title: `${$_('action.retract', $_('model.graph'))} [${graph.name}]`,
+              title: `${$_('action.retract', $_('entity.graph'))} [${graph.name}]`,
               onconfirm: () => retract(graph.id)
             });
           }

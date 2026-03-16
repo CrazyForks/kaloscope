@@ -148,24 +148,24 @@
         ...tmplRepos.map((r) => ({ value: r.repo_name, label: r.repo_name }))
       ]}
       bind:value={tmplRepo}
-      label={$_('model.source')}
+      label={$_('entity.source')}
       onchange={() => search()}
     />
     <Select
       filter
       options={enumToOptions(GraphCategory)}
       bind:value={tmplCategory}
-      label={$_('model.field.category')}
+      label={$_('field.category')}
       onchange={() => search()}
       class="max-lg:hidden"
     />
-    <Search label={$_('model.field.name')} bind:value={tmplName} onsearch={() => search()} />
+    <Search label={$_('field.name')} bind:value={tmplName} onsearch={() => search()} />
   {/snippet}
   {#snippet actions()}
     <Button
       size="md"
       icon={icons.cloudCube}
-      text={$_('action.edit', $_('model.sources'))}
+      text={$_('action.edit', $_('entity.sources'))}
       onclick={() => flowRepos.showModal()}
     />
   {/snippet}
@@ -202,7 +202,7 @@
       <div class="flex-center gap-1">
         <Button
           icon={icons.link}
-          text={$_('action.reference', $_('model.template'))}
+          text={$_('action.reference', $_('entity.template'))}
           loading={$btnLoading && refId === tmpl.id}
           disabled={tmpl.graphs.length > 0}
           onclick={() => {
@@ -214,7 +214,7 @@
               prompt({
                 advice: advice,
                 icon: icons.link,
-                title: $_('action.reference', $_('model.template')),
+                title: $_('action.reference', $_('entity.template')),
                 message: $_('flow.tmpl.confirm_name'),
                 onconfirm: (name) => name && refTmpl(tmpl.id, name)
               });
@@ -223,7 +223,7 @@
         />
         <Button
           icon={icons.documentCopy}
-          text={$_('action.copy', $_('model.template'))}
+          text={$_('action.copy', $_('entity.template'))}
           loading={$btnLoading && copyId === tmpl.id}
           onclick={() => {
             if (refId || copyId) {
@@ -234,7 +234,7 @@
               prompt({
                 advice: advice,
                 icon: icons.documentCopy,
-                title: $_('action.copy', $_('model.template')),
+                title: $_('action.copy', $_('entity.template')),
                 message: $_('flow.tmpl.confirm_name'),
                 onconfirm: (name) => name && copyTmpl(tmpl.id, name)
               });

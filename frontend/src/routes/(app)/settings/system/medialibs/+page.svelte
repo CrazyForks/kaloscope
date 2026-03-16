@@ -131,7 +131,7 @@
                 onclick={() => {
                   confirm({
                     icon: icons.delete,
-                    title: `${$_('action.delete', $_('model.media_lib'))} [${lib.name}]`,
+                    title: `${$_('action.delete', $_('entity.media_lib'))} [${lib.name}]`,
                     onconfirm: () => del(lib.id)
                   });
                 }}
@@ -145,9 +145,9 @@
       </div>
     </div>
     <dl class="rounded-b-field bg-base-100 p-4 text-sm">
-      {@render term($_('model.field.dir'), lib.dir, true)}
+      {@render term($_('field.dir'), lib.dir, true)}
       <div class="divider my-0"></div>
-      {@render term($_('model.field.language'), $_(lib.language, { locale: 'languages' }))}
+      {@render term($_('field.language'), $_(lib.language, { locale: 'languages' }))}
       <div class="divider my-0"></div>
       {@render term($_('flow.trigger.count'), String(lib.triggers.length))}
     </dl>

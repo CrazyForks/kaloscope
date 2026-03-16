@@ -59,7 +59,7 @@
 
 <Modal
   icon={icons.videoClipMultiple}
-  title={$_(id ? 'action.edit' : 'action.add', $_('model.media_lib'))}
+  title={$_(id ? 'action.edit' : 'action.add', $_('entity.media_lib'))}
   bind:this={modal}
 >
   <form
@@ -70,7 +70,7 @@
     }}
   >
     <fieldset class="fieldset">
-      <Label required>{$_('model.field.type')}</Label>
+      <Label required>{$_('field.type')}</Label>
       <Select
         options={enumToOptions(LibType, false)}
         bind:value={lib_type}
@@ -78,14 +78,14 @@
         class="w-full"
         name="lib_type"
       />
-      <Label required>{$_('model.field.name')}</Label>
-      <input placeholder={$_('model.field.name')} class="input w-full" bind:value={name} {...schema.name} />
-      <Label required>{$_('model.field.dir')}</Label>
+      <Label required>{$_('field.name')}</Label>
+      <input placeholder={$_('field.name')} class="input w-full" bind:value={name} {...schema.name} />
+      <Label required>{$_('field.dir')}</Label>
       <!-- svelte-ignore a11y_consider_explicit_label -->
       <button type="button" class="input w-full cursor-pointer" onclick={() => fileTree.showModal()} disabled={!!id}>
         <iconify-icon icon={icons.folder} width="1.5rem" class="opacity-70"></iconify-icon>
         <input
-          placeholder={$_('action.select', $_('model.field.dir'))}
+          placeholder={$_('action.select', $_('field.dir'))}
           autocomplete="off"
           class="grow cursor-pointer"
           bind:value={dir}
@@ -93,7 +93,7 @@
           disabled={!!id}
         />
       </button>
-      <Label>{$_('model.field.language')}</Label>
+      <Label>{$_('field.language')}</Label>
       <Select class="w-full" bind:value={language} name="language">
         <option value="">{$_('enum.none')}</option>
         {#each $locales.filter((l) => l !== 'languages') as code (code)}

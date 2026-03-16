@@ -91,7 +91,7 @@
       onclick={() => avatarDialog.show()}
     >
       <iconify-icon icon={icons.switch} width="1rem"></iconify-icon>
-      {$_('action.change', $_('model.field.avatar'))}
+      {$_('action.change', $_('field.avatar'))}
     </button>
   </div>
   <Setting title={$_('password.change')}>
@@ -130,7 +130,7 @@
   </Setting>
 </Container>
 
-<Modal title={$_('action.change', $_('model.field.avatar'))} bind:this={avatarDialog}>
+<Modal title={$_('action.change', $_('field.avatar'))} bind:this={avatarDialog}>
   <div class="flex-col-center gap-4">
     {#if cropSrc}
       <div class="flex-center size-80 overflow-hidden rounded-full border">

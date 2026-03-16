@@ -178,7 +178,7 @@
       filter
       options={enumToOptions(GraphCategory)}
       bind:value={graphCategory}
-      label={$_('model.field.category')}
+      label={$_('field.category')}
       onchange={() => search()}
       class="max-md:hidden"
     />
@@ -186,30 +186,30 @@
       filter
       options={enumToOptions(GraphState)}
       bind:value={graphState}
-      label={$_('model.field.state')}
+      label={$_('field.state')}
       onchange={() => search()}
       class="max-lg:hidden"
     />
-    <Search label={$_('model.field.name')} bind:value={graphName} onsearch={() => search()} />
+    <Search label={$_('field.name')} bind:value={graphName} onsearch={() => search()} />
   {/snippet}
   {#snippet actions()}
     <Button
       size="md"
       icon={icons.boxArrowUp}
-      text={$_('action.export', $_('model.graphs'))}
+      text={$_('action.export', $_('entity.graphs'))}
       onclick={() => exportGraphs()}
     />
     <Button
       size="md"
       icon={icons.layerDiagonalAdd}
-      text={$_('action.import', $_('model.graphs'))}
+      text={$_('action.import', $_('entity.graphs'))}
       onclick={() => zipInput.click()}
     />
     <input type="file" class="hidden" accept="application/zip" bind:this={zipInput} onchange={importGraphs} />
     <Button
       size="md"
       icon={icons.documentAdd}
-      text={$_('action.add', $_('model.graph'))}
+      text={$_('action.add', $_('entity.graph'))}
       onclick={() => graphEditor.showModal()}
     />
   {/snippet}
@@ -217,11 +217,11 @@
     <HCell width="2rem">
       <Checkbox batch={graphs.filter((g) => g.state !== 'drafting').length} bind:this={headerCheckbox} />
     </HCell>
-    <HCell width={['35%', '55%']} text={$_('model.field.name')} sort={ordering.bind('name')} />
-    <HCell width={['15%', '45%']} text={$_('model.field.category')} sort={ordering.bind('category')} />
-    <HCell width={['20%', null]} text={$_('model.field.updated')} sort={ordering.bind('updated_at')} />
-    <HCell width={['15%', null]} text={$_('model.field.average_time')} />
-    <HCell width={['15%', '4rem']} text={$_('model.field.state')} sort={ordering.bind('state')} />
+    <HCell width={['35%', '55%']} text={$_('field.name')} sort={ordering.bind('name')} />
+    <HCell width={['15%', '45%']} text={$_('field.category')} sort={ordering.bind('category')} />
+    <HCell width={['20%', null]} text={$_('field.updated')} sort={ordering.bind('updated_at')} />
+    <HCell width={['15%', null]} text={$_('field.average_time')} />
+    <HCell width={['15%', '4rem']} text={$_('field.state')} sort={ordering.bind('state')} />
     <HCell actions />
   {/snippet}
   {#snippet row(graph)}
@@ -286,17 +286,17 @@
       actions={[
         {
           icon: icons.documentEdit,
-          text: $_('action.edit', $_('model.graph')),
+          text: $_('action.edit', $_('entity.graph')),
           onclick: () => goto(`/settings/workflows/graphs/${graph.editable ? '' : 'r/'}${graph.id}`)
         },
         {
           condition: !drafting,
           icon: icons.back,
-          text: $_('action.retract', $_('model.graph')),
+          text: $_('action.retract', $_('entity.graph')),
           onclick: () => {
             confirm({
               icon: icons.back,
-              title: `${$_('action.retract', $_('model.graph'))} [${graph.name}]`,
+              title: `${$_('action.retract', $_('entity.graph'))} [${graph.name}]`,
               onconfirm: () => retract(graph.id)
             });
           }
@@ -304,11 +304,11 @@
         {
           condition: drafting,
           icon: icons.deleteDismiss,
-          text: $_('action.delete', $_('model.graph')),
+          text: $_('action.delete', $_('entity.graph')),
           onclick: () => {
             confirm({
               icon: icons.deleteDismiss,
-              title: `${$_('action.delete', $_('model.graph'))} [${graph.name}]`,
+              title: `${$_('action.delete', $_('entity.graph'))} [${graph.name}]`,
               onconfirm: () => del(graph.id)
             });
           }
@@ -316,7 +316,7 @@
         {
           condition: !!graph.last_execution,
           icon: icons.slideSearch,
-          text: $_('action.view', $_('model.logs')),
+          text: $_('action.view', $_('entity.logs')),
           onclick: () => flowLogs.showModal(graph.id)
         }
       ]}

@@ -163,7 +163,7 @@
   >
     {#snippet filters()}
       <Search
-        label={$_('model.field.keyword')}
+        label={$_('field.keyword')}
         bind:value={query.keyword}
         onsearch={() => {
           query.page_num = 1;

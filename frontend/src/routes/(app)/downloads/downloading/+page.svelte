@@ -143,19 +143,19 @@
       label={$_('download.downloader.title')}
       onchange={() => search()}
     />
-    <Search label={$_('model.field.name')} bind:value={name} onsearch={() => search()} />
+    <Search label={$_('field.name')} bind:value={name} onsearch={() => search()} />
   {/snippet}
   {#snippet actions()}
     <Button
       size="md"
       icon={icons.addCircle}
-      text={$_('action.add', $_('model.download'))}
+      text={$_('action.add', $_('entity.download'))}
       onclick={() => downloadPrompt()}
     />
   {/snippet}
   {#snippet header()}
     <HCell width={['8rem', null]} text={$_('download.downloader.title')} sort={ordering.bind('downloader_id')} />
-    <HCell width="100%" text={$_('model.field.name')} sort={ordering.bind('name')} />
+    <HCell width="100%" text={$_('field.name')} sort={ordering.bind('name')} />
     <HCell actions />
   {/snippet}
   {#snippet row(task)}
@@ -196,7 +196,7 @@
           loading: loadingIds.has(task.id),
           class: '[&_iconify-icon]:text-surface/80',
           icon: icons.pauseFilled,
-          text: $_('action.pause', $_('model.task')),
+          text: $_('action.pause', $_('entity.task')),
           onclick: () => pause(task)
         },
         {
@@ -204,12 +204,12 @@
           loading: loadingIds.has(task.id),
           class: '[&_iconify-icon]:text-surface/80',
           icon: icons.playFilled,
-          text: $_('action.start', $_('model.task')),
+          text: $_('action.start', $_('entity.task')),
           onclick: () => start(task)
         },
         {
           icon: icons.delete,
-          text: $_('action.delete', $_('model.task')),
+          text: $_('action.delete', $_('entity.task')),
           onclick: () => deleteConfirm.showModal(task.id)
         }
       ]}

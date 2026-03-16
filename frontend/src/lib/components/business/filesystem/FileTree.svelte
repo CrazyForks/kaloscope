@@ -100,7 +100,7 @@
 
 <Modal
   icon={icons.rowChild}
-  title={$_('action.select', $_(onlyDirs ? 'model.field.dir' : 'model.field.file'))}
+  title={$_('action.select', $_(onlyDirs ? 'field.dir' : 'field.file'))}
   maxWidth="36rem"
   bind:this={modal}
 >
