@@ -2,8 +2,8 @@
   export type BackdropProps = {
     /** The source URL of the background image. */
     src: string | null;
-    /** Whether to store the background image locally. */
-    store?: boolean;
+    /** Whether to proxy the image through the server. */
+    proxy?: boolean | 'store';
     /** The value for the blur filter applied to the background image. */
     blur?: string;
     /** The opacity of the background image. */
@@ -15,7 +15,7 @@
   import { proxyImage } from '$lib/api';
   import { fade } from 'svelte/transition';
 
-  let { src, store = false, blur = '5px', opacity = '0.2' }: BackdropProps = $props();
+  let { src, proxy = false, blur = '5px', opacity = '0.2' }: BackdropProps = $props();
 </script>
 
 {#if src}
@@ -23,7 +23,7 @@
     <div
       class="pointer-events-none fixed inset-0 z-0"
       style="
-        background-image: url({proxyImage(src, store)});
+        background-image: url({proxyImage(src, proxy)});
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;

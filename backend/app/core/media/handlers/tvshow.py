@@ -67,12 +67,12 @@ class TVShowMediaHandler(MediaHandler):
         meta.title = get_text(root, "title")
         meta.year = get_integer(root, "year")
         art = root.find("art")
-        meta.cover = get_text(art, "poster")
+        meta.poster = get_text(art, "poster")
         meta.backdrop = get_text(art, "fanart")
         meta.rating = get_decimal(root, "rating")
         meta.season = get_integer(root, "season")
         meta.episode = get_integer(root, "episode")
-        return MediaMeta()
+        return meta
 
     async def gen_items(self, lib: MediaLib, path: Path) -> list[MetaKeywords]:
         """Generate the media items for a TV show.

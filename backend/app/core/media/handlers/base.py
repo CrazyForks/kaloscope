@@ -55,7 +55,7 @@ class MediaMeta:
     year: int | None = None
     season: int | None = None
     episode: int | None = None
-    cover: str | None = None
+    poster: str | None = None
     backdrop: str | None = None
     rating: Decimal | None = None
 

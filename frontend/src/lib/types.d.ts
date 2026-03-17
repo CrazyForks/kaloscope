@@ -182,15 +182,20 @@ export type MediaLib = {
 export type MediaItem = {
   id: number;
   lib_id: number;
+  parent_id: number | null;
   dir: string;
   path: string;
   name: string;
-  meta: string | null;
+  visible: boolean;
+  nfo_path: string | null;
+  nfo_mtime: string | null;
   title: string | null;
-  cover: string | null;
-  backdrop: string | null;
   year: number | null;
-  rating: string | null;
+  season: number | null;
+  episode: number | null;
+  poster: string | null;
+  backdrop: string | null;
+  rating: number | null;
 };
 
 /**

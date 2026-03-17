@@ -82,7 +82,7 @@ class MediaItem(TortoiseModel):
     year = IntField(null=True)
     season = IntField(null=True)
     episode = IntField(null=True)
-    cover = CharField(max_length=255, null=True)
+    poster = CharField(max_length=255, null=True)
     backdrop = CharField(max_length=255, null=True)
     rating = DecimalField(max_digits=4, decimal_places=2, null=True)
     # relational fields

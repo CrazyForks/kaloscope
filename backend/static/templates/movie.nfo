@@ -17,7 +17,7 @@
   <genre>{{ genre }}</genre>
 {% endfor %}
   <art>
-    <poster>{{ cover }}</poster>
+    <poster>{{ poster }}</poster>
     <fanart>{{ backdrop }}</fanart>
   </art>
 {% for studio in studios %}
@@ -36,7 +36,7 @@
   <actor>
     <name>{{ actor.name }}</name>
     <role>{{ actor.role }}</role>
-    <type>{{ actor.type }}</type>
+    <order>{{ actor.order }}</order>
     <thumb>{{ actor.thumb }}</thumb>
   </actor>
 {% endfor %}

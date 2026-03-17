@@ -45,7 +45,7 @@
 
   // the items to display
   let items: MediaItem[] = $state([]);
-  let backdrop: string | null = $derived(items.length > 0 ? (items[0].backdrop ?? items[0].cover) : null);
+  let backdrop: string | null = $derived(items.length > 0 ? (items[0].backdrop ?? items[0].poster) : null);
   let pagination: Omit<PaginatorProps, 'current' | 'size'> = $state({ onchange: () => search(true) });
 
   // the loading states
@@ -181,14 +181,14 @@
         tabindex="0"
         role="button"
         class="group relative"
-        onmouseenter={() => (backdrop = item.backdrop ?? item.cover ?? backdrop)}
+        onmouseenter={() => (backdrop = item.backdrop ?? item.poster ?? backdrop)}
       >
         <div class="absolute top-0 right-0 z-1 flex gap-2 p-1 opacity-0 group-hover:opacity-100 {transClass}">
           <Button icon={icons.play} class={btnClass} onclick={() => goto(`${page.url.pathname}/${item.id}`)} />
         </div>
         <Image
           proxy="store"
-          src={item.cover}
+          src={item.poster}
           width="100%"
           ratio="2/3"
           class="shadow-sm hover:opacity-80 hover:shadow-lg {transClass}"
@@ -208,4 +208,4 @@
   </DataView>
 </Container>
 
-<Backdrop store src={backdrop} />
+<Backdrop proxy="store" src={backdrop} />

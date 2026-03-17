@@ -56,7 +56,7 @@ class MovieMediaHandler(MediaHandler):
         meta.title = get_text(root, "title")
         meta.year = get_integer(root, "year")
         art = root.find("art")
-        meta.cover = get_text(art, "poster")
+        meta.poster = get_text(art, "poster")
         meta.backdrop = get_text(art, "fanart")
         meta.rating = get_decimal(root, "rating")
         return meta

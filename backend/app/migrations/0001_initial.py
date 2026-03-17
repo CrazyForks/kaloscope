@@ -305,7 +305,7 @@ class Migration(migrations.Migration):
                 ('year', fields.IntField(null=True)),
                 ('season', fields.IntField(null=True)),
                 ('episode', fields.IntField(null=True)),
-                ('cover', fields.CharField(null=True, max_length=255)),
+                ('poster', fields.CharField(null=True, max_length=255)),
                 ('backdrop', fields.CharField(null=True, max_length=255)),
                 ('rating', fields.DecimalField(null=True, max_digits=4, decimal_places=2)),
             ],

@@ -128,7 +128,7 @@ async def parse_nfo(lib: MediaLib, path: Path | str) -> MediaMeta | None:
             year=meta.year,
             season=meta.season,
             episode=meta.episode,
-            cover=meta.cover,
+            poster=meta.poster,
             backdrop=meta.backdrop,
             rating=meta.rating,
         )
