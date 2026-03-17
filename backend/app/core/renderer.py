@@ -2,6 +2,7 @@ import base64
 import datetime
 import re
 from functools import partial
+from pathlib import Path
 from typing import Any, Literal
 
 import jinja2
@@ -266,6 +267,14 @@ def b64encode(s: str | bytes) -> str:
     return base64.b64encode(s).decode(ENCODING)
 
 
+def parent_path(path: str, levels: int = 1) -> str:
+    """Return the parent directory of a path, resolved to an absolute path."""
+    p = Path(path).resolve()
+    for _ in range(levels):
+        p = p.parent
+    return str(p)
+
+
 def ternary[V](value: V, v1: V, v2: V) -> V:
     """Return v1 if value is truthy, otherwise return v2."""
     return v1 if value else v2
@@ -345,6 +354,7 @@ ENV.filters["t2s"] = t2s
 ENV.filters["duration"] = duration
 ENV.filters["b64decode"] = b64decode
 ENV.filters["b64encode"] = b64encode
+ENV.filters["parent_path"] = parent_path
 ENV.filters["ifel"] = ternary
 ENV.filters["year"] = year
 
