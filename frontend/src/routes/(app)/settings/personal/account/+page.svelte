@@ -163,7 +163,7 @@
       accept="image/*"
       class="file-input w-full max-w-sm file-input-xs"
       bind:this={avatarInput}
-      onchange={async (event) => (cropSrc = await loadFile(event))}
+      onchange={async (event) => (cropSrc = await loadFile(event.currentTarget))}
     />
   </div>
   <div class="modal-action">

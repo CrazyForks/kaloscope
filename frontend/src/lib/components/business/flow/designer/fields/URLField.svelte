@@ -81,7 +81,7 @@
   </Label>
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <label class="input input-sm w-full gap-0" onclick={(e) => e.preventDefault()}>
+  <label class="input input-sm w-full gap-0" onclick={(event) => event.preventDefault()}>
     <button
       class="cursor-pointer pt-px opacity-80"
       onclick={() => {

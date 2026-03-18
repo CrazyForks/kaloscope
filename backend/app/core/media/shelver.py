@@ -138,6 +138,7 @@ async def update_metadata(lib: MediaLib, path: Path | str):
             nfo_mtime=datetime.fromtimestamp(path.stat().st_mtime, tz=UTC),
             title=meta.title,
             year=meta.year,
+            aired=meta.aired,
             season=meta.season,
             episode=meta.episode,
             poster=meta.poster,

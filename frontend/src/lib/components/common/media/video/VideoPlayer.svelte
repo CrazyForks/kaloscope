@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { Danmaku, Definition, Optional, Section } from '$lib/types';
+  import type { Chapter, Danmaku, Definition, Optional } from '$lib/types';
   import type { IUrl } from 'xgplayer/es/defaultConfig';
   import type OptionsPlugin from 'xgplayer/es/plugins/common/optionsIcon';
   import type DanmakuPlugin from 'xgplayer/es/plugins/danmu';
@@ -24,14 +24,24 @@
   } & Optional<{
     width: string | number;
     height: string | number;
+    autoplay: boolean;
+    /** The type of the video source, e.g., 'mp4', 'flv', 'hls', etc. */
     videoType: string;
+    /** The danmakus (video comments) to be displayed on the video. */
     danmakus: Danmaku[];
-    sections: Section[];
-    sectionId: string;
-    sectionChange: (section: Section) => void;
+    /** The video chapters for TV shows or multi-part videos. */
+    chapters: Chapter[];
+    chapterId: string;
+    chapterChange: (chapter: Chapter) => void;
+    /** The video definitions for different quality levels. */
     definitions: Definition[];
+    /** The callback function when the back button is clicked. */
+    back: () => void;
+    /** Whether the video is the next chapter of the current video. */
     next: boolean;
+    /** The title to be displayed on the top bar. */
     title: string;
+    /** The uploader to be displayed on the top bar. */
     uploader: string;
     uploadedAt: string;
   }>;
@@ -54,7 +64,7 @@
   let player: Player | null = $state(null);
   let mobilePlugin: MobilePlugin | null = $derived.by(() => player?.getPlugin('mobile'));
   let danmakuPlugin: DanmakuPlugin | null = $derived.by(() => player?.getPlugin('danmu'));
-  let sectionsPlugin: OptionsPlugin | null = $derived.by(() => player?.getPlugin('sections'));
+  let chaptersPlugin: OptionsPlugin | null = $derived.by(() => player?.getPlugin('chapters'));
   let fullscreenPlugin: FullscreenPlugin | null = $derived.by(() => player?.getPlugin('fullscreen'));
   let playbackRatePlugin: OptionsPlugin | null = $derived.by(() => player?.getPlugin('playbackRate'));
 
@@ -174,18 +184,18 @@
   };
 
   /**
-   * Extracts the sections from the video options.
+   * Extracts the chapters from the video options.
    *
    * @param options - The video options.
    */
-  const formatSections = (options: VideoOptions): Section[] => {
-    if (options.sections && options.sections.length > 0) {
-      return options.sections
-        .filter((s) => (s.id || s.url) && s.title)
-        .map((s) => ({
-          id: s.id,
-          url: s.url,
-          title: s.title,
+  const formatChapters = (options: VideoOptions): Chapter[] => {
+    if (options.chapters && options.chapters.length > 0) {
+      return options.chapters
+        .filter((c) => (c.id || c.url) && c.title)
+        .map((c) => ({
+          id: c.id,
+          url: c.url,
+          title: c.title,
           definition: false
         }));
     }
@@ -223,7 +233,7 @@
     // if the player is already mounted, just switch the URL
     if (player) {
       if (options.next) {
-        player.playNext({ url: options.url });
+        player.playNext({ url: options.url, topBar: { title: options.title } });
       } else {
         videoSettings.changeDefinition(options.url);
       }
@@ -236,8 +246,18 @@
       url: options.url,
       width: options.width ?? width,
       height: options.height ?? height,
+      autoplay: options.autoplay ?? true,
       videoType: options.videoType,
+      // bind the video settings component to the player config
+      settings: videoSettings,
       definitions: formatDefinitions(options),
+      topBarAutoHide: false,
+      topBar: {
+        back: options.back,
+        title: options.title,
+        uploader: options.uploader,
+        uploadedAt: options.uploadedAt
+      },
       danmu: {
         comments: formatDanmakus(options.danmakus),
         defaultOff: true,
@@ -246,29 +266,20 @@
           container: danmakuContainer
         }
       },
-      topBar: {
-        title: options.title,
-        uploader: options.uploader,
-        uploadedAt: options.uploadedAt,
-        settingsModal: videoSettings
-      },
-      fullscreen: {
-        switchCallback: toggleFullscreen
-      },
-      playbackRate: {
-        index: 100,
-        list: playbackRates
-      },
-      sections: {
-        index: 99,
-        list: formatSections(options),
-        sectionId: options.sectionId,
-        sectionChange: options.sectionChange
-      },
       volume: {
         index: 98,
         default: 1,
         showValueLabel: true
+      },
+      chapters: {
+        index: 99,
+        list: formatChapters(options),
+        chapterId: options.chapterId,
+        chapterChange: options.chapterChange
+      },
+      playbackRate: {
+        index: 100,
+        list: playbackRates
       },
       mobile: {
         gradient: 'none',
@@ -278,6 +289,9 @@
       controls: {
         mode: 'normal',
         initShow: true
+      },
+      fullscreen: {
+        switchCallback: toggleFullscreen
       },
       miniprogress: true,
       pip: true
@@ -314,19 +328,32 @@
         }
       });
     });
-    if (mobilePlugin) {
-      // enable the gestures on mobile devices after the first play
-      player.once(Events.PLAY, () => {
+
+    player.once(Events.PLAYING, () => {
+      // enable the gestures on mobile devices
+      if (mobilePlugin) {
         mobilePlugin.config.gestureX = true;
         mobilePlugin.config.disablePress = false;
-      });
+      }
+      // enable the auto-hide for the top bar
+      player.root?.querySelector('.xg-top-bar')?.classList.add('top-bar-autohide');
+    });
+
+    if (mobilePlugin) {
       // disable the long press gesture when the player is paused
       player.on(Events.PAUSE, () => {
         mobilePlugin.config.disablePress = true;
       });
+
+      // re-enable the long press gesture when the player starts playing
       player.on(Events.PLAY, () => {
+        if (!mobilePlugin.config.gestureX) {
+          // only re-enable the long press gesture after the first play
+          return;
+        }
         mobilePlugin.config.disablePress = false;
       });
+
       // fix the issue that the long press event is interrupted by the touchmove event
       player.on(Events.USER_ACTION, (data) => {
         if (data.pluginName === 'mobile' && data.eventType === 'press') {
@@ -354,7 +381,7 @@
       if (player.isPlaying) {
         return true;
       }
-      for (const plugin of [sectionsPlugin, playbackRatePlugin]) {
+      for (const plugin of [chaptersPlugin, playbackRatePlugin]) {
         if (plugin && plugin.optionsList && plugin.isActive) {
           plugin.optionsList.hide();
           plugin.isActive = false;
@@ -548,8 +575,7 @@
         &.xg-options-list {
           opacity: 1;
           z-index: 11;
-          font-size: 20px;
-          font-family: var(--font-title);
+          font-size: 12px;
           background-color: hsla(0, 0%, 10%, 0.9) !important;
         }
       }

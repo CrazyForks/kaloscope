@@ -80,7 +80,9 @@ async def list_items(_, query: MediaQuery) -> HTTPResponse:
         **query.page_params,
         annotations={"keyword": RawSQL("IFNULL(title, name)")},
     )
-    return json(await MediaItemService.dump_page(page, exclude=("lib",)))
+    return json(
+        await MediaItemService.dump_page(page, exclude=("lib", "parent", "children"))
+    )
 
 
 @media.get("/<id:int>")

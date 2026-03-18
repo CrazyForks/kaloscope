@@ -38,7 +38,7 @@ export default class PlaybackRate extends OptionsIcon {
   }
 
   onIconClick = () => {
-    const plugin = this.player.getPlugin('sections');
+    const plugin = this.player.getPlugin('chapters');
     if (plugin && plugin.optionsList && plugin.isActive) {
       plugin.optionsList.hide();
       plugin.isActive = false;

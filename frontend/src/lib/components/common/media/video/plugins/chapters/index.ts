@@ -1,5 +1,5 @@
 import { icons, iconToSVG } from '$lib/icons';
-import type { Section } from '$lib/types';
+import type { Chapter } from '$lib/types';
 import OptionList from 'xgplayer/es/plugins/common/optionList';
 import OptionsIcon from 'xgplayer/es/plugins/common/optionsIcon';
 import './index.css';
@@ -18,25 +18,25 @@ type DelegateEvent = Event & {
   delegateTarget: Element;
 };
 
-export default class Sections extends OptionsIcon {
+export default class Chapters extends OptionsIcon {
   static get pluginName() {
-    return 'sections';
+    return 'chapters';
   }
 
   static get defaultConfig() {
     return {
       ...OptionsIcon.defaultConfig,
-      className: 'xgplayer-sections',
+      className: 'xgplayer-chapters',
       isShowIcon: true,
       heightLimit: false,
       hidePortrait: false,
-      sectionId: '',
-      sectionChange: () => {}
+      chapterId: '',
+      chapterChange: null
     };
   }
 
   get isDefinition() {
-    return (this.config.list as Section[]).some((item) => item.definition);
+    return (this.config.list as Chapter[]).some((item) => item.definition);
   }
 
   onIconClick = () => {
@@ -49,19 +49,26 @@ export default class Sections extends OptionsIcon {
 
   onItemClick = (event: DelegateEvent, data: ChangeData) => {
     super.onItemClick(event, data);
-    if (typeof this.config.sectionChange === 'function') {
-      this.config.sectionChange({
-        id: data.to.id,
-        url: data.to.url,
-        title: data.to.showText,
-        definition: data.to.definition === 'true'
+    const { id, url, showText, definition } = data.to;
+    if (typeof this.config.chapterChange === 'function') {
+      this.config.chapterChange({
+        id: id,
+        url: url,
+        title: showText,
+        definition: definition === 'true'
       });
+    } else if (typeof url === 'string') {
+      if (definition === 'true') {
+        this.player.config.settings.changeDefinition(url);
+      } else {
+        this.player.playNext({ url: url, topBar: { title: showText } });
+      }
     }
   };
 
   registerIcons() {
     return {
-      sections: {
+      chapters: {
         icon: iconToSVG(this.isDefinition ? icons.shadow : icons.listCheck),
         class: 'size-6 text-white/80'
       }
@@ -83,18 +90,18 @@ export default class Sections extends OptionsIcon {
     const { config, optionsList, player } = this;
 
     this.curIndex = -1;
-    const items = (config.list as Section[]).map((item, index) => {
-      const sectionItem = {
+    const items = (config.list as Chapter[]).map((item, index) => {
+      const chapterItem = {
         id: item.id || '',
         url: item.url || '',
         showText: item.title,
         definition: item.definition || false,
-        selected: (item.id || item.url) === (config.sectionId || player.config.url || '')
+        selected: (item.id || item.url) === (config.chapterId || player.config.url || '')
       };
-      if (sectionItem.selected) {
+      if (chapterItem.selected) {
         this.curIndex = index;
       }
-      return sectionItem;
+      return chapterItem;
     });
 
     if (optionsList) {
@@ -105,7 +112,7 @@ export default class Sections extends OptionsIcon {
         root: isSide ? player.innerContainer || player.root : this.root,
         config: {
           data: items || [],
-          className: isSide ? 'xg-right-side xg-side-list xgplayer-sections' : '',
+          className: isSide ? 'xg-right-side xg-side-list xgplayer-chapters' : '',
           domEventType: 'click',
           onItemClick: this.onItemClick
         }

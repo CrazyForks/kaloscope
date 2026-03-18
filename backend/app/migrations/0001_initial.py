@@ -303,6 +303,7 @@ class Migration(migrations.Migration):
                 ('nfo_mtime', fields.DatetimeField(null=True, auto_now=False, auto_now_add=False)),
                 ('title', fields.CharField(null=True, max_length=255)),
                 ('year', fields.IntField(null=True)),
+                ('aired', fields.CharField(null=True, max_length=64)),
                 ('season', fields.IntField(null=True)),
                 ('episode', fields.IntField(null=True)),
                 ('poster', fields.CharField(null=True, max_length=255)),

@@ -3,14 +3,14 @@
   import { api } from '$lib/api';
   import { Overlay, VideoPlayer } from '$lib/components';
   import { createLoading } from '$lib/helpers';
-  import type { Resource, Resp, Section } from '$lib/types';
+  import type { Chapter, Resource, Resp } from '$lib/types';
   import { onMount, tick } from 'svelte';
   import { queryParameters, ssp } from 'sveltekit-search-params';
 
   // the URL query parameters
   const query = queryParameters(
     {
-      section_id: ssp.string(),
+      chapter_id: ssp.string(),
       media_type: ssp.string(),
       video_type: ssp.string()
     },
@@ -43,7 +43,7 @@
         json: {
           $start: 'details_start',
           id: page.params.rsrc_id,
-          section_id: query.section_id
+          chapter_id: query.chapter_id
         }
       })
       .json<Resp<Resource>>()
@@ -63,41 +63,42 @@
    */
   function onload(rsrc: Resource) {
     resource = rsrc;
-    const sections = rsrc?.sections ?? [];
+    const chapters = rsrc?.chapters ?? [];
     if (rsrc?.url) {
       if (mediaType === 'video' && player) {
         player.mount({
           url: rsrc.url,
           videoType: videoType,
           danmakus: rsrc.danmakus,
-          sections: sections,
-          sectionId: query.section_id,
-          sectionChange: onchange,
+          chapters: chapters,
+          chapterId: query.chapter_id,
+          chapterChange: onchange,
           definitions: rsrc.definitions,
           title: rsrc.title,
           uploader: rsrc.uploader,
           uploadedAt: rsrc.uploaded_at
         });
       }
-    } else if (sections.length > 0) {
-      onchange(sections[0]);
+    } else if (chapters.length > 0) {
+      onchange(chapters[0]);
     }
   }
 
   /**
-   * Handle the section change event.
+   * Handle the chapter change event.
    *
-   * @param section - The section object.
+   * @param chapter - The chapter object.
    */
-  function onchange(section: Section) {
-    if (section.url) {
+  function onchange(chapter: Chapter) {
+    const { id, url, title, definition } = chapter;
+    if (url) {
       // switch the resource URL
       if (mediaType === 'video' && player) {
-        player.mount({ next: !section.definition, url: section.url });
+        player.mount({ next: !definition, url: url, title: title });
       }
-    } else if (section.id && section.id !== query.section_id) {
-      // update the query parameter and request the new section
-      query.section_id = section.id;
+    } else if (id && id !== query.chapter_id) {
+      // update the query parameter and request the new chapter
+      query.chapter_id = id;
       details(true);
     }
   }

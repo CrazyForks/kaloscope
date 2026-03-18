@@ -120,7 +120,7 @@
         class="hidden"
         accept="image/*"
         bind:this={iconInput}
-        onchange={async (event) => (cropSrc = await loadFile(event))}
+        onchange={async (event) => (cropSrc = await loadFile(event.currentTarget))}
       />
     </div>
     <fieldset class="fieldset">

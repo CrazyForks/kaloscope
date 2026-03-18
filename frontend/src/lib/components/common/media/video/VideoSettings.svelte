@@ -145,6 +145,7 @@
         if (definition !== url) {
           definition = url;
         } else {
+          // definition is changed by the select component
           player.emit('url_change', url);
         }
       }

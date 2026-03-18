@@ -13,10 +13,10 @@ export default class TopBar extends Plugin {
     return {
       position: POSITIONS.ROOT_TOP,
       index: 0,
+      back: null,
       title: '',
       uploader: '',
-      uploadedAt: '',
-      settingsModal: null
+      uploadedAt: ''
     };
   }
 
@@ -32,14 +32,18 @@ export default class TopBar extends Plugin {
   onBackIconClick = (event: Event) => {
     event.preventDefault();
     event.stopPropagation();
-    historyBack();
+    if (typeof this.config.back === 'function') {
+      this.config.back();
+    } else {
+      historyBack();
+    }
   };
 
   onSettingsIconClick = (event: Event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (this.config.settingsModal) {
-      this.config.settingsModal.showModal();
+    if (this.player.config.settings) {
+      this.player.config.settings.showModal();
     }
   };
 
@@ -67,8 +71,23 @@ export default class TopBar extends Plugin {
     this.bind('.back-icon', ['click', 'touchend'], this.onBackIconClick);
     this.bind('.settings-icon', ['click', 'touchend'], this.onSettingsIconClick);
     this.toggleMarquee();
-    this.on([Events.VIDEO_RESIZE], () => {
+    this.on(Events.VIDEO_RESIZE, () => {
       this.toggleMarquee();
+    });
+    this.on(Events.PLAYNEXT, () => {
+      const newTitle = this.player.config.topBar.title;
+      if (newTitle && newTitle !== this.title) {
+        // update title when playNext with a different title
+        this.config.title = newTitle;
+        const titleEl = this.root.querySelector('.font-title');
+        if (titleEl) {
+          titleEl.innerHTML = `
+            <span class="pr-8!">${this.title}</span>
+            <span class="pr-8! hidden">${this.title}</span>
+          `;
+          this.toggleMarquee();
+        }
+      }
     });
   }
 

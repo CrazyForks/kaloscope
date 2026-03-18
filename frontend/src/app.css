@@ -185,6 +185,10 @@
   @apply cursor-pointer transition-transform duration-200 active:scale-95;
 }
 
+@utility btn-enlarge {
+  @apply border-0 transition-all hover:scale-110 hover:backdrop-blur-sm;
+}
+
 @utility btn-subtle {
   @apply btn-ghost hover:bg-base-content/10;
   &:is(:disabled, [disabled], .btn-disabled) {

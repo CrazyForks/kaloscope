@@ -181,8 +181,10 @@ export type MediaLib = {
  */
 export type MediaItem = {
   id: number;
-  lib_id: number;
-  parent_id: number | null;
+  // lib_id: number;
+  lib: MediaLib;
+  // parent_id: number | null;
+  parent: MediaItem | null;
   dir: string;
   path: string;
   name: string;
@@ -191,6 +193,7 @@ export type MediaItem = {
   nfo_mtime: string | null;
   title: string | null;
   year: number | null;
+  aired: string | null;
   season: number | null;
   episode: number | null;
   poster: string | null;
@@ -418,9 +421,9 @@ export type NodeSchema = {
 };
 
 /**
- * The type of the resource section.
+ * The type of the resource chapter.
  */
-export type Section = {
+export type Chapter = {
   id?: string | null;
   url?: string | null;
   title: string;
@@ -473,7 +476,7 @@ export type Resource = Optional<{
   text: string;
   images: string[];
   definitions: Definition[];
-  sections: Section[];
+  chapters: Chapter[];
   danmakus: Danmaku[];
   favorite: boolean;
 }>;

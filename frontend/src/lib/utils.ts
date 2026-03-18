@@ -195,14 +195,13 @@ export const sniffer = {
 };
 
 /**
- * Load a file as a base64 string from an input event.
+ * Load a file as a base64 string from an input event target.
  *
- * @param e - The input event.
+ * @param target - The event target of a file input change event.
  * @returns A promise that resolves to the base64 string.
  */
-export function loadFile(e: Event & { currentTarget: EventTarget & HTMLInputElement }): Promise<string | null> {
+export function loadFile(target: EventTarget & HTMLInputElement): Promise<string | null> {
   return new Promise((resolve, reject) => {
-    const target = e.currentTarget;
     if (target.files && target.files[0]) {
       const reader = new FileReader();
       reader.onload = (event) => {

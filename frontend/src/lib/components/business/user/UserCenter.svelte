@@ -52,9 +52,9 @@
 </script>
 
 <svelte:window
-  onbeforeinstallprompt={(e: Event) => {
-    e.preventDefault();
-    deferredPrompt = e as BeforeInstallPromptEvent;
+  onbeforeinstallprompt={(event: Event) => {
+    event.preventDefault();
+    deferredPrompt = event as BeforeInstallPromptEvent;
   }}
 />
 

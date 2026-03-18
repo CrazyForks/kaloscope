@@ -80,6 +80,7 @@ class MediaItem(TortoiseModel):
     nfo_mtime = DatetimeField(null=True)
     title = CharField(max_length=255, null=True)
     year = IntField(null=True)
+    aired = CharField(max_length=64, null=True)
     season = IntField(null=True)
     episode = IntField(null=True)
     poster = CharField(max_length=255, null=True)

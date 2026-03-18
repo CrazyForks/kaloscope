@@ -145,7 +145,7 @@
       <div class="relative">
         <Image transparent src={rsrc.cover} height={coverHeight(ratio)} {ratio} />
         <div class="absolute inset-0 flex size-full flex-col">
-          <Rating score={rsrc.rating} class="mt-1 ml-1 self-start text-xs" />
+          <Rating score={rsrc.rating} class="mt-0.5 ml-0.5 self-start px-1! text-xs" />
           <span
             class="mt-auto max-w-full self-center truncate px-0.5 text-white opacity-80 text-stroke"
             style="font-size: clamp(0.5rem, calc(1rem - 0.05rem * {rsrc.category?.length || 0}), 0.75rem);"

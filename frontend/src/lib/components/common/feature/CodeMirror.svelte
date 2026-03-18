@@ -61,6 +61,7 @@
    * Get the language name from the language object.
    *
    * @param language - The language object.
+   * @returns The language name to display.
    */
   function getLanguageName(language: LanguageSupport | Language | null | undefined): string {
     // default to plain text

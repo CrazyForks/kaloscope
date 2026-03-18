@@ -28,9 +28,9 @@ import Start from 'xgplayer/es/plugins/start';
 import Time from 'xgplayer/es/plugins/time';
 import TimeSegments from 'xgplayer/es/plugins/time/timesegments';
 import Volume from 'xgplayer/es/plugins/volume';
+import Chapters from './chapters';
 import Gradient from './gradient';
 import PlaybackRate from './playbackrate';
-import Sections from './sections';
 import TopBar from './topbar';
 
 // import all i18n json files from locales directory
@@ -74,7 +74,7 @@ const BASE_PLUGINS = [
   Danmu,
   TopBar,
   Gradient,
-  Sections,
+  Chapters,
   PlaybackRate
 ];
 
@@ -164,16 +164,21 @@ function guessVideoType(url?: IUrl): string | null {
 function videoPlugins(videoType?: string | null): Partial<BasePlugin>[] {
   videoType = videoType?.toLowerCase();
   if (videoType === 'mp4') {
-    return [MP4];
+    // https://h5player.bytedance.com/plugins/extension/xgplayer-mp4.html
+    const ios = sniffer.isIos();
+    if (!ios) {
+      return [MP4];
+    }
   } else if (videoType === 'flv') {
+    // https://h5player.bytedance.com/plugins/extension/xgplayer-flv.html
     const supported = FLV.isSupported();
     if (supported) {
       return [FLV];
     }
   } else if (videoType === 'hls') {
+    // https://h5player.bytedance.com/plugins/extension/xgplayer-hls.html
     const native = document.createElement('video').canPlayType('application/vnd.apple.mpegurl');
-    const supported = HLS.isSupported();
-    if (!native && supported) {
+    if (!native && HLS.isSupported()) {
       return [HLS];
     }
   }

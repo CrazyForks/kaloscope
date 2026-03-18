@@ -177,7 +177,7 @@
     <!-- grid view -->
     {#snippet item(item)}
       {@const transClass = 'transition-all duration-300'}
-      {@const btnClass = 'hover:bg-base-200 hover:text-base-content border-0 bg-black/70 text-white'}
+      {@const btnClass = 'hover:bg-base-300 hover:text-base-content border-0 bg-black/60 text-white'}
       <div
         tabindex="0"
         role="button"
