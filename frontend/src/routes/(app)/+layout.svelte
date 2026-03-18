@@ -19,7 +19,8 @@
   // the back button to go back to the previous page
   let historyBack: boolean = $state(false);
 
-  // the shadow status of the top navbar
+  // the states for the navbar component
+  let navbarHidden: boolean = $state(false);
   let navbarShadow: boolean = $state(false);
 
   // the scroll y position of the window
@@ -92,6 +93,7 @@
   afterNavigate(({ from }) => {
     // enable certain features based on specific class names
     historyBack = document.querySelector('.history-back') !== null;
+    navbarHidden = document.querySelector('.navbar-hidden') !== null;
     navbarShadow = document.querySelector('.navbar-shadow') !== null;
     pullToRefresh = document.querySelector('.pull-to-refresh') !== null;
     // update the subroutes store after navigation
@@ -149,7 +151,13 @@
 <svelte:window bind:scrollY />
 
 <!-- The top navigation bar. -->
-<Navbar appMode navs={data.navs} back={historyBack} shadow={navbarShadow || scrollY > 0 || frozenScrollY > 0} />
+<Navbar
+  appMode
+  navs={data.navs}
+  back={historyBack}
+  hidden={navbarHidden}
+  shadow={navbarShadow || scrollY > 0 || frozenScrollY > 0}
+/>
 <!-- The loading spinner for the pull-to-refresh feature. -->
 <div
   class="max-h-48 justify-center bg-base-125 {refresherH.current ? 'flex' : 'hidden'}"

@@ -8,6 +8,8 @@
     back?: boolean;
     /** Whether to show the shadow effect. */
     shadow?: boolean;
+    /** Whether to hide the navbar component. */
+    hidden?: boolean;
     /** Whether to use the app mode. */
     appMode?: boolean;
   };
@@ -23,7 +25,7 @@
   import { historyBack, subroutes } from '$lib/stores';
   import { scale } from 'svelte/transition';
 
-  let { navs = [], back = false, shadow = false, appMode = false }: NavbarProps = $props();
+  let { navs = [], back = false, shadow = false, hidden = false, appMode = false }: NavbarProps = $props();
   let themeSwitcher: Themes;
   let langSwitcher: Languages;
   let logo: Logo | null = $state(null);
@@ -44,7 +46,7 @@
   });
 </script>
 
-<div class="navbar top-0 layer-2 h-(--ks-navbar-h) min-h-(--ks-navbar-h) {navbarClass} {shadowClass}">
+<div class="navbar top-0 layer-2 h-(--ks-navbar-h) min-h-(--ks-navbar-h) {navbarClass} {shadowClass}" class:hidden>
   <!-- left part -->
   <div class="mr-auto flex-center shrink-0 overflow-hidden">
     {#if appMode}
