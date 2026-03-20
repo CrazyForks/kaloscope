@@ -35,7 +35,7 @@ package-mode = false
 packages = [{ include = "app" }]
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.15.6"
+ruff = "^0.15.7"
 pytest = "^9.0.2"
 pre-commit = "^4.5.1"
 commitizen = "^4.13.9"

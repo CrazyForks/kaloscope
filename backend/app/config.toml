@@ -9,14 +9,17 @@ response_timeout = 60
 keep_alive_timeout = 120
 fallback_error_format = "json"
 
-# https://sanic.dev/en/plugins/sanic-ext/openapi/ui.html
-oas_ui_default = "swagger"
-oas_ui_redoc = false
-
 # https://sanic.dev/en/plugins/sanic-ext/health-monitor.html
 health = true
 health_endpoint = true
 health_url_prefix = "/_api/health"
+
+# https://sanic.dev/en/plugins/sanic-ext/openapi/ui.html
+oas_ui_default = "swagger"
+oas_ui_redoc = false
+
+# https://sanic.dev/en/plugins/sanic-ext/logger.html
+logging = true
 
 [workspace]
 database = "{root}/workspace/database"
