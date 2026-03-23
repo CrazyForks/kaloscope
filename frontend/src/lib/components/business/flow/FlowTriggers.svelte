@@ -1,12 +1,6 @@
-<script lang="ts">
-  import { api } from '$lib/api';
-  import { Button } from '$lib/components';
+<script lang="ts" module>
   import type { GraphCategory } from '$lib/enums';
-  import { _ } from '$lib/i18n';
-  import { icons } from '$lib/icons';
   import type { FlowGraph, FlowTrigger, Page, Resp } from '$lib/types';
-  import { onMount, tick } from 'svelte';
-  import { flip } from 'svelte/animate';
 
   type FlowTriggersProps = {
     category: keyof typeof GraphCategory;
@@ -14,6 +8,16 @@
     onchange?: (triggers: FlowTrigger[]) => void;
     class?: string;
   };
+</script>
+
+<script lang="ts">
+  import { api } from '$lib/api';
+  import { Button } from '$lib/components';
+  import { _ } from '$lib/i18n';
+  import { icons } from '$lib/icons';
+  import { onMount, tick } from 'svelte';
+  import { flip } from 'svelte/animate';
+
   let { category, triggers: _triggers, onchange, class: _class }: FlowTriggersProps = $props();
 
   // the snapshot is used to avoid reactivity issues with the initial triggers
@@ -53,7 +57,7 @@
   }
 
   onMount(() => {
-    // load the graphs for the given category
+    // load the available graphs for the given category
     api
       .get('flow/graph/list', {
         searchParams: [

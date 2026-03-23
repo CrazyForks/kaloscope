@@ -73,8 +73,7 @@ methods:
    */
   function upsert(form: HTMLFormElement, data: FormData) {
     loading.start();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const jsonData: Record<string, any> = Object.fromEntries(data);
+    const jsonData: Record<string, unknown> = Object.fromEntries(data);
     jsonData.id = id;
     jsonData.config = config;
     api

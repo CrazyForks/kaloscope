@@ -21,6 +21,7 @@ from app.core.flow.nodes.base import Node
 from app.core.flow.syncer import save_icon, sync_repo
 from app.models.flow import (
     FlowGraph,
+    FlowJob,
     FlowLog,
     FlowRepository,
     FlowTemplate,
@@ -29,6 +30,8 @@ from app.models.flow import (
     GraphCategory,
     GraphRef,
     GraphState,
+    JobState,
+    JobUpsert,
     RepositoryAdd,
 )
 from app.services.base import BaseService
@@ -580,3 +583,30 @@ class FlowTriggerService(BaseService[FlowTrigger], model=FlowTrigger):
         await engine.execute_batch(
             graph_ids, bootparams, repeatable=repeatable, recoverable=recoverable
         )
+
+
+class FlowJobService(BaseService[FlowJob], model=FlowJob):
+    """The service class for all flow job related operations."""
+
+    @classmethod
+    @atomic()
+    async def upsert(cls, body: JobUpsert) -> FlowJob:
+        """Create or update a flow job.
+
+        Args:
+            body: The job upsert data.
+
+        Returns:
+            The created or updated flow job.
+        """
+        engine = cls.app_ctx().engine
+        data = body.model_dump(exclude={"id"})
+        if body.id:
+            await FlowJob.filter(id=body.id).update(**data)
+            job = await FlowJob.get(id=body.id)
+            await engine.refresh_job(job.id)
+        else:
+            data["state"] = JobState.PENDING
+            job = await FlowJob.create(**data)
+            await engine.add_job(job.id)
+        return job

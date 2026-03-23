@@ -3,11 +3,11 @@
   import { createLoading } from '$lib/helpers';
   import type { DownloadDir, Downloader, Resp } from '$lib/types';
 
-  // the modal dialog and file tree instances
+  // the modal dialog and file tree instance
   let modal: Modal;
   let fileTree: FileTree;
 
-  // the download directories and managers
+  // the download directories and downloaders
   let directories: DownloadDir[] = $state([]);
   let directory: DownloadDir | null = $state(null);
   let downloaders: Downloader[] = $state([]);
@@ -152,9 +152,9 @@
           label: d.name,
           disabled: d.status === 'down'
         }))}
-        bind:value={downloader}
         class="w-full"
         name="downloader_id"
+        bind:value={downloader}
       />
       <Label>{$_('download.dir')}</Label>
       {#if directory}

@@ -60,7 +60,8 @@
       "workflows": {
         "title": "工作流",
         "templates": "流程模板",
-        "graphs": "流程定义"
+        "graphs": "流程定义",
+        "schedule": "定时调度"
       },
       "help": {
         "title": "帮助",
@@ -84,21 +85,30 @@
       "movie": "电影",
       "tv_show": "电视剧"
     },
+    "download_state": {
+      "downloading": "下载中",
+      "paused": "已暂停",
+      "completed": "已完成",
+      "error": "异常"
+    },
     "graph_category": {
       "indexer": "网络搜索",
       "ingest": "资源入库",
-      "schedule": "定时任务"
+      "schedule": "定时调度"
     },
     "graph_state": {
       "drafting": "草稿",
       "modified": "有更新",
       "published": "已发布"
     },
-    "download_state": {
-      "downloading": "下载中",
+    "job_state": {
       "paused": "已暂停",
-      "completed": "已完成",
-      "error": "异常"
+      "running": "运行中"
+    },
+    "job_trigger": {
+      "date": "单次执行",
+      "interval": "间隔执行",
+      "cron": "Cron 表达式"
     }
   },
   "data": {
@@ -128,6 +138,15 @@
     "description": "描述",
     "average_time": "平均耗时",
     "last_execution": "上次执行",
+    "graph": "工作流",
+    "trigger": "触发方式",
+    "bootparams": "启动参数",
+    "cron_expr": "Cron 表达式",
+    "run_date": "执行时间",
+    "interval": "间隔",
+    "interval_start": "开始时间",
+    "interval_end": "结束时间",
+    "every": "每 {0}",
     "created": "创建时间",
     "updated": "更新时间",
     "actions": "操作"
@@ -141,6 +160,8 @@
     "tasks": "任务",
     "graph": "流程",
     "graphs": "流程",
+    "job": "定时任务",
+    "jobs": "定时任务",
     "source": "数据源",
     "sources": "数据源",
     "filter": "筛选条件",
@@ -161,6 +182,7 @@
     "edit": "编辑{0}",
     "view": "查看{0}",
     "pause": "暂停{0}",
+    "resume": "恢复{0}",
     "start": "开始{0}",
     "append": "添加{0}",
     "change": "更换{0}",
@@ -209,7 +231,9 @@
     "hour": "小时",
     "hours": "小时",
     "day": "天",
-    "days": "天"
+    "days": "天",
+    "week": "周",
+    "weeks": "周"
   },
   "password": {
     "new": "新密码",

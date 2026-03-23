@@ -63,7 +63,7 @@ export const load: LayoutLoad = () => {
           icon: icons.documentFlowchart
         },
         {
-          title: 'enum.graph_category.schedule',
+          title: 'nav.settings.workflows.schedule',
           path: '/settings/workflows/schedule',
           icon: icons.clock
         }

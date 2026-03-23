@@ -1,10 +1,4 @@
-<script lang="ts">
-  import { enhance } from '$app/forms';
-  import { api } from '$lib/api';
-  import { Label, Modal } from '$lib/components';
-  import { createFormSchema, createLoading } from '$lib/helpers';
-  import { _ } from '$lib/i18n';
-  import { icons } from '$lib/icons';
+<script lang="ts" module>
   import type { GlobalVariable, Resp } from '$lib/types';
 
   type VariableEditorProps = Partial<{
@@ -14,6 +8,16 @@
     encrypted: boolean;
     onsave: (result: GlobalVariable) => void;
   }>;
+</script>
+
+<script lang="ts">
+  import { enhance } from '$app/forms';
+  import { api } from '$lib/api';
+  import { Label, Modal } from '$lib/components';
+  import { createFormSchema, createLoading } from '$lib/helpers';
+  import { _ } from '$lib/i18n';
+  import { icons } from '$lib/icons';
+
   let { id, key, value, encrypted = false, onsave }: VariableEditorProps = $props();
 
   // the modal dialog instance
@@ -35,8 +39,7 @@
    */
   function upsert(form: HTMLFormElement, data: FormData) {
     loading.start();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const jsonData: Record<string, any> = Object.fromEntries(data);
+    const jsonData: Record<string, unknown> = Object.fromEntries(data);
     jsonData.id = id;
     jsonData.encrypted = encrypted;
     api

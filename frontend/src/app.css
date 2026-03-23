@@ -120,15 +120,27 @@
     @apply border-border!;
   }
 
-  /* base focus ring color */
+  /* base outline color */
+  .outline {
+    @apply outline-border!;
+  }
+
   .input,
   .select,
   .textarea,
   .file-input {
     @apply transition-colors;
+    /* base focus ring color */
     &:focus,
     &:focus-within {
       @apply border-primary/80! outline-none!;
+    }
+    /* base disabled state color */
+    &:has(> input[disabled]),
+    &:has(> select[disabled]),
+    &:is(:disabled, [disabled]),
+    fieldset:disabled & {
+      @apply border-base-content/10!;
     }
   }
 
@@ -237,10 +249,10 @@
   mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
 }
 
+/* hover effects for interactive elements */
 @utility hover-link {
   @apply cursor-pointer border-b border-transparent text-primary hover:border-primary/80;
 }
-
 @utility hover-dashed {
   @apply cursor-pointer overflow-hidden rounded-field border-dashed border-border hover:border;
 }

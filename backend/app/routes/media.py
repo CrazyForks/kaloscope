@@ -49,7 +49,8 @@ async def sort_libraries(_, body: IDs) -> HTTPResponse:
 @validate(json=MediaLibUpsert)
 async def upsert_library(_, body: MediaLibUpsert) -> HTTPResponse:
     """Create or update a media library."""
-    return json(await MediaLibService.dump(await MediaLibService.upsert(body)))
+    library = await MediaLibService.upsert(body)
+    return json(await MediaLibService.dump(library))
 
 
 @media.post("/lib/delete")
@@ -81,7 +82,7 @@ async def list_items(_, query: MediaQuery) -> HTTPResponse:
         annotations={"keyword": RawSQL("IFNULL(title, name)")},
     )
     return json(
-        await MediaItemService.dump_page(page, exclude=("lib", "parent", "children"))
+        await MediaItemService.dump_page(page, exclude={"lib", "parent", "children"})
     )
 
 

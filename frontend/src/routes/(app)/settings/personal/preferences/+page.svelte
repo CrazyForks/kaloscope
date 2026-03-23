@@ -95,9 +95,9 @@
         <Select
           options={[
             { value: 0, label: 'preference.privacy.untrack' },
-            { value: 1, label: `1 ${$_('duration.day')}` },
-            { value: 3, label: `3 ${$_('duration.days')}` },
-            { value: 7, label: `7 ${$_('duration.days')}` }
+            { value: 1, label: `1 ${$_('duration.day').toLowerCase()}` },
+            { value: 3, label: `3 ${$_('duration.days').toLowerCase()}` },
+            { value: 7, label: `7 ${$_('duration.days').toLowerCase()}` }
           ]}
           bind:value={$user.preferences.search_records}
           onchange={() => update('search_records')}
@@ -109,9 +109,9 @@
         <Select
           options={[
             { value: 0, label: 'preference.privacy.untrack' },
-            { value: 1, label: `1 ${$_('duration.day')}` },
-            { value: 3, label: `3 ${$_('duration.days')}` },
-            { value: 7, label: `7 ${$_('duration.days')}` }
+            { value: 1, label: `1 ${$_('duration.day').toLowerCase()}` },
+            { value: 3, label: `3 ${$_('duration.days').toLowerCase()}` },
+            { value: 7, label: `7 ${$_('duration.days').toLowerCase()}` }
           ]}
           bind:value={$user.preferences.watch_records}
           onchange={() => update('watch_records')}

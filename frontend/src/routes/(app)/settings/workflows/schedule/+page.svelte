@@ -1,75 +1,151 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
   import { api } from '$lib/api';
   import {
+    Badge,
+    Button,
     Cell,
+    confirm,
     DataView,
-    FlowLogs,
     HCell,
-    Image,
+    JobEditor,
     Paginator,
     Search,
-    Status,
-    confirm,
+    Select,
     type PaginatorProps
   } from '$lib/components';
+  import { enumToOptions, JobState, JobTrigger, IntervalUnit } from '$lib/enums';
   import { createLoading, createSortField } from '$lib/helpers';
-  import { _, dateTime, milliseconds } from '$lib/i18n';
+  import { _, dateTime } from '$lib/i18n';
   import { icons } from '$lib/icons';
-  import type { FlowGraph, Page, Resp } from '$lib/types';
-  import { untrack } from 'svelte';
+  import type { FlowJob, OptionValue, Page, Resp } from '$lib/types';
+  import { toDatetimeLocal } from '$lib/utils';
+  import { tick, untrack } from 'svelte';
 
-  let graphs: FlowGraph[] = $state([]);
-  let graphName: string = $state('');
-  let flowLogs: FlowLogs;
+  let jobs: FlowJob[] = $state([]);
+  let jobName: string = $state('');
+  let jobState: OptionValue = $state(null);
+  let jobTrigger: OptionValue = $state(null);
+  let creator: JobEditor | null = $state(null);
+  let updater: JobEditor | null = $state(null);
+  let selected: FlowJob | null = $state(null);
+
+  let retryCount = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   const pagination: PaginatorProps = $state({ current: 1, size: 15, onchange: search });
   const ordering = createSortField();
   const loading = createLoading();
 
   /**
-   * Search flow graphs.
+   * Search flow jobs.
    *
    * @param page - The page number.
    * @param size - The page size.
+   * @param retry - Whether this search is a retry attempt.
    */
-  function search(page: number = 1, size: number = pagination.size) {
+  function search(page: number = 1, size: number = pagination.size, retry: boolean = false) {
+    if (!retry) {
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      retryCount = 0;
+    }
     loading.start();
     api
-      .get('flow/graph/list', {
-        searchParams: [
-          ['page_num', page],
-          ['page_size', size],
-          ['ordering', $ordering],
-          ['category', 'schedule'],
-          ['states', 'modified'],
-          ['states', 'published'],
-          ['name', graphName]
-        ]
+      .get('flow/job/list', {
+        searchParams: {
+          page_num: page,
+          page_size: size,
+          ordering: $ordering,
+          trigger: jobTrigger ?? '',
+          state: jobState ?? '',
+          name: jobName
+        }
       })
-      .json<Resp<Page<FlowGraph>>>()
+      .json<Resp<Page<FlowJob>>>()
       .then((resp) => {
         pagination.current = page;
         pagination.size = size;
         pagination.total = resp.data.total;
-        graphs = resp.data.items;
+        jobs = resp.data.items;
+        // if there are pending jobs, retry search with exponential backoff up to 5 times
+        if (jobs.some((job) => !JobState[job.state]) && retryCount < 5) {
+          retryTimer = setTimeout(
+            () => {
+              retryTimer = null;
+              search(page, size, true);
+            },
+            1000 * Math.pow(2, retryCount)
+          );
+          retryCount++;
+        } else {
+          retryCount = 0;
+        }
       })
-      .finally(() => {
-        loading.end();
-      });
+      .finally(() => loading.end());
   }
 
   /**
-   * Retract flow graph by ID.
+   * Pause a flow job by ID.
    *
-   * @param id - The flow graph ID.
+   * @param id - The flow job ID.
    */
-  function retract(id: number) {
+  function pause(id: number) {
     loading.start();
     api
-      .post(`flow/graph/${id}/retract`)
+      .post(`flow/job/${id}/pause`)
       .then(() => search(pagination.current))
       .catch(() => loading.end());
+  }
+
+  /**
+   * Resume a flow job by ID.
+   *
+   * @param id - The flow job ID.
+   */
+  function resume(id: number) {
+    loading.start();
+    api
+      .post(`flow/job/${id}/resume`)
+      .then(() => search(pagination.current))
+      .catch(() => loading.end());
+  }
+
+  /**
+   * Delete a flow job by ID.
+   *
+   * @param id - The flow job ID.
+   */
+  function del(id: number) {
+    loading.start();
+    api
+      .post(`flow/job/${id}/delete`)
+      .then(() => search(pagination.current))
+      .catch(() => loading.end());
+  }
+
+  /**
+   * Format the trigger description for display.
+   *
+   * @param job - The flow job.
+   */
+  function triggerDesc(job: FlowJob): string {
+    switch (job.trigger) {
+      case 'date':
+        return $dateTime(job.run_date);
+      case 'cron':
+        return job.cron_expr ?? '';
+      case 'interval': {
+        if (!job.interval_num || !job.interval_unit) {
+          return '';
+        }
+        const unit = IntervalUnit[job.interval_unit];
+        return $_('field.every', `${job.interval_num} ${$_(unit.label).toLowerCase()}`);
+      }
+      default:
+        return '';
+    }
   }
 
   $effect(() => {
@@ -78,51 +154,107 @@
   });
 </script>
 
-<DataView dvh loading={$loading} data={graphs}>
+<DataView dvh loading={$loading} data={jobs}>
   {#snippet filters()}
-    <Search label={$_('field.name')} bind:value={graphName} onsearch={() => search()} />
+    <Select
+      filter
+      options={enumToOptions(JobTrigger)}
+      bind:value={jobTrigger}
+      label={$_('field.trigger')}
+      onchange={() => search()}
+      class="max-md:hidden"
+    />
+    <Select
+      filter
+      options={enumToOptions(JobState)}
+      bind:value={jobState}
+      label={$_('field.state')}
+      onchange={() => search()}
+      class="max-lg:hidden"
+    />
+    <Search label={$_('field.name')} bind:value={jobName} onsearch={() => search()} />
+  {/snippet}
+  {#snippet actions()}
+    <Button
+      size="md"
+      icon={icons.addCircle}
+      text={$_('action.add', $_('entity.job'))}
+      onclick={() => creator?.showModal()}
+    />
   {/snippet}
   {#snippet header()}
-    <HCell width={['40%', '100%']} text={$_('field.name')} sort={ordering.bind('name')} />
-    <HCell width={['30%', null]} text={$_('field.last_execution')} />
-    <HCell width={['20%', null]} text={$_('field.average_time')} />
-    <HCell width={['10%', '4rem']} text={$_('field.status')} class="justify-center" />
+    <HCell width={['15%', '50%']} text={$_('field.graph')} sort={ordering.bind('graph__name')} />
+    <HCell width={['25%', '50%']} text={$_('field.trigger')} sort={ordering.bind('trigger')} />
+    <HCell width={['25%', null]} text={$_('field.description')} />
+    <HCell width={['20%', null]} text={$_('field.updated')} sort={ordering.bind('updated_at')} />
+    <HCell width={['15%', '4rem']} text={$_('field.state')} sort={ordering.bind('state')} />
     <HCell actions />
   {/snippet}
-  {#snippet row(graph)}
+  {#snippet row(job)}
     <Cell>
-      <Image transparent src={graph.icon} icon={icons.documentFlowchart} />
-      <div class="truncate">
-        <div class="mb-1 truncate" title={graph.name}>{graph.name}</div>
-        <div class="truncate text-xs opacity-50" title={graph.description}>{graph.description}</div>
+      <div class="truncate pl-1">
+        <div class="mb-2 truncate font-medium" title={job.graph_name}>{job.graph_name}</div>
+        <div class="truncate text-xs opacity-50">ID: {job.id}</div>
       </div>
     </Cell>
-    <Cell text={$dateTime(graph.last_execution)} />
-    <Cell text={$milliseconds(graph.average_time)} />
-    <Cell class="justify-center">
-      <Status rate={graph.success_rate} />
+    <Cell>
+      {@const trigger = JobTrigger[job.trigger]}
+      <Badge icon={trigger.icon} iconColor={trigger.iconColor}>{$_(trigger.label)}</Badge>
+    </Cell>
+    <Cell text={triggerDesc(job)} />
+    <Cell text={$dateTime(job.updated_at)} />
+    <Cell class="max-lg:pl-3">
+      {@const state = JobState[job.state]}
+      {#if state}
+        <Badge icon={state.icon} iconColor={state.iconColor}>
+          <span class="max-lg:hidden">{$_(state.label)}</span>
+        </Badge>
+      {:else}
+        <span class="loading loading-xs loading-spinner"></span>
+      {/if}
     </Cell>
     <Cell
       actions={[
         {
-          disabled: !graph.last_execution,
-          icon: icons.slideSearch,
-          text: $_('action.view', $_('entity.logs')),
-          onclick: () => flowLogs.showModal(graph.id)
+          icon: icons.edit,
+          text: $_('action.edit', $_('entity.job')),
+          onclick: () => {
+            selected = job;
+            tick().then(() => updater?.showModal());
+          }
         },
         {
-          icon: icons.documentEdit,
-          text: $_('action.edit', $_('entity.graph')),
-          onclick: () => goto(`/settings/workflows/graphs/${graph.editable ? '' : 'r/'}${graph.id}`)
-        },
-        {
-          icon: icons.back,
-          text: $_('action.retract', $_('entity.graph')),
+          condition: job.state === 'running',
+          icon: icons.pause,
+          text: $_('action.pause', $_('entity.job')),
           onclick: () => {
             confirm({
-              icon: icons.back,
-              title: `${$_('action.retract', $_('entity.graph'))} [${graph.name}]`,
-              onconfirm: () => retract(graph.id)
+              icon: icons.pause,
+              title: `${$_('action.pause', $_('entity.job'))} [${job.id}]`,
+              onconfirm: () => pause(job.id)
+            });
+          }
+        },
+        {
+          condition: job.state === 'paused',
+          icon: icons.play,
+          text: $_('action.resume', $_('entity.job')),
+          onclick: () => {
+            confirm({
+              icon: icons.play,
+              title: `${$_('action.resume', $_('entity.job'))} [${job.id}]`,
+              onconfirm: () => resume(job.id)
+            });
+          }
+        },
+        {
+          icon: icons.deleteDismiss,
+          text: $_('action.delete', $_('entity.job')),
+          onclick: () => {
+            confirm({
+              icon: icons.deleteDismiss,
+              title: `${$_('action.delete', $_('entity.job'))} [${job.id}]`,
+              onconfirm: () => del(job.id)
             });
           }
         }
@@ -134,4 +266,16 @@
   {/snippet}
 </DataView>
 
-<FlowLogs bind:this={flowLogs} />
+<JobEditor bind:this={creator} onsave={() => search()} />
+
+{#if selected}
+  <JobEditor
+    bind:this={updater}
+    {...selected}
+    bootparams={selected.bootparams ? JSON.stringify(selected.bootparams, null, 2) : '{}'}
+    run_date={toDatetimeLocal(selected.run_date)}
+    interval_start={toDatetimeLocal(selected.interval_start)}
+    interval_end={toDatetimeLocal(selected.interval_end)}
+    onsave={() => search(pagination.current)}
+  />
+{/if}

@@ -1,3 +1,13 @@
+<script lang="ts" module>
+  import type { Path, PathStats, Resp } from '$lib/types';
+
+  type FileTreeProps = Partial<{
+    rootPath: string;
+    onlyDirs: boolean;
+    onconfirm: (stats: PathStats) => void;
+  }>;
+</script>
+
 <script lang="ts">
   import { enhance } from '$app/forms';
   import { api } from '$lib/api';
@@ -6,14 +16,8 @@
   import { _ } from '$lib/i18n';
   import { icons } from '$lib/icons';
   import { token } from '$lib/stores';
-  import type { Path, PathStats, Resp } from '$lib/types';
   import { onMount } from 'svelte';
 
-  type FileTreeProps = Partial<{
-    rootPath: string;
-    onlyDirs: boolean;
-    onconfirm: (stats: PathStats) => void;
-  }>;
   let { rootPath = '', onlyDirs = false, onconfirm }: FileTreeProps = $props();
   let paths: Path[] = $state([]);
   let current: string = $state('');

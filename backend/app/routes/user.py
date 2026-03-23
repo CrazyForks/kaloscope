@@ -34,16 +34,17 @@ async def list_users(_, query: UserQuery) -> HTTPResponse:
     queries = []
     if query.username:
         queries.append(Q(username__icontains=query.username))
-    page = await UserService.dump_page(await User.page(*queries, **query.page_params))
+    page = await User.page(*queries, **query.page_params)
+    result = await UserService.dump_page(page)
     # get the last activity of the online users
     sessions = SessionHolder.get_sessions()
     activities = {
         u.id: u.last_activity
         for u in sorted(sessions.values(), key=lambda u: u.last_activity)
     }
-    for user in page["items"]:
+    for user in result["items"]:
         user["last_activity"] = activities.get(user["id"])
-    return json(page)
+    return json(result)
 
 
 @user.post("/create")

@@ -15,6 +15,7 @@ from app.core.flow.nodes.base import Node, start_config
 from app.models.base import IDs
 from app.models.flow import (
     FlowGraph,
+    FlowJob,
     FlowRepository,
     FlowTemplate,
     FlowVariable,
@@ -23,6 +24,8 @@ from app.models.flow import (
     GraphQuery,
     GraphState,
     IndexerResource,
+    JobQuery,
+    JobUpsert,
     RepositoryAdd,
     TmplQuery,
 )
@@ -30,6 +33,7 @@ from app.models.general import GlobalCookie
 from app.models.user import UserInfo
 from app.services.flow import (
     FlowGraphService,
+    FlowJobService,
     FlowLogService,
     FlowRepositoryService,
     FlowTemplateService,
@@ -118,22 +122,23 @@ async def list_graphs(_, query: GraphQuery) -> HTTPResponse:
         queries.append(Q(state__in=query.states))
     if query.category:
         queries.append(Q(category=query.category))
-    page = await FlowGraphService.dump_page(
-        await FlowGraph.page(*queries, **query.page_params),
-        exclude={"draft", "definition", "logs"},
+    page = await FlowGraph.page(*queries, **query.page_params)
+    result = await FlowGraphService.dump_page(
+        page, exclude={"draft", "definition", "logs"}
     )
     # get the newest template for each graph if the template exists
-    for graph in page["items"]:
+    for graph in result["items"]:
         if tmpl := graph["tmpl"]:
             graph["newest_tmpl"] = await FlowTemplateService.get_newest(tmpl)
-    return json(page)
+    return json(result)
 
 
 @flow.post("/graph/upsert")
 @validate(form=GraphBasics)
 async def upsert_graph(_, body: GraphBasics) -> HTTPResponse:
     """Create or update a flow graph."""
-    return json(await FlowGraphService.dump(await FlowGraphService.upsert(body)))
+    graph = await FlowGraphService.upsert(body)
+    return json(await FlowGraphService.dump(graph))
 
 
 @flow.get("/graph/<id:int>")
@@ -336,15 +341,54 @@ async def unfavorite_resource(
     return empty()
 
 
+@flow.get("/job/list")
+@validate(query=JobQuery)
+async def list_jobs(_, query: JobQuery) -> HTTPResponse:
+    """List the flow jobs."""
+    queries = []
+    if query.name:
+        queries.append(Q(graph__name__icontains=query.name))
+    if query.state:
+        queries.append(Q(state=query.state))
+    if query.trigger:
+        queries.append(Q(trigger=query.trigger))
+    page = await FlowJob.page(*queries, **query.page_params)
+    result = await FlowJobService.dump_page(page)
+    # attach the graph name for each job
+    graph_ids = {job.graph_id for job in page.items}
+    graphs = {g.id: g.name for g in await FlowGraph.filter(id__in=graph_ids)}
+    for job in result["items"]:
+        job["graph_name"] = graphs.get(job["graph_id"])
+    return json(result)
+
+
+@flow.post("/job/upsert")
+@validate(json=JobUpsert)
+async def upsert_job(_, body: JobUpsert) -> HTTPResponse:
+    """Create or update a flow job."""
+    job = await FlowJobService.upsert(body)
+    return json(await FlowJobService.dump(job))
+
+
 @flow.post("/job/<id:int>/pause")
 async def pause_job(request: Request, id: int) -> HTTPResponse:
     """Pause the job."""
     engine: FlowEngine = request.app.ctx.engine
-    return json(await engine.pause_job(id))
+    await engine.pause_job(id)
+    return empty()
 
 
 @flow.post("/job/<id:int>/resume")
 async def resume_job(request: Request, id: int) -> HTTPResponse:
     """Resume the job."""
     engine: FlowEngine = request.app.ctx.engine
-    return json(await engine.resume_job(id))
+    await engine.resume_job(id)
+    return empty()
+
+
+@flow.post("/job/<id:int>/delete")
+async def delete_job(request: Request, id: int) -> HTTPResponse:
+    """Delete the job."""
+    engine: FlowEngine = request.app.ctx.engine
+    await engine.delete_job(id)
+    return empty()

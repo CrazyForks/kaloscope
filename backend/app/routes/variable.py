@@ -25,7 +25,8 @@ async def list_variables(_, query: VariableQuery) -> HTTPResponse:
 @validate(json=VariableUpsert)
 async def upsert_variable(_, body: VariableUpsert) -> HTTPResponse:
     """Create or update a global variable."""
-    return json(await VariableService.dump(await VariableService.upsert(body)))
+    variable = await VariableService.upsert(body)
+    return json(await VariableService.dump(variable))
 
 
 @variable.post("/delete")

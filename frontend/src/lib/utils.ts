@@ -247,3 +247,25 @@ export function isWhite(color: string | null | undefined): boolean {
   const whiteCodes = ['#ffffff', '#fff', 'rgb(255,255,255)', 'hsl(0,0%,100%)', 'white'];
   return whiteCodes.includes(code);
 }
+
+/**
+ * Convert an ISO 8601 datetime string to the format required by datetime-local inputs (yyyy-MM-ddTHH:mm),
+ * expressed in the user's local timezone.
+ *
+ * @param value - The ISO 8601 datetime string.
+ * @returns The formatted local datetime string.
+ */
+export function toDatetimeLocal(value: string | null | undefined): string {
+  if (!value) {
+    return '';
+  }
+  const date = new Date(value);
+  if (isNaN(date.getTime())) {
+    return '';
+  }
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  );
+}

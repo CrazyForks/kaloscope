@@ -166,7 +166,7 @@ class JobAction(Enum):
 
     PAUSE = auto()
     RESUME = auto()
-    REMOVE = auto()
+    DELETE = auto()
     REFRESH = auto()
 
 
@@ -364,14 +364,14 @@ class FlowEngine:
         if await job.update(state=JobState.PENDING) == 1:
             self._job_actions[job_id] = JobAction.REFRESH
 
-    async def remove_job(self, job_id: int):
-        """Remove the flow job.
+    async def delete_job(self, job_id: int):
+        """Delete the flow job.
 
         Args:
             job_id: The flow job ID.
         """
         if await FlowJob.filter(id=job_id, state=JobState.RUNNING).exists():
-            self._job_actions[job_id] = JobAction.REMOVE
+            self._job_actions[job_id] = JobAction.DELETE
         await FlowJob.filter(id=job_id).delete()
 
     async def execute(

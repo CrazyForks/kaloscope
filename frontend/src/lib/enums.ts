@@ -63,6 +63,29 @@ export const LibType = createEnum({
   }
 });
 
+export const DownloadState = createEnum({
+  downloading: {
+    label: 'enum.download_state.downloading',
+    icon: icons.download,
+    iconColor: null
+  },
+  paused: {
+    label: 'enum.download_state.paused',
+    icon: icons.pauseFilled,
+    iconColor: null
+  },
+  completed: {
+    label: 'enum.download_state.completed',
+    icon: icons.fileCheck,
+    iconColor: 'var(--color-success)'
+  },
+  error: {
+    label: 'enum.download_state.error',
+    icon: icons.dismissCircle,
+    iconColor: 'var(--color-error)'
+  }
+});
+
 export const GraphCategory = createEnum({
   indexer: {
     label: 'enum.graph_category.indexer',
@@ -99,25 +122,61 @@ export const GraphState = createEnum({
   }
 });
 
-export const DownloadState = createEnum({
-  downloading: {
-    label: 'enum.download_state.downloading',
-    icon: icons.download,
-    iconColor: null
-  },
+export const JobState = createEnum({
   paused: {
-    label: 'enum.download_state.paused',
+    label: 'enum.job_state.paused',
     icon: icons.pauseFilled,
     iconColor: null
   },
-  completed: {
-    label: 'enum.download_state.completed',
-    icon: icons.fileCheck,
+  running: {
+    label: 'enum.job_state.running',
+    icon: icons.play,
     iconColor: 'var(--color-success)'
+  }
+});
+
+export const JobTrigger = createEnum({
+  date: {
+    label: 'enum.job_trigger.date',
+    icon: icons.calendar,
+    iconColor: null
   },
-  error: {
-    label: 'enum.download_state.error',
-    icon: icons.dismissCircle,
-    iconColor: 'var(--color-error)'
+  interval: {
+    label: 'enum.job_trigger.interval',
+    icon: icons.arrowRotateClockwise,
+    iconColor: null
+  },
+  cron: {
+    label: 'enum.job_trigger.cron',
+    icon: icons.clock,
+    iconColor: null
+  }
+});
+
+export const IntervalUnit = createEnum({
+  seconds: {
+    label: 'duration.seconds',
+    icon: null,
+    iconColor: null
+  },
+  minutes: {
+    label: 'duration.minutes',
+    icon: null,
+    iconColor: null
+  },
+  hours: {
+    label: 'duration.hours',
+    icon: null,
+    iconColor: null
+  },
+  days: {
+    label: 'duration.days',
+    icon: null,
+    iconColor: null
+  },
+  weeks: {
+    label: 'duration.weeks',
+    icon: null,
+    iconColor: null
   }
 });

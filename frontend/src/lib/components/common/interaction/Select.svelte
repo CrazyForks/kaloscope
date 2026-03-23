@@ -18,6 +18,8 @@
     placeholder: string;
     /** The name of the select. */
     name: string;
+    /** Whether the select is required. */
+    required: boolean;
     /** Whether the select is disabled. */
     disabled: boolean;
     /** Whether to use the filter style. */
@@ -41,6 +43,7 @@
     label,
     placeholder: _placeholder,
     name,
+    required = false,
     disabled = false,
     filter = false,
     class: _class,
@@ -74,7 +77,7 @@
 
 {#if native}
   <!-- native select element -->
-  <select class="{selectClass} {_class}" bind:value {name} {disabled} {onchange}>
+  <select class="{selectClass} {_class}" bind:value {name} {required} {disabled} {onchange}>
     {#if children}
       {@render children()}
     {:else if options}

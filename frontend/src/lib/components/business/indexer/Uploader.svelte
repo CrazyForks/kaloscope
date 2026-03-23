@@ -1,10 +1,13 @@
-<script lang="ts">
+<script lang="ts" module>
   type UploaderProps = Partial<{
     up: string | null;
     at: string | null;
     extra: string | null;
     class: string;
   }>;
+</script>
+
+<script lang="ts">
   let { up, at, extra, class: _class }: UploaderProps = $props();
 </script>
 

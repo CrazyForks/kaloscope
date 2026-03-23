@@ -60,7 +60,8 @@
       "workflows": {
         "title": "Workflows",
         "templates": "Templates",
-        "graphs": "Graphs"
+        "graphs": "Graphs",
+        "schedule": "Schedule"
       },
       "help": {
         "title": "Help",
@@ -84,6 +85,12 @@
       "movie": "Movie",
       "tv_show": "TV Show"
     },
+    "download_state": {
+      "downloading": "Downloading",
+      "paused": "Paused",
+      "completed": "Completed",
+      "error": "Error"
+    },
     "graph_category": {
       "indexer": "Indexer",
       "ingest": "Ingest",
@@ -94,11 +101,14 @@
       "modified": "Modified",
       "published": "Published"
     },
-    "download_state": {
-      "downloading": "Downloading",
+    "job_state": {
       "paused": "Paused",
-      "completed": "Completed",
-      "error": "Error"
+      "running": "Running"
+    },
+    "job_trigger": {
+      "date": "Once",
+      "interval": "Interval",
+      "cron": "Cron Expression"
     }
   },
   "data": {
@@ -128,8 +138,17 @@
     "description": "Description",
     "average_time": "Average Time",
     "last_execution": "Last Execution",
-    "created": "Created date",
-    "updated": "Updated date",
+    "graph": "Graph",
+    "trigger": "Trigger",
+    "bootparams": "Boot Parameters",
+    "cron_expr": "Cron Expression",
+    "run_date": "Run Date",
+    "interval": "Interval",
+    "interval_start": "Start Time",
+    "interval_end": "End Time",
+    "every": "Every {0}",
+    "created": "Created Date",
+    "updated": "Updated Date",
     "actions": "Actions"
   },
   "entity": {
@@ -141,6 +160,8 @@
     "tasks": "Tasks",
     "graph": "Graph",
     "graphs": "Graphs",
+    "job": "Job",
+    "jobs": "Jobs",
     "source": "Source",
     "sources": "Sources",
     "filter": "Filter",
@@ -161,6 +182,7 @@
     "edit": "Edit {0}",
     "view": "View {0}",
     "pause": "Pause {0}",
+    "resume": "Resume {0}",
     "start": "Start {0}",
     "append": "Append {0}",
     "change": "Change {0}",
@@ -200,16 +222,18 @@
     }
   },
   "duration": {
-    "millisecond": "millisecond",
-    "milliseconds": "milliseconds",
-    "second": "second",
-    "seconds": "seconds",
-    "minute": "minute",
-    "minutes": "minutes",
-    "hour": "hour",
-    "hours": "hours",
-    "day": "day",
-    "days": "days"
+    "millisecond": "Millisecond",
+    "milliseconds": "Milliseconds",
+    "second": "Second",
+    "seconds": "Seconds",
+    "minute": "Minute",
+    "minutes": "Minutes",
+    "hour": "Hour",
+    "hours": "Hours",
+    "day": "Day",
+    "days": "Days",
+    "week": "Week",
+    "weeks": "Weeks"
   },
   "password": {
     "new": "New Password",

@@ -1,23 +1,29 @@
-<script lang="ts">
-  import { enhance } from '$app/forms';
-  import { api } from '$lib/api';
-  import { FileTree, FlowTriggers, Label, Modal, Select } from '$lib/components';
-  import { enumToOptions, LibType } from '$lib/enums';
-  import { createFormSchema, createLoading } from '$lib/helpers';
-  import { _, locales } from '$lib/i18n';
-  import { icons } from '$lib/icons';
+<script lang="ts" module>
   import type { FlowTrigger, MediaLib, Resp } from '$lib/types';
+  import { enumToOptions, LibType } from '$lib/enums';
 
   type MediaLibEditorProps = Partial<{
     id: number;
-    lib_type: string;
+    lib_type: keyof typeof LibType;
     name: string;
     dir: string;
     language: string | null;
     triggers: FlowTrigger[];
     onsave: (result: MediaLib) => void;
   }>;
+</script>
+
+<script lang="ts">
+  import { enhance } from '$app/forms';
+  import { api } from '$lib/api';
+  import { FileTree, FlowTriggers, Label, Modal, Select } from '$lib/components';
+  import { createFormSchema, createLoading } from '$lib/helpers';
+  import { _, locales } from '$lib/i18n';
+  import { icons } from '$lib/icons';
+
   let { id, lib_type, name, dir, language = '', triggers, onsave }: MediaLibEditorProps = $props();
+
+  // the file tree instance
   let fileTree: FileTree;
 
   // the modal dialog instance
@@ -39,8 +45,7 @@
    */
   function upsert(form: HTMLFormElement, data: FormData) {
     loading.start();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const jsonData: Record<string, any> = Object.fromEntries(data);
+    const jsonData: Record<string, unknown> = Object.fromEntries(data);
     jsonData.id = id;
     jsonData.triggers = triggers;
     api
@@ -73,28 +78,33 @@
       <Label required>{$_('field.type')}</Label>
       <Select
         options={enumToOptions(LibType, false)}
-        bind:value={lib_type}
-        disabled={!!id}
         class="w-full"
         name="lib_type"
+        bind:value={lib_type}
+        disabled={!!id}
       />
       <Label required>{$_('field.name')}</Label>
       <input placeholder={$_('field.name')} class="input w-full" bind:value={name} {...schema.name} />
       <Label required>{$_('field.dir')}</Label>
       <!-- svelte-ignore a11y_consider_explicit_label -->
-      <button type="button" class="input w-full cursor-pointer" onclick={() => fileTree.showModal()} disabled={!!id}>
+      <button
+        type="button"
+        class="input w-full {id ? 'cursor-not-allowed' : 'cursor-pointer'}"
+        onclick={() => fileTree.showModal()}
+        disabled={!!id}
+      >
         <iconify-icon icon={icons.folder} width="1.5rem" class="opacity-70"></iconify-icon>
         <input
           placeholder={$_('action.select', $_('field.dir'))}
           autocomplete="off"
-          class="grow cursor-pointer"
+          class="grow {id ? 'cursor-not-allowed' : 'cursor-pointer'}"
           bind:value={dir}
           {...schema.dir}
           disabled={!!id}
         />
       </button>
       <Label>{$_('field.language')}</Label>
-      <Select class="w-full" bind:value={language} name="language">
+      <Select class="w-full" name="language" bind:value={language}>
         <option value="">{$_('enum.none')}</option>
         {#each $locales.filter((l) => l !== 'languages') as code (code)}
           <option value={code}>{$_(code, { locale: 'languages' })}</option>

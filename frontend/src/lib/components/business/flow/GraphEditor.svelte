@@ -1,14 +1,5 @@
-<script lang="ts">
-  import { enhance } from '$app/forms';
-  import { cropper } from '$lib/actions';
-  import { api } from '$lib/api';
-  import { Image, Label, Modal, Select } from '$lib/components';
-  import { enumToOptions, GraphCategory } from '$lib/enums';
-  import { createFormSchema, createLoading } from '$lib/helpers';
-  import { _ } from '$lib/i18n';
-  import { icons } from '$lib/icons';
+<script lang="ts" module>
   import type { FlowGraph, Resp } from '$lib/types';
-  import { loadFile } from '$lib/utils';
 
   type GraphEditorProps = Partial<{
     id: number;
@@ -18,6 +9,19 @@
     category: keyof typeof GraphCategory;
     onsave: (result: FlowGraph) => void;
   }>;
+</script>
+
+<script lang="ts">
+  import { enhance } from '$app/forms';
+  import { cropper } from '$lib/actions';
+  import { api } from '$lib/api';
+  import { Image, Label, Modal, Select } from '$lib/components';
+  import { enumToOptions, GraphCategory } from '$lib/enums';
+  import { createFormSchema, createLoading } from '$lib/helpers';
+  import { _ } from '$lib/i18n';
+  import { icons } from '$lib/icons';
+  import { loadFile } from '$lib/utils';
+
   let { id, name, icon, description, category, onsave }: GraphEditorProps = $props();
 
   // the modal dialog instance
@@ -127,10 +131,10 @@
       <Label required>{$_('field.category')}</Label>
       <Select
         options={enumToOptions(GraphCategory, false)}
-        bind:value={category}
-        disabled={!!id}
         class="w-full"
         name="category"
+        bind:value={category}
+        disabled={!!id}
       />
       <Label required>{$_('field.name')}</Label>
       <input placeholder={$_('field.name')} class="input w-full" bind:value={name} {...schema.name} />

@@ -84,22 +84,22 @@ export const milliseconds = derived(_format, ($format) => {
       return EMPTY_SIGN;
     }
     if (milliseconds < 1000) {
-      return `${Math.floor(milliseconds)} ${$format('duration.milliseconds')}`;
+      return `${Math.floor(milliseconds)} ${$format('duration.milliseconds').toLowerCase()}`;
     }
     const seconds = milliseconds / 1000;
     if (seconds < 60) {
-      return `${Math.floor(seconds)} ${$format('duration.seconds')}`;
+      return `${Math.floor(seconds)} ${$format('duration.seconds').toLowerCase()}`;
     }
     const minutes = seconds / 60;
     if (minutes < 60) {
-      return `${Math.floor(minutes)} ${$format('duration.minutes')}`;
+      return `${Math.floor(minutes)} ${$format('duration.minutes').toLowerCase()}`;
     }
     const hours = minutes / 60;
     if (hours < 24) {
-      return `${Math.floor(hours)} ${$format('duration.hours')}`;
+      return `${Math.floor(hours)} ${$format('duration.hours').toLowerCase()}`;
     }
     const days = hours / 24;
-    return `${Math.floor(days)} ${$format('duration.days')}`;
+    return `${Math.floor(days)} ${$format('duration.days').toLowerCase()}`;
   };
 });
 

@@ -62,7 +62,8 @@ async def get_downloader_presets(_) -> HTTPResponse:
 @validate(json=DownloaderUpsert)
 async def upsert_downloader(_, body: DownloaderUpsert) -> HTTPResponse:
     """Create or update a downloader."""
-    return json(await DownloaderService.dump(await DownloaderService.upsert(body)))
+    downloader = await DownloaderService.upsert(body)
+    return json(await DownloaderService.dump(downloader))
 
 
 @download.post("/manager/delete")

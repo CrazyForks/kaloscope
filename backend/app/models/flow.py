@@ -1,8 +1,8 @@
 from datetime import datetime
 from enum import StrEnum, auto
-from typing import Any
+from typing import Any, Self
 
-from pydantic import BaseModel, Field, PositiveInt
+from pydantic import BaseModel, Field, FutureDatetime, PositiveInt, model_validator
 from sanic.request.form import File
 from tortoise.fields import (
     SET_NULL,
@@ -48,11 +48,11 @@ class JobTrigger(StrEnum):
 
 
 class IntervalUnit(StrEnum):
-    WEEKS = "weeks"
-    DAYS = "days"
-    HOURS = "hours"
-    MINUTES = "minutes"
     SECONDS = "seconds"
+    MINUTES = "minutes"
+    HOURS = "hours"
+    DAYS = "days"
+    WEEKS = "weeks"
 
 
 # -------------------- ORM Models --------------------
@@ -312,6 +312,46 @@ class GraphImport(BaseModel, RequestFilesMixin):
 class GraphRef(BaseModel):
     graph_id: PositiveInt
     asynchronous: bool = False
+
+
+class JobQuery(Pageable):
+    name: str | None = None
+    state: JobState | None = None
+    trigger: JobTrigger | None = None
+
+
+class JobUpsert(BaseModel):
+    id: PositiveInt | None = None
+    graph_id: PositiveInt
+    bootparams: dict[str, Any] | None = None
+    trigger: JobTrigger
+    run_date: FutureDatetime | None = None
+    cron_expr: str | None = Field(max_length=255, default=None)
+    interval_num: PositiveInt | None = None
+    interval_unit: IntervalUnit | None = None
+    interval_start: datetime | None = None
+    interval_end: FutureDatetime | None = None
+
+    @model_validator(mode="after")
+    def validate_trigger_fields(self) -> Self:
+        if self.trigger == JobTrigger.DATE:
+            if self.run_date is None:
+                raise ValueError("run_date required")
+        elif self.trigger == JobTrigger.CRON:
+            if self.cron_expr is None:
+                raise ValueError("cron_expr required")
+            if len(self.cron_expr.split()) != 5:
+                raise ValueError("cron_expr must have 5 fields")
+        elif self.trigger == JobTrigger.INTERVAL:
+            if self.interval_num is None or self.interval_unit is None:
+                raise ValueError("interval_num and interval_unit required")
+            if (
+                self.interval_start is not None
+                and self.interval_end is not None
+                and self.interval_start >= self.interval_end
+            ):
+                raise ValueError("interval_start must be before interval_end")
+        return self
 
 
 class IndexerResource(BaseModel):

@@ -1,4 +1,13 @@
-import { DownloadState, GraphCategory, GraphState, LibType, UserRole } from '$lib/enums';
+import {
+  DownloadState,
+  GraphCategory,
+  GraphState,
+  IntervalUnit,
+  JobState,
+  JobTrigger,
+  LibType,
+  UserRole
+} from '$lib/enums';
 import { icons } from '$lib/icons';
 import type { Edge, Node } from '@xyflow/svelte';
 import type { HandleType, Position } from '@xyflow/system';
@@ -381,6 +390,28 @@ export type FlowTrigger = {
   graph_id: number;
   graph_name: string;
   asynchronous: boolean;
+};
+
+/**
+ * The type of the flow job.
+ */
+export type FlowJob = {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  graph_id: number;
+  graph_name: string | null;
+  bootparams: Record<string, any> | null; // eslint-disable-line
+  repeatable: boolean;
+  recoverable: boolean;
+  state: keyof typeof JobState;
+  trigger: keyof typeof JobTrigger;
+  run_date: string | null;
+  cron_expr: string | null;
+  interval_num: number | null;
+  interval_unit: keyof typeof IntervalUnit | null;
+  interval_start: string | null;
+  interval_end: string | null;
 };
 
 /**
