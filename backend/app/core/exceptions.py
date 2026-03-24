@@ -18,6 +18,7 @@ class ErrorCode(StrEnum):
     NOT_FOUND = auto()
     USER_NOT_FOUND = auto()
     FLOW_NOT_FOUND = auto()
+    FLOW_NOT_PUBLISHED = auto()
     LOGIN_FAILED = auto()
     LOGIN_EXPIRED = auto()
     NAME_ALREADY_EXISTS = auto()

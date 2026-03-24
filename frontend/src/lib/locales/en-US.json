@@ -510,6 +510,7 @@
     "not_found": "Requested resource not found!",
     "user_not_found": "User not found!",
     "flow_not_found": "Workflow definition not found!",
+    "flow_not_published": "Workflow is not published!",
     "permission_denied": "Permission denied!",
     "login_failed": "Login failed!",
     "login_expired": "Login expired!",
