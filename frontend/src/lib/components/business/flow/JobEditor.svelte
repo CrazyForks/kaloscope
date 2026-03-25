@@ -5,6 +5,7 @@
   type JobEditorProps = Partial<{
     id: number;
     graph_id: number;
+    graph_name: string | null;
     trigger: keyof typeof JobTrigger;
     bootparams: string;
     run_date: string | null;
@@ -30,6 +31,7 @@
   let {
     id,
     graph_id,
+    graph_name,
     trigger = 'cron',
     bootparams = '{}',
     run_date = null,
@@ -109,21 +111,25 @@
   }
 
   onMount(() => {
-    // load the available graphs for scheduling
-    api
-      .get('flow/graph/list', {
-        searchParams: [
-          ['page_num', 0],
-          ['ordering', 'name'],
-          ['category', 'schedule'],
-          ['states', 'modified'],
-          ['states', 'published']
-        ]
-      })
-      .json<Resp<Page<FlowGraph>>>()
-      .then((resp) => {
-        graphOptions = resp.data.items.map((g) => ({ value: g.id, label: g.name }));
-      });
+    if (id) {
+      graphOptions = [{ value: graph_id, label: graph_name! }];
+    } else {
+      // load the available graphs for scheduling
+      api
+        .get('flow/graph/list', {
+          searchParams: [
+            ['page_num', 0],
+            ['ordering', 'name'],
+            ['category', 'schedule'],
+            ['states', 'modified'],
+            ['states', 'published']
+          ]
+        })
+        .json<Resp<Page<FlowGraph>>>()
+        .then((resp) => {
+          graphOptions = resp.data.items.map((g) => ({ value: g.id, label: g.name }));
+        });
+    }
   });
 </script>
 
