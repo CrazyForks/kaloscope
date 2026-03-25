@@ -42,21 +42,21 @@ files = [
 
 [[package]]
 name = "anyio"
-version = "4.12.1"
+version = "4.13.0"
 description = "High-level concurrency and networking framework on top of asyncio or Trio"
 optional = false
-python-versions = ">=3.9"
+python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "anyio-4.12.1-py3-none-any.whl", hash = "sha256:d405828884fc140aa80a3c667b8beed277f1dfedec42ba031bd6ac3db606ab6c"},
-    {file = "anyio-4.12.1.tar.gz", hash = "sha256:41cfcc3a4c85d3f05c932da7c26d0201ac36f72abd4435ba90d0464a3ffed703"},
+    {file = "anyio-4.13.0-py3-none-any.whl", hash = "sha256:08b310f9e24a9594186fd75b4f73f4a4152069e3853f1ed8bfbf58369f4ad708"},
+    {file = "anyio-4.13.0.tar.gz", hash = "sha256:334b70e641fd2221c1505b3890c69882fe4a2df910cba14d97019b90b24439dc"},
 ]
 
 [package.dependencies]
 idna = ">=2.8"
 
 [package.extras]
-trio = ["trio (>=0.31.0) ; python_version < \"3.10\"", "trio (>=0.32.0) ; python_version >= \"3.10\""]
+trio = ["trio (>=0.32.0)"]
 
 [[package]]
 name = "anysqlite"
@@ -2371,14 +2371,14 @@ cli = ["click"]
 
 [[package]]
 name = "tortoise-orm"
-version = "1.1.6"
+version = "1.1.7"
 description = "Easy async ORM for python, built with relations in mind"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "tortoise_orm-1.1.6-py3-none-any.whl", hash = "sha256:70bd10d28dff9df889161e190c460c2339169ef47986765647ec53cb554031b2"},
-    {file = "tortoise_orm-1.1.6.tar.gz", hash = "sha256:30095a77aa7c3eb3ede1baf4b390a66b994dc7c4d0d06a609d23a16c50e55d0c"},
+    {file = "tortoise_orm-1.1.7-py3-none-any.whl", hash = "sha256:b640b786905891cc120aa16d1a7af18cd54b111a812f9b1c1d1c7b294d62949d"},
+    {file = "tortoise_orm-1.1.7.tar.gz", hash = "sha256:a0f0f27f9c92547739f0a3f0862c257ab64d8baadbc0e548cbcfa2d70bcbe275"},
 ]
 
 [package.dependencies]
@@ -2387,7 +2387,7 @@ anyio = "*"
 ciso8601 = {version = "*", optional = true, markers = "sys_platform != \"win32\" and implementation_name == \"cpython\" and extra == \"accel\""}
 iso8601 = {version = ">=2.1.0,<3.0.0", markers = "python_version < \"4.0\""}
 orjson = {version = "*", optional = true, markers = "extra == \"accel\""}
-pypika-tortoise = ">=0.6.3,<1.0.0"
+pypika-tortoise = ">=0.6.5,<1.0.0"
 uvloop = {version = "*", optional = true, markers = "sys_platform != \"win32\" and implementation_name == \"cpython\" and extra == \"accel\""}
 
 [package.extras]
@@ -2992,4 +2992,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<4.0"
-content-hash = "c4fde26f029e1479be0f55ee666f83870de0e7b9964c7c0a3a5618916357cbe9"
+content-hash = "4d90f1146e6897930eac6be2e22f7e1f24298e96ede3431244acd5e795d27ba0"

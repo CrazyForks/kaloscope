@@ -47,14 +47,16 @@ flow = Blueprint("flow", url_prefix="/flow")
 @flow.get("/repo/list")
 async def list_repositories(_) -> HTTPResponse:
     """List the flow repositories."""
-    return json(await FlowRepositoryService.dump_list(await FlowRepository.all()))
+    repos = await FlowRepository.all()
+    return json(await FlowRepositoryService.dump_list(repos))
 
 
 @flow.post("/repo/add")
 @validate(json=RepositoryAdd)
 async def add_repository(_, body: RepositoryAdd) -> HTTPResponse:
     """Add a flow repository."""
-    return json(await FlowRepositoryService.dump(await FlowRepositoryService.add(body)))
+    repo = await FlowRepositoryService.add(body)
+    return json(await FlowRepositoryService.dump(repo))
 
 
 @flow.post("/repo/delete")
@@ -267,14 +269,12 @@ async def get_indexer_config(_, id: int) -> HTTPResponse:
 async def get_indexer_auth(request: Request, id: int) -> HTTPResponse:
     """Get the authentication of the indexer flow."""
     now = time.time()
-
     # check the auth variable
     var = await FlowVariable.get_or_none(
         Q(graph_id=id, key=AUTH_KEY) & (Q(expires__gte=now) | Q(expires__isnull=True))
     )
     if var is not None and "name" in var.value:
         return json(var.value)
-
     # check the auth cookie
     config = await start_config(id, "auth")
     cookie = config.get("auth", {}).get("cookie")
@@ -285,17 +285,14 @@ async def get_indexer_auth(request: Request, id: int) -> HTTPResponse:
         )
         if _cookie is not None:
             return json({"name": ""})
-
     return json(None)
 
 
 @flow.post("/indexer/<id:int>/logout")
 async def indexer_logout(request: Request, id: int) -> HTTPResponse:
     """Logout the indexer flow."""
-
     # delete the auth variable
     await FlowVariable.filter(graph_id=id, key=AUTH_KEY).delete()
-
     # delete the auth cookie
     config = await start_config(id, "auth")
     cookie = config.get("auth", {}).get("cookie")
@@ -312,7 +309,6 @@ async def indexer_logout(request: Request, id: int) -> HTTPResponse:
         if name:
             filter &= Q(name=name)
         await GlobalCookie.filter(filter).delete()
-
     return empty()
 
 

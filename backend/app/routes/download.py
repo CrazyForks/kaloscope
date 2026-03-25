@@ -106,7 +106,8 @@ async def list_tasks(_, query: DownloadQuery) -> HTTPResponse:
 @validate(form=DownloadAdd)
 async def add_task(_, body: DownloadAdd) -> HTTPResponse:
     """Add a download task."""
-    return json(await DownloadTaskService.dump(await DownloadTaskService.add(body)))
+    task = await DownloadTaskService.add(body)
+    return json(await DownloadTaskService.dump(task))
 
 
 @download.post("/pause")
