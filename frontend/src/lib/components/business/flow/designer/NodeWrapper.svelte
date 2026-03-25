@@ -32,10 +32,10 @@
     `border-2 ${selected ? 'border-base-content/30' : 'border-border hover:border-base-content/30'}`
   );
   const titleClass = $derived(
-    `backdrop-blur-lg transition-colors ${selected ? 'bg-base-300' : 'bg-base-300/50 group-hover:bg-base-300'}`
+    `transition-colors ${selected ? 'bg-base-300' : 'bg-base-300/50 group-hover:bg-base-300'}`
   );
   const bodyClass = $derived(
-    `backdrop-blur-sm transition-colors ${selected ? 'bg-base-100' : 'bg-base-100/70 group-hover:bg-base-100'}`
+    `transition-colors ${selected ? 'bg-base-100' : 'bg-base-100/70 group-hover:bg-base-100'}`
   );
 
   /**
@@ -73,7 +73,7 @@
   }
 </script>
 
-<div class="group relative w-max min-w-80 rounded-box transition-all {shadowClass} {borderClass}">
+<div class="group relative w-max min-w-80 rounded-box backdrop-blur-lg transition-all {shadowClass} {borderClass}">
   <div class="absolute z-1 size-full bg-transparent {interactive ? 'hidden' : ''}"></div>
   <div class="flex items-center gap-2 rounded-t-box p-2 {titleClass}">
     <iconify-icon icon={schema.icon in icons ? icons[schema.icon] : icons.box3d} width="1.5rem"></iconify-icon>
