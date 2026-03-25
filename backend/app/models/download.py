@@ -4,20 +4,24 @@ from typing import Self
 from pydantic import BaseModel, Field, PositiveInt, field_serializer, model_validator
 from sanic.request.form import File
 from tortoise.fields import (
+    SET_NULL,
     BigIntField,
     CharEnumField,
     CharField,
     DatetimeField,
     FloatField,
     ForeignKeyField,
+    ForeignKeyNullableRelation,
     ForeignKeyRelation,
     IntField,
+    JSONField,
     ReverseRelation,
     TextField,
 )
 
 from app.core.renderer import duration
 from app.models.base import IDs, Pageable, RequestFilesMixin, TortoiseModel
+from app.models.media import MediaLib
 from app.utils.disk import format_bytes
 
 
@@ -27,6 +31,13 @@ class DownloadState(StrEnum):
     PAUSED = auto()
     COMPLETED = auto()
     ERROR = auto()
+
+
+class TransferMethod(StrEnum):
+    HARDLINK = auto()
+    SYMLINK = auto()
+    MOVE = auto()
+    COPY = auto()
 
 
 # -------------------- ORM Models --------------------
@@ -79,6 +90,16 @@ class DownloadTask(TortoiseModel):
     total_size = BigIntField(null=True)
     completed_size = BigIntField(null=True)
     completed_at = DatetimeField(null=True)
+    files = JSONField[list[str] | None](null=True)
+    transfer_to_id: int | None
+    transfer_to: ForeignKeyNullableRelation[MediaLib] = ForeignKeyField(
+        "models.MediaLib",
+        related_name="tasks",
+        db_index=True,
+        null=True,
+        on_delete=SET_NULL,
+    )
+    transfer_method = CharEnumField(max_length=16, enum_type=TransferMethod, null=True)
 
     def ratio(self) -> str:
         """Calculate the ratio of completed size to total size."""
