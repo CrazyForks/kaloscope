@@ -303,7 +303,12 @@ def _mapping(json: Any, mappings: dict[str, str]) -> dict[str, Any]:
     Returns:
         The mapped JSON response.
     """
-    return {k: jsonpath_first(json, v) for k, v in mappings.items()}
+
+    def jsonpath(k: str):
+        # determine the JSONPath function based on the mapping key
+        return jsonpath_all if k == "files" else jsonpath_first
+
+    return {k: jsonpath(k)(json, v) for k, v in mappings.items()}
 
 
 def _is_file(value: Any) -> bool:
