@@ -131,9 +131,9 @@
       <Label required>{$_('field.category')}</Label>
       <Select
         options={enumToOptions(GraphCategory, false)}
-        class="w-full"
-        name="category"
         bind:value={category}
+        name="category"
+        class="w-full"
         disabled={!!id}
       />
       <Label required>{$_('field.name')}</Label>

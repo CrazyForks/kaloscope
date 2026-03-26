@@ -1,7 +1,15 @@
+from datetime import UTC, datetime
 from enum import StrEnum, auto
 from typing import Any, Self
 
-from pydantic import BaseModel, Field, PositiveInt, field_serializer, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    FutureDatetime,
+    PositiveInt,
+    field_serializer,
+    model_validator,
+)
 from sanic.request.form import File
 from tortoise.fields import (
     SET_NULL,
@@ -102,12 +110,22 @@ class DownloadPlan(TortoiseModel):
     sub_pattern = CharField(max_length=4096, null=True)
     sub_repl = CharField(max_length=4096, null=True)
 
+    def inactive(self) -> bool:
+        """Check if the plan is currently inactive."""
+        now = datetime.now(UTC)
+        if self.interval_start is not None and now < self.interval_start:
+            return True
+        if self.interval_end is not None and now > self.interval_end:
+            return True
+        return self.total_limit is not None and self.total_count >= self.total_limit
+
     class Meta:
         table = "download_plan"
         ordering = ["-created_at"]
 
     class PydanticMeta:
         exclude = ("graph", "downloader", "transfer_lib")
+        computed = ("inactive",)
 
 
 class DownloadTask(TortoiseModel):
@@ -193,7 +211,7 @@ class DownloadQuery(Pageable):
 
 class DownloadAdd(BaseModel, RequestFilesMixin):
     downloader_id: PositiveInt
-    dir: str
+    dir: str = Field(min_length=1, max_length=4096)
     link: str | None = Field(pattern=r"^[^\n]*$", default=None)
     torrent: File | None = None
     pause: bool = False
@@ -235,3 +253,36 @@ class DownloadStats(BaseModel):
     @field_serializer("up_speed", "dl_speed")
     def serialize_speed(self, speed: int) -> str:
         return format_bytes(speed)
+
+
+class DownloadPlanQuery(Pageable):
+    graph_id: int | None = None
+    keyword: str | None = None
+
+
+class DownloadPlanUpsert(BaseModel):
+    id: PositiveInt | None = None
+    graph_id: PositiveInt
+    downloader_id: PositiveInt
+    dir: str = Field(min_length=1, max_length=4096)
+    keyword: str = Field(min_length=1, max_length=4096)
+    filters: dict[str, Any] | None = None
+    interval_num: PositiveInt
+    interval_start: datetime | None = None
+    interval_end: FutureDatetime | None = None
+    batch_limit: PositiveInt
+    total_limit: PositiveInt | None = None
+    transfer_lib_id: PositiveInt | None = None
+    transfer_method: TransferMethod | None = None
+    sub_pattern: str | None = Field(max_length=4096, default=None)
+    sub_repl: str | None = Field(max_length=4096, default=None)
+
+    @model_validator(mode="after")
+    def validate_interval_fields(self) -> Self:
+        if (
+            self.interval_start is not None
+            and self.interval_end is not None
+            and self.interval_start >= self.interval_end
+        ):
+            raise ValueError("interval_start must be before interval_end")
+        return self

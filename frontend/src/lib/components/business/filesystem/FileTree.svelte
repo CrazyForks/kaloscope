@@ -25,9 +25,12 @@
 
   // the modal dialog instance
   let modal: Modal;
-  export const showModal = () => {
-    if (!paths || paths.length === 0) {
-      list(rootPath).then((result) => {
+  export const showModal = (expandTo?: string) => {
+    if (!paths || paths.length === 0 || expandTo) {
+      if (expandTo) {
+        current = expandTo;
+      }
+      list(rootPath, expandTo).then((result) => {
         paths = result;
         modal.show();
       });
@@ -43,11 +46,18 @@
    * List the files and directories in the given path.
    *
    * @param path - The path to list.
+   * @param expandTo - The path to expand to.
    */
-  async function list(path: string): Promise<Path[]> {
+  async function list(path: string, expandTo?: string): Promise<Path[]> {
     try {
       const resp = await api
-        .get('filesystem/list', { searchParams: { path: path, only_dirs: onlyDirs } })
+        .get('filesystem/list', {
+          searchParams: {
+            path: path,
+            only_dirs: onlyDirs,
+            expand_to: expandTo
+          }
+        })
         .json<Resp<Path[]>>();
       return resp.data;
     } catch (error) {
@@ -76,11 +86,13 @@
 
   /**
    * Confirm the selected path and close the modal.
+   *
+   * @param path - The path to confirm.
    */
-  function confirm() {
+  export function confirm(path?: string) {
     loading.start();
     api
-      .get('filesystem/stats', { searchParams: { path: current } })
+      .get('filesystem/stats', { searchParams: { path: path ?? current } })
       .json<Resp<PathStats>>()
       .then((resp) => {
         if (onlyDirs && !resp.data.writable) {
@@ -105,7 +117,7 @@
 <Modal
   icon={icons.rowChild}
   title={$_('action.select', $_(onlyDirs ? 'field.dir' : 'field.file'))}
-  maxWidth="36rem"
+  maxWidth="40rem"
   bind:this={modal}
 >
   <form
@@ -116,7 +128,7 @@
     }}
   >
     <fieldset class="fieldset">
-      <ul class="menu max-h-[50vh] w-full flex-nowrap gap-1 overflow-y-auto rounded-box border">
+      <ul class="menu max-h-[50vh] w-full flex-nowrap gap-1 overflow-auto rounded-box border">
         {@render tree(paths)}
       </ul>
       <label class="mt-2 fieldset-label w-fit">
@@ -144,7 +156,7 @@
       {@const activeClass = current === path.path ? 'item-emphasis' : ''}
       <li>
         {#if path.is_dir && !path.is_empty}
-          <details open={false}>
+          <details bind:open={path.open}>
             <summary class={activeClass} onclick={() => unfold(path)}>
               {@render item(path)}
             </summary>

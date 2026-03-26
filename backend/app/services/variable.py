@@ -10,11 +10,11 @@ class VariableService(BaseService[GlobalVariable], model=GlobalVariable):
     """The service class for all global variable related operations."""
 
     @classmethod
-    async def upsert(cls, var: VariableUpsert) -> GlobalVariable:
+    async def upsert(cls, obj: VariableUpsert) -> GlobalVariable:
         """Create or update a global variable.
 
         Args:
-            var: The global variable data.
+            obj: The global variable data.
 
         Raises:
             KaloscopeException: If the key already exists.
@@ -23,24 +23,24 @@ class VariableService(BaseService[GlobalVariable], model=GlobalVariable):
             The global variable instance.
         """
         # check if the key already exists
-        filter = ~Q(id=var.id) if var.id else Q()
-        if await GlobalVariable.filter(filter & Q(key=var.key)).count() > 0:
+        filter = ~Q(id=obj.id) if obj.id else Q()
+        if await GlobalVariable.filter(filter & Q(key=obj.key)).count() > 0:
             raise KaloscopeException(ErrorCode.NAME_ALREADY_EXISTS)
 
-        if var.id:
+        if obj.id:
             # update the global variable
-            await GlobalVariable.filter(id=var.id).update(
-                value=xor_encrypt(var.value) if var.encrypted else var.value,
-                value_length=len(var.value),
+            await GlobalVariable.filter(id=obj.id).update(
+                value=xor_encrypt(obj.value) if obj.encrypted else obj.value,
+                value_length=len(obj.value),
             )
-            variable = await GlobalVariable.get(id=var.id)
+            variable = await GlobalVariable.get(id=obj.id)
         else:
             # create the global variable
             variable = await GlobalVariable.create(
-                key=var.key,
-                value=xor_encrypt(var.value) if var.encrypted else var.value,
-                value_length=len(var.value),
-                encrypted=var.encrypted,
+                key=obj.key,
+                value=xor_encrypt(obj.value) if obj.encrypted else obj.value,
+                value_length=len(obj.value),
+                encrypted=obj.encrypted,
             )
 
         return variable

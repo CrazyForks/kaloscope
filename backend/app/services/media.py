@@ -60,14 +60,13 @@ class MediaLibService(BaseService[MediaLib], model=MediaLib):
         else:
             # create the media library
             priorities: list = await MediaLib.all().values_list("priority", flat=True)
-            lib = MediaLib(
+            lib = await MediaLib.create(
                 lib_type=obj.lib_type,
                 name=obj.name,
                 dir=obj.dir,
                 language=obj.language or None,
-                priority=(max(priorities) + 1 if len(priorities) > 0 else 1),
+                priority=(max(priorities) + 1 if priorities else 1),
             )
-            await lib.save()
             # add the observer
             watcher = cls.app_ctx().watcher
             await watcher.add_observer(lib, initialize=True)

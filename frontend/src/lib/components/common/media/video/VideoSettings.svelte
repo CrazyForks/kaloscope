@@ -224,10 +224,10 @@
         {#if definitions.length > 0}
           <Select
             native={!rotateFullscreen}
-            class="dropdown-top [&_p]:max-h-32!"
             options={definitions.map((d) => ({ value: d.url, label: String(d.definition) }))}
             bind:value={definition}
             onchange={() => changeDefinition(definition)}
+            class="dropdown-top [&_p]:max-h-32!"
           />
         {:else}
           <Select options={[{ value: '', label: 'media.video.default' }]} disabled />
@@ -238,12 +238,12 @@
           {@render optionName($_('media.video.landscape.title'), true)}
           <Select
             native={!rotateFullscreen}
-            class="dropdown-top [&_p]:max-h-32!"
             options={[
               { value: 'rotate', label: 'media.video.landscape.rotate' },
               { value: 'web_api', label: 'media.video.landscape.web_api' }
             ]}
             bind:value={$video.landscapeMode}
+            class="dropdown-top [&_p]:max-h-32!"
           />
         </div>
       {/if}

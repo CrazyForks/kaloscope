@@ -59,7 +59,7 @@
     <dd class="flex items-center gap-2 truncate opacity-70">
       <span class="truncate">{description}</span>
       {#if status}
-        <Status rate={status === 'up' ? 1 : status === 'down' ? 0 : null} class="mx-1" />
+        <Status rate={status === 'up' ? 1 : status === 'down' ? 0 : null} class="px-1" />
       {/if}
     </dd>
   </div>

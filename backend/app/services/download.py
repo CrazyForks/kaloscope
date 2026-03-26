@@ -16,6 +16,8 @@ from app.models.download import (
     DownloadDir,
     Downloader,
     DownloaderUpsert,
+    DownloadPlan,
+    DownloadPlanUpsert,
     DownloadState,
     DownloadStats,
     DownloadTask,
@@ -98,7 +100,7 @@ class DownloaderService(BaseService[Downloader], model=Downloader):
             # create the downloader
             version = await adapter.version()
             priorities: list = await Downloader.all().values_list("priority", flat=True)
-            downloader = Downloader(
+            downloader = await Downloader.create(
                 preset=obj.preset or None,
                 config=obj.config,
                 name=adapter.name,
@@ -107,7 +109,6 @@ class DownloaderService(BaseService[Downloader], model=Downloader):
                 version=version,
                 priority=(max(priorities) + 1 if priorities else 1),
             )
-            await downloader.save()
 
         return downloader
 
@@ -281,3 +282,25 @@ class DownloadTaskService(BaseService[DownloadTask], model=DownloadTask):
             up_speed=up_speed,
             dl_speed=dl_speed,
         )
+
+
+class DownloadPlanService(BaseService[DownloadPlan], model=DownloadPlan):
+    """The service class for all download plan related operations."""
+
+    @classmethod
+    async def upsert(cls, obj: DownloadPlanUpsert) -> DownloadPlan:
+        """Create or update a download plan.
+
+        Args:
+            obj: The download plan data.
+
+        Returns:
+            The download plan instance.
+        """
+        data = obj.model_dump(exclude={"id"})
+        if obj.id:
+            await DownloadPlan.filter(id=obj.id).update(**data)
+            plan = await DownloadPlan.get(id=obj.id)
+        else:
+            plan = await DownloadPlan.create(**data)
+        return plan

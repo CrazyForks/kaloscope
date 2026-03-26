@@ -217,10 +217,10 @@
     <HCell width="2rem">
       <Checkbox batch={graphs.filter((g) => g.state !== 'drafting').length} bind:this={headerCheckbox} />
     </HCell>
-    <HCell width={['35%', '55%']} text={$_('field.name')} sort={ordering.bind('name')} />
+    <HCell width={['30%', '55%']} text={$_('field.name')} sort={ordering.bind('name')} />
     <HCell width={['15%', '45%']} text={$_('field.category')} sort={ordering.bind('category')} />
     <HCell width={['20%', null]} text={$_('field.updated')} sort={ordering.bind('updated_at')} />
-    <HCell width={['15%', null]} text={$_('field.average_time')} />
+    <HCell width={['20%', null]} text={$_('field.average_time')} />
     <HCell width={['15%', '4rem']} text={$_('field.state')} sort={ordering.bind('state')} />
     <HCell actions />
   {/snippet}
@@ -276,10 +276,10 @@
       <Status rate={graph.success_rate} />
       {$milliseconds(graph.average_time)}
     </Cell>
-    <Cell class="max-lg:pl-3">
+    <Cell>
       {@const state = GraphState[graph.state]}
       <Badge icon={state.icon} iconColor={state.iconColor} dashed={drafting}>
-        <span class="max-lg:hidden">{$_(state.label)}</span>
+        <span class="max-xl:hidden">{$_(state.label)}</span>
       </Badge>
     </Cell>
     <Cell

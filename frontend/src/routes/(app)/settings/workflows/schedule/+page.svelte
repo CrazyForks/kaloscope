@@ -192,7 +192,7 @@
   {/snippet}
   {#snippet row(job)}
     <Cell>
-      <div class="truncate pl-1">
+      <div class="truncate">
         <div class="mb-2 truncate font-medium" title={job.graph_name}>{job.graph_name}</div>
         <div class="truncate text-xs opacity-50">ID: {job.id}</div>
       </div>
@@ -203,11 +203,11 @@
     </Cell>
     <Cell text={triggerDesc(job)} />
     <Cell text={$dateTime(job.updated_at)} />
-    <Cell class="max-lg:pl-3">
+    <Cell>
       {@const state = JobState[job.state]}
       {#if state}
         <Badge icon={state.icon} iconColor={state.iconColor}>
-          <span class="max-lg:hidden">{$_(state.label)}</span>
+          <span class="max-xl:hidden">{$_(state.label)}</span>
         </Badge>
       {:else}
         <span class="loading loading-xs loading-spinner"></span>
@@ -272,7 +272,6 @@
   <JobEditor
     bind:this={updater}
     {...selected}
-    bootparams={selected.bootparams ? JSON.stringify(selected.bootparams, null, 2) : '{}'}
     run_date={toDatetimeLocal(selected.run_date)}
     interval_start={toDatetimeLocal(selected.interval_start)}
     interval_end={toDatetimeLocal(selected.interval_end)}

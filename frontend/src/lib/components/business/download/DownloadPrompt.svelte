@@ -1,8 +1,8 @@
 <script lang="ts" module>
   import { api } from '$lib/api';
+  import { TransferMethod } from '$lib/enums';
   import { createFormSchema, createLoading } from '$lib/helpers';
   import type { DownloadDir, Downloader, MediaLib, Resp } from '$lib/types';
-  import { TransferMethod } from '$lib/enums';
 
   // the modal dialog and file tree instance
   let modal: Modal;
@@ -14,7 +14,7 @@
   let downloaders: Downloader[] = $state([]);
   let downloader: number = $state(0);
 
-  // the media libraries and transfer settings
+  // the media libraries and transfer options
   let mediaLibs: MediaLib[] = $state([]);
   let transferLibId: number = $state(0);
   let transferMethod: keyof typeof TransferMethod = $state('hardlink');
@@ -87,7 +87,7 @@
     directories = _directories;
     directory = directories[0] || null;
     downloaders = _downloaders;
-    downloader = downloaders.find((d) => d.status !== 'down')?.id || 0;
+    downloader = downloaders.find((d) => d.status !== 'down')?.id ?? 0;
     mediaLibs = _mediaLibs;
     supportsHardlink = _platform !== 'win32';
     transferMethod = supportsHardlink ? 'hardlink' : 'symlink';
@@ -193,7 +193,7 @@
   });
 </script>
 
-<Modal icon={icons.download} title={$_('action.add', $_('entity.download'))} bind:this={_modal}>
+<Modal icon={icons.download} title={$_('action.add', $_('entity.download'))} maxWidth="36rem" bind:this={_modal}>
   <form
     method="post"
     enctype="multipart/form-data"
@@ -210,14 +210,14 @@
           label: d.name,
           disabled: d.status === 'down'
         }))}
-        class="w-full"
-        name="downloader_id"
         bind:value={downloader}
+        name="downloader_id"
+        class="w-full"
       />
       <Label required>{$_('download.dir')}</Label>
       {#if directory}
-        <button type="button" class="input w-full cursor-pointer" onclick={() => fileTree.showModal()}>
-          <iconify-icon icon={icons.folder} width="1.5rem" class="opacity-70"></iconify-icon>
+        <button type="button" class="input w-full cursor-pointer" onclick={() => fileTree.showModal(directory?.path)}>
+          <iconify-icon icon={icons.folder} width="1.5rem" class="opacity-50"></iconify-icon>
           <input
             type="text"
             autocomplete="off"
@@ -230,13 +230,13 @@
         </button>
       {:else}
         <label class="input w-full">
-          <iconify-icon icon={icons.folder} width="1.5rem" class="opacity-70"></iconify-icon>
+          <iconify-icon icon={icons.folder} width="1.5rem" class="opacity-50"></iconify-icon>
           <input type="text" class="grow" name="dir" />
         </label>
       {/if}
       <Label required class="mt-6">{$_('download.prompt')}</Label>
       <textarea
-        rows={3}
+        rows={5}
         placeholder={$_('download.supported')}
         class="textarea w-full"
         name="link"
@@ -254,9 +254,9 @@
           { value: 0, label: $_('download.transfer.none') },
           ...mediaLibs.map((lib) => ({ value: lib.id, label: lib.name }))
         ]}
-        class="w-full"
-        name="transfer_lib_id"
         bind:value={transferLibId}
+        name="transfer_lib_id"
+        class="w-full"
       />
       {#if transferLibId}
         <Label required>{$_('download.transfer.method')}</Label>
@@ -305,9 +305,6 @@
   bind:this={_fileTree}
   onlyDirs={true}
   onconfirm={(stats) => {
-    directory = {
-      path: stats.path,
-      free: stats.free ?? ''
-    };
+    directory = { path: stats.path, free: stats.free };
   }}
 />

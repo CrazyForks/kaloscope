@@ -54,7 +54,7 @@
   const innerLoading = createLoading();
 
   // the abort controller
-  let abortController: AbortController;
+  let abortController: AbortController | null = null;
 
   // the standalone display mode media query
   const standaloneMode = new MediaQuery('(display-mode: standalone)');
@@ -76,17 +76,14 @@
    */
   function search(toTop: boolean = false) {
     let aborted = false;
-    if (abortController) {
-      // abort the previous request
-      abortController.abort();
-    }
-    abortController = new AbortController();
-    const signal = abortController.signal;
+    // abort the previous request
+    abortController?.abort();
     // execute the search request
+    abortController = new AbortController();
     innerLoading.start();
     api
       .get('media/list', {
-        signal,
+        signal: abortController.signal,
         searchParams: {
           page_num: query.page_num,
           page_size: query.page_size,

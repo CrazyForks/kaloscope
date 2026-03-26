@@ -78,9 +78,9 @@
       <Label required>{$_('field.type')}</Label>
       <Select
         options={enumToOptions(LibType, false)}
-        class="w-full"
-        name="lib_type"
         bind:value={lib_type}
+        name="lib_type"
+        class="w-full"
         disabled={!!id}
       />
       <Label required>{$_('field.name')}</Label>
@@ -93,7 +93,7 @@
         onclick={() => fileTree.showModal()}
         disabled={!!id}
       >
-        <iconify-icon icon={icons.folder} width="1.5rem" class="opacity-70"></iconify-icon>
+        <iconify-icon icon={icons.folder} width="1.5rem" class="opacity-50"></iconify-icon>
         <input
           placeholder={$_('action.select', $_('field.dir'))}
           autocomplete="off"
@@ -104,7 +104,7 @@
         />
       </button>
       <Label>{$_('field.language')}</Label>
-      <Select class="w-full" name="language" bind:value={language}>
+      <Select bind:value={language} name="language" class="w-full">
         <option value="">{$_('enum.none')}</option>
         {#each $locales.filter((l) => l !== 'languages') as code (code)}
           <option value={code}>{$_(code, { locale: 'languages' })}</option>

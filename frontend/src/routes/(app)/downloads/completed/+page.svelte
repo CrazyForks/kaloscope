@@ -17,10 +17,10 @@
   import type { Downloader, DownloadTask, Page, Resp } from '$lib/types';
   import { onMount, untrack } from 'svelte';
 
-  let downloaders: Downloader[] = $state([]);
-  let downloader: number | null = $state(null);
   let tasks: DownloadTask[] = $state([]);
   let name: string = $state('');
+  let downloader: number | null = $state(null);
+  let downloaders: Downloader[] = $state([]);
   let deleteConfirm: DeleteConfirm;
 
   const pagination: PaginatorProps = $state({ current: 1, size: 50, onchange: search });

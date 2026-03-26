@@ -74,7 +74,7 @@
   const authLoading = createLoading();
 
   // the abort controller
-  let abortController: AbortController;
+  let abortController: AbortController | null = null;
 
   // the standalone display mode media query
   const standaloneMode = new MediaQuery('(display-mode: standalone)');
@@ -153,25 +153,22 @@
    */
   function search(toTop: boolean = false) {
     let aborted = false;
-    if (abortController) {
-      // abort the previous request
-      abortController.abort();
-    }
+    // abort the previous request
+    abortController?.abort();
+    // check if the keyword is required but not provided, or the user is not logged in
     if ((keyword?.required && !query.keyword) || (loginConfig?.required && loggedUser === null)) {
-      // if the keyword is required and not provided, or the user is not logged in
       resources = [];
       pagination.total = null;
       innerLoading.end();
       outerLoading.end();
       return;
     }
-    abortController = new AbortController();
-    const signal = abortController.signal;
     // execute the search request
+    abortController = new AbortController();
     innerLoading.start();
     api
       .post(`flow/graph/${indexerId}/execute`, {
-        signal,
+        signal: abortController.signal,
         json: {
           $start: 'search_start',
           page_num: query.page_num,
@@ -265,6 +262,7 @@
     {#snippet filters()}
       <Search
         manual
+        required={keyword?.required}
         label={$_('field.keyword')}
         bind:value={query.keyword}
         onsearch={() => {

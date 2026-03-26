@@ -140,6 +140,7 @@
   <button
     id={callyId}
     popovertarget={callyPopoverId}
+    type="button"
     class="input w-full"
     style="anchor-name:--{callyId}"
     onclick={() => {

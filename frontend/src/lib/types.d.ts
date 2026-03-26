@@ -6,6 +6,7 @@ import {
   JobState,
   JobTrigger,
   LibType,
+  TransferMethod,
   UserRole
 } from '$lib/enums';
 import { icons } from '$lib/icons';
@@ -140,8 +141,9 @@ export type Path = {
   is_empty: boolean | null;
   is_hidden: boolean;
   file_type: string | null;
-  children?: Path[] | null;
+  open?: boolean;
   loading?: boolean;
+  children?: Path[] | null;
 };
 
 /**
@@ -271,7 +273,7 @@ export type Downloader = {
  */
 export type DownloadDir = {
   path: string;
-  free: string;
+  free?: string;
 };
 
 /**
@@ -279,6 +281,8 @@ export type DownloadDir = {
  */
 export type DownloadTask = {
   id: number;
+  created_at: string;
+  updated_at: string;
   downloader_id: number;
   dir: string;
   name: string;
@@ -297,6 +301,41 @@ export type DownloadTask = {
   completed_at: string | null;
   ratio: string;
   estimate: string;
+
+  // transfer options
+  transfer_lib_id: number | null;
+  transfer_method: keyof typeof TransferMethod | null;
+  sub_pattern: string | null;
+  sub_repl: string | null;
+};
+
+/**
+ * The type of the download plan.
+ */
+export type DownloadPlan = {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  graph_id: number;
+  graph_name: string | null;
+  downloader_id: number;
+  dir: string;
+  keyword: string;
+  filters: Record<string, any> | null; // eslint-disable-line
+  interval_num: number;
+  interval_start: string | null;
+  interval_end: string | null;
+  batch_limit: number;
+  total_limit: number | null;
+  total_count: number;
+  last_run: string | null;
+  running: boolean;
+
+  // transfer options
+  transfer_lib_id: number | null;
+  transfer_method: keyof typeof TransferMethod | null;
+  sub_pattern: string | null;
+  sub_repl: string | null;
 };
 
 /**

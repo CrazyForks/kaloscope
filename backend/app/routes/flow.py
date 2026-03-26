@@ -348,7 +348,7 @@ async def list_jobs(_, query: JobQuery) -> HTTPResponse:
         queries.append(Q(trigger=query.trigger))
     page = await FlowJob.page(*queries, **query.page_params)
     result = await FlowJobService.dump_page(page)
-    # attach the graph name for each job
+    # attach the graph name to the result
     graph_ids = {job.graph_id for job in page.items}
     graphs = {g.id: g.name for g in await FlowGraph.filter(id__in=graph_ids)}
     for job in result["items"]:
@@ -376,7 +376,7 @@ async def pause_job(request: Request, id: int) -> HTTPResponse:
 async def resume_job(request: Request, id: int) -> HTTPResponse:
     """Resume the job."""
     job = await FlowJob.get(id=id)
-    graph = await FlowGraph.get_or_none(id=job.graph_id, state=GraphState.PUBLISHED)
+    graph = await FlowGraph.get_or_none(id=job.graph_id, state__not=GraphState.DRAFTING)
     if graph is None:
         raise KaloscopeException(ErrorCode.FLOW_NOT_PUBLISHED)
     engine: FlowEngine = request.app.ctx.engine

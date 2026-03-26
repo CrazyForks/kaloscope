@@ -244,7 +244,7 @@ class FlowGraphService(BaseService[FlowGraph], model=FlowGraph):
             graph = await FlowGraph.get(id=obj.id)
         else:
             # create the flow graph
-            graph = FlowGraph(
+            graph = await FlowGraph.create(
                 name=obj.name,
                 icon=await save_icon(obj.image),
                 description=obj.description,
@@ -253,7 +253,6 @@ class FlowGraphService(BaseService[FlowGraph], model=FlowGraph):
                 state=GraphState.DRAFTING,
                 draft={"nodes": [], "edges": []},
             )
-            await graph.save()
 
         return graph
 
@@ -606,20 +605,20 @@ class FlowJobService(BaseService[FlowJob], model=FlowJob):
 
     @classmethod
     @atomic()
-    async def upsert(cls, body: JobUpsert) -> FlowJob:
+    async def upsert(cls, obj: JobUpsert) -> FlowJob:
         """Create or update a flow job.
 
         Args:
-            body: The job upsert data.
+            obj: The flow job data.
 
         Returns:
-            The created or updated flow job.
+            The flow job instance.
         """
         engine = cls.app_ctx().engine
-        data = body.model_dump(exclude={"id"})
-        if body.id:
-            await FlowJob.filter(id=body.id).update(**data)
-            job = await FlowJob.get(id=body.id)
+        data = obj.model_dump(exclude={"id"})
+        if obj.id:
+            await FlowJob.filter(id=obj.id).update(**data)
+            job = await FlowJob.get(id=obj.id)
             await engine.refresh_job(job.id)
         else:
             data["state"] = JobState.PENDING

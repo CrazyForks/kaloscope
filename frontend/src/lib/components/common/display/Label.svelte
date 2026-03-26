@@ -42,7 +42,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="mt-2 flex items-center justify-between gap-1 px-1 {_class}"
+  class="mt-2 flex min-h-6.5 items-center justify-between gap-1 px-1 {_class}"
   onclick={(event) => preventDefault && event.preventDefault()}
 >
   <span class="opacity-90 {bold ? 'font-bold' : ''} {small ? 'text-sm' : 'text-base'}">

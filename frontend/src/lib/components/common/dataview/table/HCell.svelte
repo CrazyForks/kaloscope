@@ -63,7 +63,10 @@
     class={children || cellText ? 'px-0 pt-1 pb-2' : 'p-0'}
     style:width={cellWidth}
   >
-    <div class="flex pl-2 {actions ? 'justify-center pr-2' : ''} {cellWidth === '0' ? 'hidden' : ''} {_class}">
+    <div
+      class="flex {children ? 'pl-2' : 'pl-1'} {actions ? 'justify-center pr-1' : ''} {_class}"
+      class:hidden={cellWidth === '0'}
+    >
       {#if children}
         {@render children()}
       {:else if cellText}

@@ -8,6 +8,11 @@ export const load: LayoutLoad = () => {
       title: 'nav.downloads.title',
       routes: [
         {
+          title: 'nav.downloads.plans',
+          path: '/downloads/plans',
+          icon: icons.arrowRotateClockwise
+        },
+        {
           title: 'nav.downloads.downloading',
           path: '/downloads/downloading',
           icon: icons.download

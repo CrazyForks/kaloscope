@@ -7,7 +7,9 @@
     /** The label of the item to search. */
     label?: string;
     /** The placeholder text for the search input. */
-    placeholder?: string;
+    placeholder?: string | null;
+    /** Whether the search input is required. */
+    required?: boolean | null;
     /** Whether to trigger the search manually. */
     manual?: boolean;
     /** Whether to use a smaller input size. */
@@ -38,6 +40,7 @@
     value = $bindable(),
     label,
     placeholder: _placeholder,
+    required = false,
     manual = false,
     small = true,
     maxWidth = '20rem',
@@ -99,6 +102,7 @@
     aria-label="Search"
     onclick={(event) => {
       event.preventDefault();
+      required && searchInput.reportValidity();
       _onsearch(_value);
     }}
   >
@@ -116,6 +120,7 @@
     type="search"
     class="grow truncate"
     maxlength="4096"
+    {required}
     {placeholder}
     bind:value={_value}
     bind:this={searchInput}
@@ -126,7 +131,7 @@
 
   {#if showFilters}
     {@const filtered = filters && filters !== '{}'}
-    <button class={btnClass} aria-label="Show Filters" onclick={() => filtersModal?.showModal()}>
+    <button type="button" class={btnClass} aria-label="Show Filters" onclick={() => filtersModal?.showModal()}>
       <iconify-icon
         icon={icons.adjustmentsHorizontal}
         width="1.5rem"

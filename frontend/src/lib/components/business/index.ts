@@ -1,6 +1,7 @@
 export { default as DeleteConfirm } from './download/DeleteConfirm.svelte';
 export { default as DownloaderEditor } from './download/DownloaderEditor.svelte';
 export { downloadPrompt, default as DownloadPrompt } from './download/DownloadPrompt.svelte';
+export { default as PlanEditor } from './download/PlanEditor.svelte';
 
 export { default as FileTree } from './filesystem/FileTree.svelte';
 

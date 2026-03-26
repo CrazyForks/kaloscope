@@ -1,13 +1,13 @@
 <script lang="ts" module>
-  import type { FlowGraph, FlowJob, Option, Page, Resp } from '$lib/types';
   import { enumToOptions, IntervalUnit, JobTrigger } from '$lib/enums';
+  import type { FlowGraph, FlowJob, Option, Page, Resp } from '$lib/types';
 
   type JobEditorProps = Partial<{
     id: number;
     graph_id: number;
     graph_name: string | null;
     trigger: keyof typeof JobTrigger;
-    bootparams: string;
+    bootparams: Record<string, any> | null; // eslint-disable-line
     run_date: string | null;
     cron_expr: string | null;
     interval_num: number | null;
@@ -21,7 +21,7 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
   import { api } from '$lib/api';
-  import { CodeMirror, Label, Modal, Select, alert } from '$lib/components';
+  import { alert, CodeMirror, Label, Modal, Select } from '$lib/components';
   import { createFormSchema, createLoading } from '$lib/helpers';
   import { _ } from '$lib/i18n';
   import { icons } from '$lib/icons';
@@ -33,7 +33,7 @@
     graph_id,
     graph_name,
     trigger = 'cron',
-    bootparams = '{}',
+    bootparams = null,
     run_date = null,
     cron_expr = null,
     interval_num = null,
@@ -45,10 +45,18 @@
 
   // the modal dialog instance
   let modal: Modal;
-  export const showModal = () => modal.show();
+  export const showModal = () => {
+    if (id) {
+      graphOptions = [{ value: graph_id, label: graph_name! }];
+    }
+    modal.show();
+  };
 
-  // graph options for the dropdown
+  // the graph options for the dropdown
   let graphOptions: Option[] = $state([]);
+
+  // the JSON string for boot parameters
+  let jsonParams = $derived(bootparams ? JSON.stringify(bootparams, null, 2) : '{}');
 
   // the loading state and form schema
   const loading = createLoading();
@@ -67,7 +75,7 @@
     // validate the boot parameters
     let params = null;
     try {
-      params = JSON.parse(bootparams);
+      params = JSON.parse(jsonParams);
     } catch (error) {
       console.error(error);
     }
@@ -77,8 +85,7 @@
     }
     // send the request
     loading.start();
-    const jsonData: Record<string, unknown> = { id, graph_id, trigger };
-    jsonData.bootparams = params;
+    const jsonData: Record<string, unknown> = { id, graph_id, trigger, bootparams: params };
     if (trigger === 'date') {
       jsonData.run_date = run_date || null;
     } else if (trigger === 'cron') {
@@ -98,7 +105,7 @@
         // reset the form
         setTimeout(() => {
           trigger = 'cron';
-          bootparams = '{}';
+          bootparams = null;
           run_date = null;
           cron_expr = null;
           interval_num = null;
@@ -111,10 +118,8 @@
   }
 
   onMount(() => {
-    if (id) {
-      graphOptions = [{ value: graph_id, label: graph_name! }];
-    } else {
-      // load the available graphs for scheduling
+    // load the available flow graphs
+    if (!id) {
       api
         .get('flow/graph/list', {
           searchParams: [
@@ -143,7 +148,7 @@
   >
     <fieldset class="fieldset">
       <Label required>{$_('field.graph')}</Label>
-      <Select options={graphOptions} class="w-full" name="graph_id" bind:value={graph_id} disabled={!!id} />
+      <Select options={graphOptions} bind:value={graph_id} name="graph_id" class="w-full" disabled={!!id} />
       <Label>{$_('field.bootparams')}</Label>
       <CodeMirror
         darkMode
@@ -152,10 +157,10 @@
         maxHeight="10rem"
         language={json()}
         title={$_('field.bootparams')}
-        bind:document={bootparams}
+        bind:document={jsonParams}
       />
       <Label required>{$_('field.trigger')}</Label>
-      <Select options={enumToOptions(JobTrigger, false)} class="w-full" name="trigger" bind:value={trigger} />
+      <Select options={enumToOptions(JobTrigger, false)} bind:value={trigger} name="trigger" class="w-full" />
       {#if trigger === 'date'}
         <Label required>{$_('field.run_date')}</Label>
         <input class="input w-full" bind:value={run_date} {...schema.run_date} />
@@ -165,13 +170,13 @@
       {:else if trigger === 'interval'}
         <Label required>{$_('field.interval')}</Label>
         <div class="flex gap-2">
-          <input class="input w-full" bind:value={interval_num} {...schema.interval_num} />
+          <input class="input w-1/2" bind:value={interval_num} {...schema.interval_num} />
           <Select
             required
             options={enumToOptions(IntervalUnit, false)}
-            class="w-full"
-            name="interval_unit"
             bind:value={interval_unit}
+            name="interval_unit"
+            class="w-1/2"
           />
         </div>
         <Label>{$_('field.interval_start')}</Label>
