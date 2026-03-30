@@ -163,7 +163,7 @@ async def delete_tasks(_, body: DownloadDel) -> HTTPResponse:
 @download.get("/stats")
 async def get_stats(request: Request):
     """Get the download statistics."""
-    syncer: DLSyncer = request.app.ctx.syncer
+    syncer: DLSyncer = request.app.ctx.dl_syncer
     syncer.accelerate()
     try:
         start = datetime.now()

@@ -83,25 +83,25 @@ async def init_shared_ctx(app: Sanic):
     See https://sanic.dev/en/guide/running/manager.html for more details.
     """
     shared = app.shared_ctx
-    app.ctx.manager = multiprocessing.Manager()
+    app.ctx.sync_manager = (sync_manager := multiprocessing.Manager())
     # shared online user sessions
-    shared.sessions = app.ctx.manager.dict()
+    shared.sessions = sync_manager.dict()
     shared.sessions_lock = multiprocessing.Lock()
     # shared objects for the HTTP client
-    shared.cookies = app.ctx.manager.dict()
+    shared.cookies = sync_manager.dict()
     shared.cookies_lock = multiprocessing.RLock()
-    shared.csrf_tokens = app.ctx.manager.dict()
+    shared.csrf_tokens = sync_manager.dict()
     # shared objects for the flow engine
     shared.flow_lock = multiprocessing.Lock()
     shared.flow_events = multiprocessing.Queue()
     shared.flow_reload_flag = multiprocessing.Event()
     shared.flow_syncer_flag = multiprocessing.Event()
-    shared.flow_job_actions = app.ctx.manager.dict()
-    shared.flow_running_tasks = app.ctx.manager.list()
+    shared.flow_job_actions = sync_manager.dict()
+    shared.flow_running_tasks = sync_manager.list()
     # shared objects for the media library watcher
     shared.lib_watcher_lock = multiprocessing.Lock()
-    shared.lib_removing_paths = app.ctx.manager.list()
-    shared.lib_observing_paths = app.ctx.manager.list()
+    shared.lib_removing_paths = sync_manager.list()
+    shared.lib_observing_paths = sync_manager.list()
     # shared objects for the download synchronizer
     shared.dl_syncer_lock = multiprocessing.Lock()
     shared.dl_syncer_flag = multiprocessing.Event()
@@ -111,8 +111,8 @@ async def init_shared_ctx(app: Sanic):
 
 async def close_shared_ctx(app: Sanic):
     """Shutdown the shared context manager."""
-    manager: SyncManager = app.ctx.manager
-    manager.shutdown()
+    sync_manager: SyncManager = app.ctx.sync_manager
+    sync_manager.shutdown()
     logger.debug(_msg(Colors.YELLOW, "Shared context manager shutdown."), _worker(app))
 
 
@@ -180,42 +180,42 @@ async def close_http_client(app: Sanic):
 
 async def start_flow_engine(app: Sanic):
     """Start the flow engine."""
-    app.ctx.engine = FlowEngine(app)
-    await app.ctx.engine.start()
+    app.ctx.flow_engine = FlowEngine(app)
+    await app.ctx.flow_engine.start()
     logger.debug(_msg(Colors.BLUE, "Flow engine started."), _worker(app))
 
 
 async def close_flow_engine(app: Sanic):
     """Shutdown the flow engine."""
-    engine: FlowEngine = app.ctx.engine
+    engine: FlowEngine = app.ctx.flow_engine
     await engine.shutdown()
     logger.debug(_msg(Colors.YELLOW, "Flow engine shutdown."), _worker(app))
 
 
 async def start_lib_watcher(app: Sanic):
     """Start the media library watcher."""
-    app.ctx.watcher = LibWatcher(app)
-    await app.ctx.watcher.start()
+    app.ctx.lib_watcher = LibWatcher(app)
+    await app.ctx.lib_watcher.start()
     logger.debug(_msg(Colors.BLUE, "Media library watcher started."), _worker(app))
 
 
 async def close_lib_watcher(app: Sanic):
     """Shutdown the media library watcher."""
-    watcher: LibWatcher = app.ctx.watcher
+    watcher: LibWatcher = app.ctx.lib_watcher
     await watcher.shutdown()
     logger.debug(_msg(Colors.YELLOW, "Media library watcher shutdown."), _worker(app))
 
 
 async def start_dl_syncer(app: Sanic):
     """Start the download synchronizer."""
-    app.ctx.syncer = DLSyncer(app)
-    await app.ctx.syncer.start()
+    app.ctx.dl_syncer = DLSyncer(app)
+    await app.ctx.dl_syncer.start()
     logger.debug(_msg(Colors.BLUE, "Download synchronizer started."), _worker(app))
 
 
 async def close_dl_syncer(app: Sanic):
     """Shutdown the download synchronizer."""
-    syncer: DLSyncer = app.ctx.syncer
+    syncer: DLSyncer = app.ctx.dl_syncer
     await syncer.shutdown()
     logger.debug(_msg(Colors.YELLOW, "Download synchronizer shutdown."), _worker(app))
 

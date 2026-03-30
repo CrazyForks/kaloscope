@@ -191,7 +191,7 @@ async def retract_graph(_, id: int) -> HTTPResponse:
 @flow.post("/graph/<id:int>/execute")
 async def execute_graph(request: Request, id: int) -> HTTPResponse:
     """Execute the flow graph."""
-    engine: FlowEngine = request.app.ctx.engine
+    engine: FlowEngine = request.app.ctx.flow_engine
     bootparams: dict = request.json or {}
     kwargs = {
         "graph_id": id,
@@ -367,7 +367,7 @@ async def upsert_job(_, body: JobUpsert) -> HTTPResponse:
 @flow.post("/job/<id:int>/pause")
 async def pause_job(request: Request, id: int) -> HTTPResponse:
     """Pause the job."""
-    engine: FlowEngine = request.app.ctx.engine
+    engine: FlowEngine = request.app.ctx.flow_engine
     await engine.pause_job(id)
     return empty()
 
@@ -379,7 +379,7 @@ async def resume_job(request: Request, id: int) -> HTTPResponse:
     graph = await FlowGraph.get_or_none(id=job.graph_id, state__not=GraphState.DRAFTING)
     if graph is None:
         raise KaloscopeException(ErrorCode.FLOW_NOT_PUBLISHED)
-    engine: FlowEngine = request.app.ctx.engine
+    engine: FlowEngine = request.app.ctx.flow_engine
     await engine.resume_job(id)
     return empty()
 
@@ -387,6 +387,6 @@ async def resume_job(request: Request, id: int) -> HTTPResponse:
 @flow.post("/job/<id:int>/delete")
 async def delete_job(request: Request, id: int) -> HTTPResponse:
     """Delete the job."""
-    engine: FlowEngine = request.app.ctx.engine
+    engine: FlowEngine = request.app.ctx.flow_engine
     await engine.delete_job(id)
     return empty()
