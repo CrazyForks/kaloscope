@@ -17,7 +17,7 @@ repos:
         stages: [commit-msg]
   - repo: https://github.com/python-poetry/poetry
     # https://python-poetry.org/docs/main/pre-commit-hooks/#why-does-pre-commit-autoupdate-not-update-to-the-latest-version
-    rev: 2.3.2
+    rev: 2.3.3
     hooks:
       - id: poetry-check
         args: [-C, ./backend]
@@ -26,7 +26,7 @@ repos:
       - id: poetry-install
         args: [-C, ./backend]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.7
+    rev: v0.15.8
     hooks:
       - id: ruff-check
         args: [--fix]

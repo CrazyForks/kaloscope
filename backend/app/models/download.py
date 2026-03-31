@@ -97,7 +97,7 @@ class DownloadPlan(TortoiseModel):
     batch_limit = IntField(default=10)
     total_limit = IntField(null=True)
     total_count = IntField(default=0)
-    last_run = DatetimeField(null=True)
+    last_exec = DatetimeField(null=True)
     transfer_lib_id: int | None
     transfer_lib: ForeignKeyNullableRelation[MediaLib] = ForeignKeyField(
         "models.MediaLib",
@@ -224,7 +224,7 @@ class DownloadAdd(BaseModel, RequestFilesMixin):
     def check_link_or_torrent(self) -> Self:
         link = self.link.strip() if self.link else None
         if not link and not self.torrent:
-            raise ValueError("Either `link` or `torrent` must be provided.")
+            raise ValueError("either link or torrent must be provided")
         return self
 
     @field_serializer("torrent")

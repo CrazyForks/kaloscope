@@ -33,6 +33,7 @@ class RepoFetcher:
         """
         self._app = app
         self._task = None
+        # ensure that only one instance is running
         if self._fetcher_lock.acquire(block=False):
             try:
                 if not self._fetcher_flag.is_set():

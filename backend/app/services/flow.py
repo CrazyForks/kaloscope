@@ -353,7 +353,7 @@ class FlowGraphService(BaseService[FlowGraph], model=FlowGraph):
         if await FlowGraph.filter(id=id, state__not=state).update(state=state) == 1:
             running_jobs = await FlowJob.filter(graph_id=id, state=JobState.RUNNING)
             if running_jobs:
-                engine = cls.app_ctx().engine
+                engine = cls.app_ctx().flow_engine
                 for job in running_jobs:
                     await engine.pause_job(job.id)
 
@@ -594,7 +594,7 @@ class FlowTriggerService(BaseService[FlowTrigger], model=FlowTrigger):
             return
 
         # use the flow engine to execute the flow graphs
-        engine = cls.app_ctx().engine
+        engine = cls.app_ctx().flow_engine
         await engine.execute_batch(
             graph_ids, bootparams, repeatable=repeatable, recoverable=recoverable
         )
@@ -614,7 +614,7 @@ class FlowJobService(BaseService[FlowJob], model=FlowJob):
         Returns:
             The flow job instance.
         """
-        engine = cls.app_ctx().engine
+        engine = cls.app_ctx().flow_engine
         data = obj.model_dump(exclude={"id"})
         if obj.id:
             await FlowJob.filter(id=obj.id).update(**data)

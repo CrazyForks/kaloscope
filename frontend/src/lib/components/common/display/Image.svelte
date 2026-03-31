@@ -57,6 +57,16 @@
     qbittorrent: resolve('/icons/qbittorrent.ico'),
     transmission: resolve('/icons/transmission.ico')
   };
+
+  /**
+   * Extract the display initial character from the given string.
+   *
+   * @param str - The first unicode letter or number in the string.
+   */
+  function extractInitial(str: string): string {
+    const match = str.match(/[\p{L}\p{N}]/u);
+    return (match ? match[0] : str[0]).toLocaleUpperCase();
+  }
 </script>
 
 <script lang="ts">
@@ -146,7 +156,7 @@
       />
     {/key}
   {:else if text}
-    <span class="text-xl font-bold opacity-60">{text[0].toLocaleUpperCase()}</span>
+    <span class="text-xl font-bold opacity-60">{extractInitial(text)}</span>
   {:else if icon}
     <iconify-icon {icon} width="100%" height="100%" style:aspect-ratio={aspectRatio} class="opacity-50"></iconify-icon>
   {/if}

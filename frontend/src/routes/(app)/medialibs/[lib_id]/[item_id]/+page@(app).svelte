@@ -38,13 +38,13 @@
       if (media?.children?.length) {
         for (const part of media.children) {
           chapters.push({
-            url: `/_api/media/stream?path=${part.path}`,
+            url: `/_api/media/stream?path=${encodeURIComponent(part.path)}`,
             title: formatTitle(part)
           });
         }
       }
       player?.mount({
-        url: `/_api/media/stream?path=${target.path}`,
+        url: `/_api/media/stream?path=${encodeURIComponent(target.path)}`,
         back: () => (playing = false),
         title: formatTitle(target),
         chapters: chapters

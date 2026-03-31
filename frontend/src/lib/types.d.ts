@@ -328,7 +328,7 @@ export type DownloadPlan = {
   batch_limit: number;
   total_limit: number | null;
   total_count: number;
-  last_run: string | null;
+  last_exec: string | null;
   running: boolean;
 
   // transfer options

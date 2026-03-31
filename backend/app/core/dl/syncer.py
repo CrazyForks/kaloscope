@@ -12,15 +12,20 @@ from pathlib import Path
 from sanic import Sanic
 from sanic.log import logger
 from tortoise import timezone
+from tortoise.expressions import F, RawSQL
 
-from app.core.dl.adapter import load_config
+from app.core.dl.adapter import Adapter, load_config
+from app.core.flow.engine import FlowEngine
 from app.models.download import (
     Downloader,
+    DownloadPlan,
     DownloadState,
     DownloadTask,
     TransferMethod,
 )
+from app.models.flow import GraphState
 from app.models.media import MediaLib
+from app.utils.bittorrent import standardize_magnet
 
 
 @dataclass(frozen=True)
@@ -66,8 +71,6 @@ class DLSyncer:
     """The download task synchronizer."""
 
     _DL_SYNCER = "dl_syncer"
-    _last_sync_tasks: datetime = datetime.now()
-    _last_check_plans: datetime = datetime.now()
 
     def __init__(self, app: Sanic):
         """Initialize the download task synchronizer.
@@ -77,6 +80,9 @@ class DLSyncer:
         """
         self._app = app
         self._task = None
+        self._last_sync_tasks = datetime.now()
+        self._last_check_plans = datetime.now()
+        # ensure that only one instance is running
         if self._syncer_lock.acquire(block=False):
             try:
                 if not self._syncer_flag.is_set():
@@ -118,20 +124,29 @@ class DLSyncer:
 
     async def interval(self):
         """Synchronize the download tasks."""
+        slow_mode = 30
         while True:
+            now = datetime.now()
             try:
-                seconds = (datetime.now() - self._last_sync_tasks).total_seconds()
-                if not self._sync_fast.is_set() and seconds < 30:
+                seconds = (now - self._last_sync_tasks).total_seconds()
+                if not self._sync_fast.is_set() and seconds < 2:
                     # do not synchronize too frequently
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(slow_mode - 1)
                     continue
 
+                # synchronize the download tasks in batch by downloader
                 all = await DownloadTask.filter(
                     state__in=[DownloadState.PAUSED, DownloadState.DOWNLOADING]
                 )
                 for downloader_id, tasks in groupby(all, key=lambda t: t.downloader_id):
                     downloader = await Downloader.get(id=downloader_id)
                     await sync_tasks(downloader, list(tasks))
+
+                # check the download plans every hour
+                hours = (now - self._last_check_plans).total_seconds() / 3600
+                if hours >= 1:
+                    self._last_check_plans = now
+                    self._app.add_task(check_download_plans())
 
                 await asyncio.sleep(1)
             except asyncio.CancelledError:
@@ -140,7 +155,7 @@ class DLSyncer:
                 logger.error("Failed to synchronize the download tasks!", exc_info=True)
                 await asyncio.sleep(1)
             finally:
-                self._last_sync_tasks = datetime.now()
+                self._last_sync_tasks = now
 
 
 async def sync_tasks(downloader: Downloader, tasks: list[DownloadTask]):
@@ -295,3 +310,145 @@ async def transfer_files(task: DownloadTask, files: list[str] | None):
             shutil.move(src, dst)
         elif task.transfer_method == TransferMethod.COPY:
             shutil.copy2(src, dst)
+
+
+async def check_download_plans():
+    """Check the download plans and add new download tasks if needed."""
+
+    # get all plans whose graph is published and interval has elapsed
+    now = f"julianday('{timezone.now().isoformat(sep=' ')}')"
+    last = "julianday(IFNULL(last_exec, download_plan.created_at))"
+    plans = await DownloadPlan.annotate(
+        elapsed_hours=RawSQL(f"({now} - {last}) * 24")
+    ).filter(
+        elapsed_hours__gte=F("interval_num"),
+        graph__state__not=GraphState.DRAFTING,
+    )
+    plans = [p for p in plans if p.inactive() is False]
+    if not plans:
+        return
+
+    # load the adapters of the associated downloaders
+    adapters: dict[int, Adapter] = {}
+    for downloader_id in {plan.downloader_id for plan in plans}:
+        downloader = await Downloader.get(id=downloader_id)
+        adapter = load_config(downloader.config)
+        if not adapter.methods.get("version") or (await adapter.version()):
+            adapters[downloader_id] = adapter
+
+    # execute each eligible plan with the corresponding adapter
+    for plan in plans:
+        if plan.downloader_id not in adapters:
+            continue
+        adapter = adapters[plan.downloader_id]
+        try:
+            await execute_download_plan(plan, adapter)
+        except Exception:
+            logger.error("Failed to execute download plan: %s", plan.id, exc_info=True)
+
+
+async def execute_download_plan(plan: DownloadPlan, adapter: Adapter | None):
+    """Execute a single download plan.
+
+    Args:
+        plan: The download plan.
+        adapter: The adapter of the associated downloader.
+    """
+    # load the adapter if not provided
+    if adapter is None:
+        downloader = await Downloader.get(id=plan.downloader_id)
+        adapter = load_config(downloader.config)
+
+    # prepare the boot parameters for graph execution
+    engine: FlowEngine = Sanic.get_app().ctx.flow_engine
+    bootparams = {
+        "$start": "search_start",
+        "page_num": 1,
+        "page_size": plan.batch_limit,
+        "keyword": plan.keyword,
+        **(plan.filters or {}),
+    }
+
+    # execute the graph workflow with up to 3 retries
+    items = []
+    for attempt in range(3):
+        try:
+            result = await engine.execute(graph_id=plan.graph_id, bootparams=bootparams)
+            if isinstance(result, dict) and isinstance(result.get("items"), list):
+                items = result["items"]
+                break
+            raise ValueError("invalid graph execution result")
+        except Exception:
+            if attempt == 2:
+                logger.error(
+                    "Failed to execute graph for plan %s after 3 attempts!",
+                    plan.id,
+                    exc_info=True,
+                )
+                return
+            await asyncio.sleep(2**attempt * 5)
+
+    # extract valid magnet links from the graph execution result
+    magnet_links = []
+    for item in items:
+        if isinstance(item, dict) and isinstance((link := item.get("link")), str):
+            # check if the link is a valid magnet/hash
+            magnet = standardize_magnet(link)
+            if magnet is None:
+                continue
+            # check if the magnet link already exists in the download tasks
+            hash = magnet.info_hash
+            if hash and await DownloadTask.filter(info_hash=hash).exists():
+                continue
+            hash_v2 = magnet.info_hash_v2
+            if hash_v2 and await DownloadTask.filter(info_hash_v2=hash_v2).exists():
+                continue
+            magnet_links.append(magnet)
+
+    # add download tasks for each valid magnet link
+    task_count = 0
+    for magnet in magnet_links:
+        # check if the total limit of the plan has been reached
+        if plan.total_limit and plan.total_count + task_count >= plan.total_limit:
+            break
+
+        # add the download task via adapter
+        try:
+            result = await adapter.call(
+                "add_link",
+                {
+                    "dir": plan.dir,
+                    "link": magnet.link,
+                    "pause": False,
+                },
+            )
+        except Exception:
+            logger.error(
+                "Failed to add download task for plan %s, link: %s",
+                plan.id,
+                link,
+                exc_info=True,
+            )
+            continue
+
+        unique_id = result.get("unique_id") if isinstance(result, dict) else None
+        await DownloadTask.create(
+            downloader_id=plan.downloader_id,
+            dir=plan.dir,
+            name=magnet.info_hash or magnet.info_hash_v2,
+            unique_id=unique_id,
+            info_hash=magnet.info_hash,
+            info_hash_v2=magnet.info_hash_v2,
+            magnet_link=magnet.link,
+            state=DownloadState.DOWNLOADING,
+            transfer_lib_id=plan.transfer_lib_id,
+            transfer_method=plan.transfer_method,
+            sub_pattern=plan.sub_pattern,
+            sub_repl=plan.sub_repl,
+        )
+        task_count += 1
+
+    # update the plan's total_count and last_exec
+    await DownloadPlan.filter(id=plan.id).update(
+        total_count=plan.total_count + task_count, last_exec=timezone.now()
+    )

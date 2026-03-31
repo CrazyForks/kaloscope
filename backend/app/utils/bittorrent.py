@@ -3,6 +3,7 @@ import contextlib
 import re
 from dataclasses import dataclass
 
+from sanic.log import logger
 from torrentool.api import Torrent
 from torrentool.bencode import Bencode
 
@@ -125,9 +126,13 @@ def decode_torrent(torrent: bytes) -> Torrent | None:
     Returns:
         The decoded torrent object if successful, None otherwise.
     """
-    decoded = Bencode.read_string(torrent, byte_keys={"pieces"})
-    if isinstance(decoded, dict):
-        return Torrent(decoded)
+    try:
+        decoded = Bencode.read_string(torrent, byte_keys={"pieces"})
+        if isinstance(decoded, dict):
+            return Torrent(decoded)
+    except Exception:
+        logger.error("Failed to decode the torrent file!", exc_info=True)
+    return None
 
 
 def get_torrent_hash(torrent: bytes) -> str | None:

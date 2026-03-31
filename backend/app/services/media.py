@@ -68,7 +68,7 @@ class MediaLibService(BaseService[MediaLib], model=MediaLib):
                 priority=(max(priorities) + 1 if priorities else 1),
             )
             # add the observer
-            watcher = cls.app_ctx().watcher
+            watcher = cls.app_ctx().lib_watcher
             await watcher.add_observer(lib, initialize=True)
 
         # bind the flow triggers to the media library
@@ -90,7 +90,7 @@ class MediaLibService(BaseService[MediaLib], model=MediaLib):
         await MediaLib.filter(id=id).delete()
         await FlowTrigger.filter(category=GraphCategory.INGEST, rel_id=id).delete()
         # remove the observer
-        watcher = cls.app_ctx().watcher
+        watcher = cls.app_ctx().lib_watcher
         await watcher.remove_observer(lib.dir)
 
 

@@ -163,7 +163,7 @@ class Node(metaclass=NodeMeta):
             )
             # check if the node type is duplicated
             if schema in cls.schemas:
-                raise ValueError(f"Duplicate node schema type: {schema.node_type}")
+                raise ValueError(f"duplicate node schema type: {schema.node_type}")
             cls.schemas.add(schema)
             cls.executors[schema.node_type] = node_cls._execute
             return node_cls

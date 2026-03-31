@@ -119,7 +119,7 @@
     <HCell width={['15%', '50%']} text={$_('field.graph')} sort={ordering.bind('graph__name')} />
     <HCell width={['20%', '50%']} text={$_('field.keyword')} sort={ordering.bind('keyword')} />
     <HCell width={['20%', null]} text={$_('field.interval')} sort={ordering.bind('interval_num')} />
-    <HCell width={['20%', null]} text={$_('field.last_run')} sort={ordering.bind('last_run')} />
+    <HCell width={['20%', null]} text={$_('field.last_exec')} sort={ordering.bind('last_exec')} />
     <HCell width={['15%', null]} text={$_('field.total_count')} />
     <HCell width={['10%', '4rem']} text={$_('field.status')} />
     <HCell actions />
@@ -133,7 +133,7 @@
     </Cell>
     <Cell text={plan.keyword} />
     <Cell text={$_('field.every', `${plan.interval_num} ${$_('duration.hours').toLowerCase()}`)} />
-    <Cell text={$dateTime(plan.last_run)} />
+    <Cell text={$dateTime(plan.last_exec)} />
     <Cell text={`${plan.total_count}${plan.total_limit ? ` / ${plan.total_limit}` : ''}`} />
     <Cell>
       <Status rate={plan.running ? 1 : null} class="px-2" />

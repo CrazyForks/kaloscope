@@ -317,5 +317,5 @@ def get_handler(lib_type: LibType) -> MediaHandler:
     """
     handler = _HANDLERS.get(lib_type)
     if handler is None:
-        raise ValueError(f"Unsupported media library type: {lib_type}")
+        raise ValueError(f"unsupported media library type: {lib_type}")
     return handler

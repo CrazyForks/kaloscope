@@ -158,7 +158,7 @@
     "batch_limit": "Batch Limit",
     "total_limit": "Total Limit",
     "total_count": "Downloaded",
-    "last_run": "Last Run",
+    "last_exec": "Last Executed",
     "created": "Created Date",
     "updated": "Updated Date",
     "actions": "Actions"
@@ -547,7 +547,6 @@
     "invalid_yaml_config": "Invalid YAML configuration!",
     "invalid_repo_url": "Invalid GitHub repository URL!",
     "invalid_flow_graph": "Not all required fields are filled!",
-    "get_downloaders_failed": "Failed to get available downloaders!",
     "get_info_hash_failed": "Failed to get info-hash!",
     "info_hash_collision": "Download already exists!",
     "http_request_failed": "HTTP request failed!",

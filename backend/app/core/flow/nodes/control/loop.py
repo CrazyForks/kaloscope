@@ -48,7 +48,7 @@ class LoopNode(Node):
         handles = cls.Handles
         if handles.input == input_handle:
             if not (isinstance(var, Iterable) and isinstance(var, Sized)):
-                raise ValueError("The loop variable must be an iterable with length.")
+                raise ValueError("loop variable must be an iterable with length")
             node_data[IDX_KEY] = 0
             if len(var) > 0:
                 node_data[LOOP_KEY] = {varname: var[0]}

@@ -161,7 +161,7 @@
     <input
       type="file"
       accept="image/*"
-      class="file-input w-full max-w-sm file-input-xs"
+      class="file-input w-full max-w-sm file-input-sm"
       bind:this={avatarInput}
       onchange={async (event) => (cropSrc = await loadFile(event.currentTarget))}
     />

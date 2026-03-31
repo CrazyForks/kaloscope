@@ -46,7 +46,7 @@ class BaseService[M: TortoiseModel]:
         Raises:
             ValueError: If the class is instantiated directly.
         """
-        raise ValueError(f"Cannot instantiate {cls.__name__} class directly.")
+        raise ValueError(f"cannot instantiate {cls.__name__} directly")
 
     @classmethod
     def app_config(cls) -> Config:

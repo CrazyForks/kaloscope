@@ -8,11 +8,10 @@
   let modal: Modal;
   let fileTree: FileTree;
 
-  // the download directories and downloaders
-  let directories: DownloadDir[] = $state([]);
+  // the download directory and downloaders
   let directory: DownloadDir | null = $state(null);
   let downloaders: Downloader[] = $state([]);
-  let downloader: number = $state(0);
+  let downloaderId: number = $state(0);
 
   // the media libraries and transfer options
   let mediaLibs: MediaLib[] = $state([]);
@@ -28,6 +27,9 @@
 
   // the submittable state
   let submittable = $derived.by(() => {
+    if (downloaderId === 0) {
+      return false;
+    }
     if (files && files.length > 0) {
       return true;
     }
@@ -52,21 +54,23 @@
    */
   export function downloadPrompt(uri?: string | null, callback?: () => void) {
     init().then(() => {
-      if (downloader === 0) {
-        alert({ level: 'error', message: 'get_downloaders_failed' });
-        return;
-      }
       oncreate = callback ?? null;
-      files = null;
-      link = uri || '';
-      transferLibId = 0;
-      transferMethod = supportsHardlink ? 'hardlink' : 'symlink';
-      subPattern = '';
-      subRepl = '';
+      // if a URI is provided, use it as the link and clear the files
+      if (uri) {
+        link = uri;
+        files = null;
+      }
       if (!link && navigator.clipboard) {
+        // if no URI is provided and clipboard is supported, try to read a link from the clipboard
         navigator.clipboard
           .readText()
-          .then((text) => (link = text))
+          .then((text) => {
+            text = text.trim();
+            if (text) {
+              link = text;
+              files = null;
+            }
+          })
           .finally(() => modal.show());
       } else {
         modal.show();
@@ -78,19 +82,20 @@
    * Initialize the component.
    */
   async function init() {
-    const [_directories, _downloaders, _mediaLibs, _platform] = await Promise.all([
+    const [_directories, _downloaders, _mediaLibs] = await Promise.all([
       getDirectories(),
       getDownloaders(),
-      getMediaLibs(),
-      getPlatform()
+      getMediaLibs()
     ]);
-    directories = _directories;
-    directory = directories[0] || null;
     downloaders = _downloaders;
-    downloader = downloaders.find((d) => d.status !== 'down')?.id ?? 0;
     mediaLibs = _mediaLibs;
-    supportsHardlink = _platform !== 'win32';
-    transferMethod = supportsHardlink ? 'hardlink' : 'symlink';
+    // set the initial values
+    if (!directory) {
+      directory = _directories[0] || null;
+    }
+    if (!downloaderId) {
+      downloaderId = downloaders.find((d) => d.status !== 'down')?.id ?? 0;
+    }
   }
 
   /**
@@ -148,10 +153,9 @@
   /**
    * Add a download task.
    *
-   * @param form - The form element.
    * @param data - The form data.
    */
-  function addTask(form: HTMLFormElement, data: FormData) {
+  function addTask(data: FormData) {
     loading.start();
     // append the pause field based on the start checkbox
     data.append('pause', (!data.get('start')).toString());
@@ -168,7 +172,13 @@
       .then(() => {
         modal.close();
         oncreate?.();
-        setTimeout(() => form.reset(), 200);
+        setTimeout(() => {
+          // reset the form
+          transferLibId = 0;
+          transferMethod = supportsHardlink ? 'hardlink' : 'symlink';
+          subPattern = '';
+          subRepl = '';
+        }, 200);
       })
       .finally(() => {
         loading.end();
@@ -178,7 +188,7 @@
 
 <script lang="ts">
   import { enhance } from '$app/forms';
-  import { FileTree, Label, Modal, Select, alert } from '$lib/components';
+  import { FileTree, Label, Modal, Select } from '$lib/components';
   import { _ } from '$lib/i18n';
   import { icons } from '$lib/icons';
   import { onMount } from 'svelte';
@@ -190,6 +200,11 @@
     // assign the modal dialog and file tree instances to the module variables
     modal = _modal;
     fileTree = _fileTree;
+    // initialize platform-dependent variables once at mount time
+    getPlatform().then((platform) => {
+      supportsHardlink = platform !== 'win32';
+      transferMethod = supportsHardlink ? 'hardlink' : 'symlink';
+    });
   });
 </script>
 
@@ -197,9 +212,9 @@
   <form
     method="post"
     enctype="multipart/form-data"
-    use:enhance={({ formElement, formData, cancel }) => {
+    use:enhance={({ formData, cancel }) => {
       cancel();
-      addTask(formElement, formData);
+      addTask(formData);
     }}
   >
     <fieldset class="fieldset">
@@ -210,7 +225,7 @@
           label: d.name,
           disabled: d.status === 'down'
         }))}
-        bind:value={downloader}
+        bind:value={downloaderId}
         name="downloader_id"
         class="w-full"
       />
@@ -243,7 +258,7 @@
         bind:value={link}
         disabled={files && files.length > 0}
       ></textarea>
-      <input type="file" accept=".torrent" class="file-input w-full file-input-xs" name="torrent" bind:files />
+      <input type="file" accept=".torrent" class="file-input w-full file-input-sm" name="torrent" bind:files />
       <label class="mt-2 fieldset-label w-fit">
         <input type="checkbox" class="checkbox" checked={true} name="start" />
         <span class="text-base text-base-content opacity-90">{$_('download.start')}</span>
@@ -292,7 +307,7 @@
       <button type="button" class="btn" onclick={() => modal.close()}>
         {$_('message.cancel')}
       </button>
-      <button type="submit" class="btn btn-submit" disabled={!submittable || $loading !== null}>
+      <button type="submit" class="btn btn-submit" disabled={$loading !== null || !submittable}>
         {$_('message.confirm')}
         {#if $loading}
           <span class="loading loading-xs loading-dots"></span>

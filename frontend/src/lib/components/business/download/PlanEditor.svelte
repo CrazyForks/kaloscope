@@ -74,6 +74,7 @@
       preview();
       fileTree.confirm(dir);
       transfer_lib_id = transfer_lib_id ?? 0;
+      transfer_method = transfer_method ?? (supportsHardlink ? 'hardlink' : 'symlink');
     }
     modal.show();
   };
@@ -85,8 +86,7 @@
   let previewLoading: boolean = $state(false);
   let abortController: AbortController | null = null;
 
-  // the download directories and downloaders
-  let directories: DownloadDir[] = $state([]);
+  // the download directory and downloaders
   let directory: DownloadDir | null = $state(null);
   let downloaders: Downloader[] = $state([]);
 
@@ -205,7 +205,7 @@
             batch_limit = 10;
             total_limit = null;
             transfer_lib_id = 0;
-            transfer_method = null;
+            transfer_method = supportsHardlink ? 'hardlink' : 'symlink';
             sub_pattern = null;
             sub_repl = null;
             resources = [];
@@ -260,15 +260,12 @@
         .then((r) => r.data.platform)
         .catch(() => '')
     ]).then(([_directories, _downloaders, _mediaLibs, _platform]) => {
-      directories = _directories;
       downloaders = _downloaders;
       mediaLibs = _mediaLibs;
       supportsHardlink = _platform !== 'win32';
       // set the initial values
-      if (dir) {
-        fileTree.confirm(dir);
-      } else {
-        directory = directories[0] || null;
+      if (!directory) {
+        directory = _directories[0] || null;
       }
       if (!downloader_id) {
         downloader_id = downloaders.find((d) => d.status !== 'down')?.id ?? 0;
@@ -476,5 +473,6 @@
   onlyDirs={true}
   onconfirm={(stats) => {
     directory = { path: stats.path, free: stats.free };
+    dir = directory.path;
   }}
 />

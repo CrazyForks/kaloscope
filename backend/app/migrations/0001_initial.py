@@ -263,7 +263,7 @@ class Migration(migrations.Migration):
                 ('batch_limit', fields.IntField(default=10)),
                 ('total_limit', fields.IntField(null=True)),
                 ('total_count', fields.IntField(default=0)),
-                ('last_run', fields.DatetimeField(null=True, auto_now=False, auto_now_add=False)),
+                ('last_exec', fields.DatetimeField(null=True, auto_now=False, auto_now_add=False)),
                 ('transfer_lib', fields.ForeignKeyField('models.MediaLib', source_field='transfer_lib_id', null=True, db_index=True, db_constraint=True, to_field='id', related_name='plans', on_delete=OnDelete.SET_NULL)),
                 ('transfer_method', fields.CharEnumField(null=True, description='HARDLINK: hardlink\nSYMLINK: symlink\nMOVE: move\nCOPY: copy', enum_type=TransferMethod, max_length=16)),
                 ('sub_pattern', fields.CharField(null=True, max_length=4096)),

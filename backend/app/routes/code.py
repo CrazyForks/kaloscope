@@ -58,7 +58,7 @@ async def evaluate(_, body: EvalRequest) -> HTTPResponse:
             # otherwise, parse the document as JSON and use it as the context
             context = json.loads(document)
             if not isinstance(context, dict):
-                raise ValueError("Document must be a valid JSON object.")
+                raise ValueError("document must be a valid JSON object")
 
         # render the template with the context
         result = render(body.template, context)

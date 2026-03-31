@@ -124,7 +124,7 @@ class MediaLibUpsert(BaseModel):
     @model_validator(mode="after")
     def check_dir(self) -> Self:
         if not self.id and (not self.dir or not is_directory(self.dir)):
-            raise ValueError(f"Invalid directory: {self.dir}")
+            raise ValueError(f"invalid directory: {self.dir}")
         return self
 
 
