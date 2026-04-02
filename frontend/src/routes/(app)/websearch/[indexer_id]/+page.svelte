@@ -193,6 +193,12 @@
           pagination.total = resp.data.total;
           pagination.simpleMode = false;
         }
+        // record search history
+        if (query.keyword) {
+          api.post('user/record_history', {
+            json: { rel_type: 'search', rel_id: indexerId, keyword: query.keyword }
+          });
+        }
       })
       .catch((error) => {
         if (error.name === 'AbortError') {
