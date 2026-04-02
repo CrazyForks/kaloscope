@@ -8,6 +8,7 @@ from app.models.user import (
     FavoriteQuery,
     HistoryEntry,
     HistoryQuery,
+    HistoryType,
     User,
     UserAvatar,
     UserCreate,
@@ -130,6 +131,13 @@ async def record_history(request: Request, body: HistoryEntry) -> HTTPResponse:
 async def list_histories(request: Request, query: HistoryQuery) -> HTTPResponse:
     """List the current user's histories."""
     user: UserInfo = request.ctx.user
+    # clean expired history records
+    if query.rel_type:
+        await UserHistoryService.clean_expired(user.id, query.rel_type)
+    else:
+        for rel_type in HistoryType:
+            await UserHistoryService.clean_expired(user.id, rel_type)
+    # list histories with pagination
     queries = [Q(user_id=user.id)]
     if query.rel_type:
         queries.append(Q(rel_type=query.rel_type))

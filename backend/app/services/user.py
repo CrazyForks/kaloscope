@@ -1,6 +1,7 @@
 import uuid
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import aiofiles
 from sanic import Request
@@ -168,6 +169,20 @@ class UserService(BaseService[User], model=User):
                 sessions[token] = login_user
 
     @classmethod
+    def get_pref(cls, preferences: dict | None, key: str) -> Any:
+        """Get a preference value with fallback to the default.
+
+        Args:
+            preferences: The user's preferences dict.
+            key: The preference key to look up.
+
+        Returns:
+            The preference value, or the default value if not set.
+        """
+        prefs = preferences if isinstance(preferences, dict) else {}
+        return prefs.get(key, cls.DEFAULT_PREFERENCES.get(key))
+
+    @classmethod
     async def create(cls, username: str, password: str, role: UserRole = UserRole.USER):
         """Create a new user.
 
@@ -220,6 +235,28 @@ class UserHistoryService(BaseService[UserHistory], model=UserHistory):
     """The service class for all user history related operations."""
 
     @classmethod
+    async def retention_days(cls, user_id: int, rel_type: HistoryType) -> int:
+        """Get the maximum retention days for a given history type.
+
+        Args:
+            user_id: The user ID.
+            rel_type: The history type.
+
+        Returns:
+            The maximum retention days, or 0 if not set.
+        """
+        days = 0
+        user = await User.get_or_none(id=user_id)
+        if user is None:
+            return days
+
+        if rel_type == HistoryType.SEARCH:
+            days = UserService.get_pref(user.preferences, "search_records")
+        elif rel_type == HistoryType.VIDEO:
+            days = UserService.get_pref(user.preferences, "watch_records")
+        return days if isinstance(days, int) and days >= 0 else 0
+
+    @classmethod
     async def record(cls, user_id: int, obj: HistoryEntry) -> UserHistory | None:
         """Record a user history entry, incrementing repetitions on duplicate.
 
@@ -230,9 +267,12 @@ class UserHistoryService(BaseService[UserHistory], model=UserHistory):
         Returns:
             The user history instance, or None if the entry is invalid.
         """
+        if await cls.retention_days(user_id, obj.rel_type) == 0:
+            # do not record history if the retention days is set to 0
+            return None
+
         history = None
         created = False
-
         if obj.rel_type == HistoryType.VIDEO:
             # record video watch history
             history, created = await UserHistory.update_or_create(
@@ -255,8 +295,30 @@ class UserHistoryService(BaseService[UserHistory], model=UserHistory):
                     keyword=keyword,
                 )
 
+        # increment repetitions if not created
         if history is not None and not created:
             history.repetitions += 1
             await history.save(update_fields=["repetitions", "updated_at"])
 
         return history
+
+    @classmethod
+    async def clean_expired(cls, user_id: int, rel_type: HistoryType) -> None:
+        """Delete expired history records based on user preferences.
+
+        Reads `search_records` or `watch_records` from the user's preferences to
+        determine the retention window (in days). A value of 0 means no history
+        is kept, so all records of the given type are deleted.
+
+        Args:
+            user_id: The user ID.
+            rel_type: The history type to clean.
+        """
+        days = await cls.retention_days(user_id, rel_type)
+        if days == 0:
+            await UserHistory.filter(user_id=user_id, rel_type=rel_type).delete()
+        else:
+            cutoff = timezone.now() - timedelta(days=days)
+            await UserHistory.filter(
+                user_id=user_id, rel_type=rel_type, updated_at__lt=cutoff
+            ).delete()
