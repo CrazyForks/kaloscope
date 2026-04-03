@@ -237,7 +237,7 @@
     publishing = true;
     confirm({
       icon: icons.directionUpRight,
-      title: $_('flow.publish'),
+      title: $_('action.publish'),
       onconfirm: () => publish(),
       oncancel: () => {
         publishing = false;
@@ -403,7 +403,7 @@
         <Button
           size="xs"
           icon={icons.arrowHookUpLeft}
-          text={$_('flow.undo')}
+          text={$_('action.undo')}
           disabled={histories.size <= 1 || historyId === firstHistoryId}
           onclick={() => {
             window.dispatchEvent(
@@ -420,7 +420,7 @@
         <Button
           size="xs"
           icon={icons.arrowHookUpRight}
-          text={$_('flow.redo')}
+          text={$_('action.redo')}
           disabled={histories.size <= 1 || historyId === lastHistoryId}
           onclick={() => {
             window.dispatchEvent(
@@ -464,7 +464,7 @@
       <Button
         size="xs"
         icon={icons.save}
-        text={$_('flow.save')}
+        text={$_('action.save')}
         loading={saving}
         disabled={!savable}
         onclick={() => save()}
@@ -472,7 +472,7 @@
       <Button
         size="xs"
         icon={icons.directionUpRight}
-        text={$_('flow.publish')}
+        text={$_('action.publish')}
         loading={publishing}
         disabled={!publishable}
         onclick={() => prepublish()}

@@ -34,6 +34,7 @@ from app.models.flow import (
     JobUpsert,
     RepositoryAdd,
 )
+from app.models.user import HistoryType, PermType, UserHistory, UserPermission
 from app.services.base import BaseService
 from app.utils import json
 
@@ -447,6 +448,19 @@ class FlowGraphService(BaseService[FlowGraph], model=FlowGraph):
                     if graph.state != GraphState.DRAFTING:
                         graph.state = GraphState.MODIFIED
                     await graph.save()
+
+    @classmethod
+    @atomic()
+    async def delete(cls, id: int):
+        """Delete a flow graph.
+
+        Args:
+            id: The flow graph ID.
+        """
+        if await FlowGraph.filter(id=id, state=GraphState.DRAFTING).delete() > 0:
+            # also delete the related user histories and permissions
+            await UserHistory.filter(rel_type=HistoryType.SEARCH, rel_id=id).delete()
+            await UserPermission.filter(rel_type=PermType.INDEXER, rel_id=id).delete()
 
 
 class FlowLogService(BaseService[FlowLog], model=FlowLog):

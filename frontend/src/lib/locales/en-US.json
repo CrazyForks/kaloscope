@@ -210,10 +210,14 @@
     "download": "Download {0}",
     "favorite": "Favorite {0}",
     "reference": "Reference {0}",
+    "undo": "Undo {0}",
+    "redo": "Redo {0}",
+    "save": "Save {0}",
     "copy": "Copy {0}",
     "open": "Open {0}",
     "close": "Close {0}",
     "reload": "Reload {0}",
+    "publish": "Publish {0}",
     "move_up": "Move Up {0}",
     "move_down": "Move Down {0}",
     "toggle_on": "On",
@@ -419,6 +423,20 @@
     "eval_result": "Evaluation Result..."
   },
   "flow": {
+    "readonly": "Read-Only Mode",
+    "sidebar": "Sidebar",
+    "fitview": "Fit View",
+    "interactivity": {
+      "toggle": "Toggle Interactivity"
+    },
+    "minimap": {
+      "toggle": "Toggle Minimap"
+    },
+    "autosaving": "Saving in {0} seconds",
+    "autosave": {
+      "on": "Turn on AutoSave",
+      "off": "Turn off AutoSave"
+    },
     "node": {
       "group": {
         "start": "Start",
@@ -488,24 +506,6 @@
         "value": "Value"
       }
     },
-    "readonly": "Read-Only Mode",
-    "sidebar": "Sidebar",
-    "fitview": "Fit View",
-    "interactivity": {
-      "toggle": "Toggle Interactivity"
-    },
-    "minimap": {
-      "toggle": "Toggle Minimap"
-    },
-    "autosave": {
-      "on": "Turn on AutoSave",
-      "off": "Turn off AutoSave"
-    },
-    "autosaving": "Saving in {0} seconds",
-    "undo": "Undo",
-    "redo": "Redo",
-    "save": "Save",
-    "publish": "Publish",
     "exec": {
       "bootparams": "Boot Parameters",
       "node_data": "Node Data",

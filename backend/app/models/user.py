@@ -29,7 +29,7 @@ class HistoryType(StrEnum):
     VIDEO = auto()
 
 
-class PermissionType(StrEnum):
+class PermType(StrEnum):
     INDEXER = auto()
     MEDIA_LIB = auto()
 
@@ -108,7 +108,7 @@ class UserPermission(TortoiseModel):
     user: ForeignKeyRelation[User] = ForeignKeyField(
         "models.User", related_name="permissions", db_index=True
     )
-    rel_type = CharEnumField(max_length=16, enum_type=PermissionType)
+    rel_type = CharEnumField(max_length=16, enum_type=PermType)
     rel_id = IntField()
 
     class Meta:
@@ -174,3 +174,8 @@ class HistoryEntry(BaseModel):
 
 class HistoryQuery(Pageable):
     rel_type: HistoryType
+
+
+class PermsUpdate(BaseModel):
+    indexer_ids: list[PositiveInt] = Field(max_length=999, default_factory=list)
+    media_lib_ids: list[PositiveInt] = Field(max_length=999, default_factory=list)

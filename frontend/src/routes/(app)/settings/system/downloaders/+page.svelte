@@ -123,7 +123,7 @@
                 }}
               >
                 <iconify-icon icon={icons.arrowUp} width="1rem"></iconify-icon>
-                {$_('action.move_up', '')}
+                {$_('action.move_up')}
               </button>
             </li>
             <li class={index === downloaders.length - 1 ? 'menu-disabled' : ''}>
@@ -137,7 +137,7 @@
                 }}
               >
                 <iconify-icon icon={icons.arrowDown} width="1rem"></iconify-icon>
-                {$_('action.move_down', '')}
+                {$_('action.move_down')}
               </button>
             </li>
             <li>
@@ -152,7 +152,7 @@
                 }}
               >
                 <iconify-icon icon={icons.delete} width="1rem"></iconify-icon>
-                {$_('action.delete', '')}
+                {$_('action.delete')}
               </button>
             </li>
           </ul>
@@ -170,7 +170,7 @@
   {#snippet tail()}
     <button class="flex-col-center size-full cursor-pointer gap-2 p-4" onclick={() => creator?.showModal()}>
       <iconify-icon icon={icons.addCircle} width="2.5rem"></iconify-icon>
-      <span class="text-2xl">{$_('action.add', '')}</span>
+      <span class="text-2xl">{$_('action.add')}</span>
     </button>
   {/snippet}
 </Grid>

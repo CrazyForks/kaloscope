@@ -208,7 +208,13 @@ async def execute_graph(request: Request, id: int) -> HTTPResponse:
 @validate(json=IDs)
 async def delete_graphs(_, body: IDs) -> HTTPResponse:
     """Delete the flow graphs."""
-    await FlowGraph.filter(id__in=body.ids, state=GraphState.DRAFTING).delete()
+    for id in body.ids:
+        try:
+            await FlowGraphService.delete(int(id))
+        except Exception as e:
+            if len(body.ids) == 1:
+                raise e
+            logger.error("Failed to delete the flow graph: %s", id, exc_info=True)
     return empty()
 
 

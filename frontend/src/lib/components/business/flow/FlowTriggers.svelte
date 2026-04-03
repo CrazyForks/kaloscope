@@ -85,7 +85,7 @@
       <Button
         size="xs"
         icon={icons.addCircle}
-        text={$_('action.append', '')}
+        text={$_('action.append')}
         class={appending || unboundGraphs.length === 0 ? 'btn-disabled' : 'text-green-900'}
         onclick={() => {
           if (appending || unboundGraphs.length === 0) {
@@ -101,7 +101,7 @@
       <Button
         size="xs"
         icon={icons.subtractCircle}
-        text={$_('action.delete', '')}
+        text={$_('action.delete')}
         class={appending || triggerGraphId === 0 ? 'btn-disabled' : 'text-red-900'}
         onclick={() => {
           if (appending || triggerGraphId === 0) {
@@ -116,7 +116,7 @@
       <Button
         size="xs"
         icon={icons.arrowBigUp}
-        text={$_('action.move_up', '')}
+        text={$_('action.move_up')}
         class={appending || triggerGraphId === 0 ? 'btn-disabled' : 'text-surface'}
         onclick={() => {
           if (appending || triggerGraphId === 0) {
@@ -135,7 +135,7 @@
       <Button
         size="xs"
         icon={icons.arrowBigDown}
-        text={$_('action.move_down', '')}
+        text={$_('action.move_down')}
         class={appending || triggerGraphId === 0 ? 'btn-disabled' : 'text-surface'}
         onclick={() => {
           if (appending || triggerGraphId === 0) {

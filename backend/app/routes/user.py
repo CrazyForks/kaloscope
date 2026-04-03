@@ -11,19 +11,26 @@ from app.models.user import (
     HistoryEntry,
     HistoryQuery,
     HistoryType,
+    PermsUpdate,
     User,
     UserAvatar,
     UserCreate,
     UserFavorite,
     UserHistory,
     UserInfo,
+    UserPermission,
     UserPwd,
     UserQuery,
     UserRole,
 )
 from app.services.flow import FlowGraphService
 from app.services.media import MediaItemService
-from app.services.user import UserFavoriteService, UserHistoryService, UserService
+from app.services.user import (
+    UserFavoriteService,
+    UserHistoryService,
+    UserPermissionService,
+    UserService,
+)
 
 # subroutes for all user related operations
 user = Blueprint("user", url_prefix="/user")
@@ -169,4 +176,19 @@ async def delete_histories(request: Request, body: IDs) -> HTTPResponse:
     """Delete the current user's histories."""
     user: UserInfo = request.ctx.user
     await UserHistory.filter(user_id=user.id, id__in=body.ids).delete()
+    return empty()
+
+
+@user.get("/<user_id:int>/permissions")
+async def get_permissions(_, user_id: int) -> HTTPResponse:
+    """Get the user's permissions."""
+    perms = await UserPermission.filter(user_id=user_id).values("rel_type", "rel_id")
+    return json(list(perms))
+
+
+@user.post("/<user_id:int>/permissions")
+@validate(json=PermsUpdate)
+async def update_permissions(_, user_id: int, body: PermsUpdate) -> HTTPResponse:
+    """Update the user's permissions."""
+    await UserPermissionService.update_permissions(user_id, body)
     return empty()

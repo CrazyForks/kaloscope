@@ -20,9 +20,8 @@ export const format = derived(_format, ($format) => {
     }
     let options;
     if (values !== null && typeof values === 'object' && !Array.isArray(values)) {
+      // if values is an object (but not an array), use it directly as options
       options = values;
-    } else if (typeof values === 'string' || typeof values === 'number') {
-      options = { values: { 0: values } };
     } else if (Array.isArray(values) && values.length > 0) {
       // convert array to object with numeric keys
       options = {
@@ -34,6 +33,13 @@ export const format = derived(_format, ($format) => {
           {} as Record<string, string | number>
         )
       };
+    } else {
+      // if values is a single string or number, use it as the value for key '0'
+      let value: string | number = '';
+      if (typeof values === 'string' || typeof values === 'number') {
+        value = values;
+      }
+      options = { values: { 0: value } };
     }
     return $format(id, options);
   };

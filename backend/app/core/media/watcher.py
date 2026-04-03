@@ -34,6 +34,7 @@ from app.core.media.handlers.base import MetaKeywords, get_handler
 from app.core.media.shelver import is_nfo, update_metadata
 from app.models.flow import GraphCategory
 from app.models.media import MediaEvent, MediaItem, MediaLib
+from app.models.user import HistoryType, UserHistory
 from app.services.flow import FlowTriggerService
 from app.utils.crypto import encrypt
 
@@ -411,7 +412,14 @@ async def _handle_deleted(event: MediaEvent):
     src_path = event.src_path
     if event.is_directory:
         # delete all media items under the deleted directory
-        await MediaItem.filter(lib_id=lib_id, dir=src_path).delete()
+        ids: list = await MediaItem.filter(lib_id=lib_id, dir=src_path).values_list(
+            "id", flat=True
+        )
+        if ids:
+            await MediaItem.filter(lib_id=lib_id, id__in=ids).delete()
+            await UserHistory.filter(
+                rel_type=HistoryType.VIDEO, rel_id__in=ids
+            ).delete()
     elif is_nfo(src_path):
         # update the media item to remove the NFO metadata
         await MediaItem.filter(lib_id=lib_id, nfo_path=src_path).update(
@@ -423,6 +431,7 @@ async def _handle_deleted(event: MediaEvent):
         if item is not None:
             await item.delete()
             _trash_nfo(item.nfo_path)
+            await UserHistory.filter(rel_type=HistoryType.VIDEO, rel_id=id).delete()
             # delete the parent item if it has no more children
             if (pid := item.parent_id) is not None:
                 siblings = await MediaItem.filter(lib_id=lib_id, parent_id=pid).count()

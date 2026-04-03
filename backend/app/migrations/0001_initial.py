@@ -3,7 +3,7 @@ from tortoise.migrations import operations as ops
 from app.models.download import DownloadState, TransferMethod
 from app.models.flow import GraphCategory, GraphState, IntervalUnit, JobState, JobTrigger
 from app.models.media import Language, LibType
-from app.models.user import HistoryType, PermissionType, UserRole
+from app.models.user import HistoryType, PermType, UserRole
 from orjson import loads
 from tortoise.fields.base import OnDelete
 from tortoise.fields.data import JSON_DUMPS
@@ -398,7 +398,7 @@ class Migration(migrations.Migration):
                 ('created_at', fields.DatetimeField(null=True, auto_now=False, auto_now_add=True)),
                 ('updated_at', fields.DatetimeField(null=True, auto_now=True, auto_now_add=False)),
                 ('user', fields.ForeignKeyField('models.User', source_field='user_id', db_index=True, db_constraint=True, to_field='id', related_name='permissions', on_delete=OnDelete.CASCADE)),
-                ('rel_type', fields.CharEnumField(description='INDEXER: indexer\nMEDIA_LIB: media_lib', enum_type=PermissionType, max_length=16)),
+                ('rel_type', fields.CharEnumField(description='INDEXER: indexer\nMEDIA_LIB: media_lib', enum_type=PermType, max_length=16)),
                 ('rel_id', fields.IntField()),
             ],
             options={'table': 'user_permission', 'app': 'models', 'pk_attr': 'id'},

@@ -5,6 +5,7 @@ from app.core.exceptions import ErrorCode, KaloscopeException
 from app.core.media.handlers.base import MetaKeywords
 from app.models.flow import FlowTrigger, GraphCategory
 from app.models.media import MediaItem, MediaLib, MediaLibUpsert
+from app.models.user import PermType, UserPermission
 from app.services.base import BaseService
 from app.services.flow import FlowTriggerService
 
@@ -89,6 +90,7 @@ class MediaLibService(BaseService[MediaLib], model=MediaLib):
         lib = await MediaLib.get(id=id)
         await MediaLib.filter(id=id).delete()
         await FlowTrigger.filter(category=GraphCategory.INGEST, rel_id=id).delete()
+        await UserPermission.filter(rel_type=PermType.MEDIA_LIB, rel_id=id).delete()
         # remove the observer
         watcher = cls.app_ctx().lib_watcher
         await watcher.remove_observer(lib.dir)

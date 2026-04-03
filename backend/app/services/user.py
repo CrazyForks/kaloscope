@@ -17,10 +17,13 @@ from app.models.flow import IndexerResource
 from app.models.user import (
     HistoryEntry,
     HistoryType,
+    PermsUpdate,
+    PermType,
     User,
     UserFavorite,
     UserHistory,
     UserInfo,
+    UserPermission,
     UserRole,
 )
 from app.services.base import BaseService
@@ -322,3 +325,27 @@ class UserHistoryService(BaseService[UserHistory], model=UserHistory):
             await UserHistory.filter(
                 user_id=user_id, rel_type=rel_type, updated_at__lt=cutoff
             ).delete()
+
+
+class UserPermissionService(BaseService[UserPermission], model=UserPermission):
+    """The service class for all user permission related operations."""
+
+    @classmethod
+    @atomic()
+    async def update_permissions(cls, user_id: int, obj: PermsUpdate):
+        """Update the user's permissions by replacing existing ones.
+
+        Args:
+            user_id: The user ID.
+            obj: The permissions update data.
+        """
+        await UserPermission.filter(user_id=user_id).delete()
+        perms = [
+            UserPermission(user_id=user_id, rel_type=PermType.INDEXER, rel_id=rid)
+            for rid in obj.indexer_ids
+        ] + [
+            UserPermission(user_id=user_id, rel_type=PermType.MEDIA_LIB, rel_id=rid)
+            for rid in obj.media_lib_ids
+        ]
+        if perms:
+            await UserPermission.bulk_create(perms)

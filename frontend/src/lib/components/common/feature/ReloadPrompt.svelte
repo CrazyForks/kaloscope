@@ -17,10 +17,10 @@
     <p>{$_('app.pwa_prompt')}</p>
     <div class="mt-3 flex gap-2">
       <button class="btn btn-sm btn-submit" onclick={() => updateServiceWorker(true)}>
-        {$_('action.reload', '')}
+        {$_('action.reload')}
       </button>
       <button class="btn btn-sm" onclick={() => needRefresh.set(false)}>
-        {$_('action.close', '')}
+        {$_('action.close')}
       </button>
     </div>
   </div>

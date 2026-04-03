@@ -111,9 +111,10 @@
     <Cell
       actions={[
         {
+          disabled: user.role === 'admin',
           icon: icons.personEdit,
           text: $_('action.assign_permissions'),
-          onclick: () => userPermissions.showModal()
+          onclick: () => userPermissions.showModal(user.id)
         },
         {
           disabled: user.role === 'admin',

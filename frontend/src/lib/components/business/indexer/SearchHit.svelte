@@ -171,19 +171,19 @@
         condition: !!detailsConfig && rsrc.favorite !== undefined,
         icon: rsrc.favorite ? icons.starFilled : icons.star,
         class: rsrc.favorite ? '[&_iconify-icon]:text-yellow-500' : '',
-        text: $_('action.favorite', ''),
+        text: $_('action.favorite'),
         onclick: () => (rsrc.favorite ? unfavorite(rsrc) : favorite(rsrc))
       },
       {
         condition: !!rsrc.link,
         icon: icons.download,
-        text: $_('action.download', ''),
+        text: $_('action.download'),
         onclick: () => downloadPrompt(rsrc.link)
       },
       {
         condition: !!searchButton,
         icon: icons.search,
-        text: $_('action.search', ''),
+        text: $_('action.search'),
         onclick: () => globalSearch(rsrc.title)
       }
     ]}
