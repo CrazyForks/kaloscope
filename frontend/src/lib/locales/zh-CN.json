@@ -304,7 +304,7 @@
       "none": "不转移",
       "method": "转移方式",
       "substitution": "文件名替换",
-      "sub_pattern": "正则表达式，例如：.+/",
+      "sub_pattern": "正则表达式，例如：^(.+/)?",
       "sub_repl": "替换字符串"
     }
   },

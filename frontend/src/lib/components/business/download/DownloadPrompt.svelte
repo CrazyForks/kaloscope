@@ -68,7 +68,17 @@
           .readText()
           .then((text) => {
             text = text.trim();
-            if (text && link !== text) {
+            if (!text || text === link) {
+              return null;
+            }
+            // check if the text is a valid download link
+            return api
+              .post('download/validate', { body: text })
+              .json<Resp<boolean>>()
+              .then((resp) => (resp.data ? text : null));
+          })
+          .then((text) => {
+            if (text) {
               link = text;
               files = null;
             }

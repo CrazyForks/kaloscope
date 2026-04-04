@@ -23,7 +23,7 @@
       return '';
     }
     if (_score <= min) {
-      return min.toString();
+      return min ? min.toString() : '';
     }
     if (_score >= max) {
       return max.toString();

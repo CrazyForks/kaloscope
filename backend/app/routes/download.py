@@ -7,6 +7,7 @@ from sanic_ext import validate
 from tortoise.expressions import Q
 
 from app.core.config import KaloscopeConfig
+from app.core.constants import ENCODING
 from app.core.dl.adapter import load_config
 from app.core.dl.syncer import DLSyncer
 from app.models.base import IDs
@@ -28,6 +29,7 @@ from app.services.download import (
     DownloadPlanService,
     DownloadTaskService,
 )
+from app.utils.bittorrent import standardize_magnet
 from app.utils.disk import disk_usage
 
 # subroutes for all download related operations
@@ -82,6 +84,44 @@ async def delete_downloaders(_, body: IDs) -> HTTPResponse:
     return empty()
 
 
+@download.get("/plan/list")
+@validate(query=DownloadPlanQuery)
+async def list_plans(_, query: DownloadPlanQuery) -> HTTPResponse:
+    """List the download plans."""
+    queries = []
+    if query.graph_id:
+        queries.append(Q(graph_id=query.graph_id))
+    if query.keyword:
+        queries.append(Q(keyword__icontains=query.keyword))
+    page = await DownloadPlan.page(*queries, **query.page_params)
+    result = await DownloadPlanService.dump_page(page)
+    # attach the graph name and running status to the result
+    graph_ids = {job.graph_id for job in page.items}
+    graphs = {g.id: g for g in await FlowGraph.filter(id__in=graph_ids)}
+    for plan in result["items"]:
+        graph = graphs.get(plan["graph_id"])
+        plan["graph_name"] = graph.name if graph else None
+        published = graph.state != GraphState.DRAFTING if graph else False
+        plan["running"] = published and not plan["inactive"]
+    return json(result)
+
+
+@download.post("/plan/upsert")
+@validate(json=DownloadPlanUpsert)
+async def upsert_plan(_, body: DownloadPlanUpsert) -> HTTPResponse:
+    """Create or update a download plan."""
+    plan = await DownloadPlanService.upsert(body)
+    return json(await DownloadPlanService.dump(plan))
+
+
+@download.post("/plan/delete")
+@validate(json=IDs)
+async def delete_plans(_, body: IDs) -> HTTPResponse:
+    """Delete the download plans."""
+    await DownloadPlan.filter(id__in=body.ids).delete()
+    return empty()
+
+
 @download.get("/dir/list")
 async def list_directories(_) -> HTTPResponse:
     """List the download directories."""
@@ -108,6 +148,13 @@ async def list_tasks(_, query: DownloadQuery) -> HTTPResponse:
         queries.append(Q(downloader_id=query.downloader_id))
     page = await DownloadTask.page(*queries, **query.page_params)
     return json(await DownloadTaskService.dump_page(page))
+
+
+@download.post("/validate")
+async def valid_magnet_link(request: Request) -> HTTPResponse:
+    """Validate a magnet link."""
+    link = request.body.decode(ENCODING)
+    return json(standardize_magnet(link) is not None)
 
 
 @download.post("/add")
@@ -180,41 +227,3 @@ async def get_stats(request: Request):
                     break
     finally:
         syncer.decelerate()
-
-
-@download.get("/plan/list")
-@validate(query=DownloadPlanQuery)
-async def list_plans(_, query: DownloadPlanQuery) -> HTTPResponse:
-    """List the download plans."""
-    queries = []
-    if query.graph_id:
-        queries.append(Q(graph_id=query.graph_id))
-    if query.keyword:
-        queries.append(Q(keyword__icontains=query.keyword))
-    page = await DownloadPlan.page(*queries, **query.page_params)
-    result = await DownloadPlanService.dump_page(page)
-    # attach the graph name and running status to the result
-    graph_ids = {job.graph_id for job in page.items}
-    graphs = {g.id: g for g in await FlowGraph.filter(id__in=graph_ids)}
-    for plan in result["items"]:
-        graph = graphs.get(plan["graph_id"])
-        plan["graph_name"] = graph.name if graph else None
-        published = graph.state != GraphState.DRAFTING if graph else False
-        plan["running"] = published and not plan["inactive"]
-    return json(result)
-
-
-@download.post("/plan/upsert")
-@validate(json=DownloadPlanUpsert)
-async def upsert_plan(_, body: DownloadPlanUpsert) -> HTTPResponse:
-    """Create or update a download plan."""
-    plan = await DownloadPlanService.upsert(body)
-    return json(await DownloadPlanService.dump(plan))
-
-
-@download.post("/plan/delete")
-@validate(json=IDs)
-async def delete_plans(_, body: IDs) -> HTTPResponse:
-    """Delete the download plans."""
-    await DownloadPlan.filter(id__in=body.ids).delete()
-    return empty()
