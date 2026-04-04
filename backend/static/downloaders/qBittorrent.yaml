@@ -54,7 +54,7 @@ methods:
         completed_size: $.completed
         percentage: $.progress * 100
         raw_state: $.state
-  files:
+  details:
     post: /torrents/files
     form:
       hash: '{{hash}}'

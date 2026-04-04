@@ -223,10 +223,10 @@ async def sync_tasks(downloader: Downloader, tasks: list[DownloadTask]):
             completed_at = timezone.now()
             state = DownloadState.COMPLETED
 
-        # get the files if the method is supported
+        # get the files if the details method is supported
         files = item.get("files")
-        if files is None and "files" in adapter.methods:
-            result = await adapter.call("files", asdict(unique))
+        if files is None and "details" in adapter.methods:
+            result = await adapter.call("details", asdict(unique))
             if isinstance(result, dict):
                 files = result.get("files")
         if isinstance(files, list):

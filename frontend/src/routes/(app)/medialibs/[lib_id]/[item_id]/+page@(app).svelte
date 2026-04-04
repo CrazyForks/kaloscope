@@ -54,18 +54,18 @@
   }
 
   /**
-   * Get the media item detail by ID.
+   * Get the media item details by ID.
    *
    * @param id - The media item ID.
-   * @return The media item detail.
+   * @return The media item details.
    */
-  async function getDetail(id: number): Promise<MediaItem> {
+  async function getDetails(id: number): Promise<MediaItem> {
     const resp = await api.get(`media/${id}`).json<Resp<MediaItem>>();
     return resp.data;
   }
 
   /**
-   * Select a child media item and load its detail.
+   * Select a child media item and load its details.
    *
    * @param item - The child media item.
    */
@@ -74,7 +74,7 @@
       return;
     }
     try {
-      const data = await getDetail(item.id);
+      const data = await getDetails(item.id);
       _media = data;
       _meta = data.metadata ?? null;
     } catch (error) {
@@ -82,10 +82,10 @@
     }
   }
 
-  // load the parent media item detail on mount
+  // load the parent media item details on mount
   onMount(() => {
     loading.start();
-    getDetail(Number(page.params.item_id))
+    getDetails(Number(page.params.item_id))
       .then((data) => {
         media = data;
         meta = data.metadata ?? null;

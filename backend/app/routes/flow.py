@@ -144,8 +144,8 @@ async def upsert_graph(_, body: GraphBasics) -> HTTPResponse:
 
 
 @flow.get("/graph/<id:int>")
-async def get_graph_detail(_, id: int) -> HTTPResponse:
-    """Get the detail of the flow graph."""
+async def get_graph_details(_, id: int) -> HTTPResponse:
+    """Get the details of the flow graph."""
     graph = await FlowGraph.get(id=id)
     if isinstance(graph.draft, dict):
         graph.draft = Node.decompress(graph.draft)

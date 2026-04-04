@@ -87,8 +87,8 @@ async def list_items(_, query: MediaQuery) -> HTTPResponse:
 
 
 @media.get("/<id:int>")
-async def get_item_detail(_, id: int) -> HTTPResponse:
-    """Get the detail of the media item."""
+async def get_item_details(_, id: int) -> HTTPResponse:
+    """Get the details of the media item."""
     item = await MediaItemService.dump(await MediaItem.get(id=id))
     if nfo_path := item["nfo_path"]:
         item["metadata"] = parse_nfo(item["lib"]["lib_type"], nfo_path)
