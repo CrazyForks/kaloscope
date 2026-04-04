@@ -67,6 +67,25 @@ methods:
         completed_size: $.completedLength
         raw_state: $.status
         files: $.files[?length != "0"].path
+  details:
+    json:
+      id: kaloscope
+      jsonrpc: '2.0'
+      method: aria2.tellStatus
+      params:
+        - token:{{secret}}
+        - '{{id}}'
+    response:
+      mappings:
+        name: $.result.bittorrent.info.name
+        unique_id: $.result.gid
+        info_hash: $.result.infoHash
+        up_speed: $.result.uploadSpeed
+        dl_speed: $.result.downloadSpeed
+        total_size: $.result.totalLength
+        completed_size: $.result.completedLength
+        raw_state: $.result.status
+        files: $.result.files[?length != "0"].path
   pause:
     json:
       id: kaloscope

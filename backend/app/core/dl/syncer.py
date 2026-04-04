@@ -8,6 +8,7 @@ from functools import cached_property
 from itertools import groupby
 from multiprocessing.synchronize import Event, Lock
 from pathlib import Path
+from typing import cast
 
 from sanic import Sanic
 from sanic.log import logger
@@ -176,8 +177,8 @@ async def sync_tasks(downloader: Downloader, tasks: list[DownloadTask]):
         return
 
     # construct a dict of unique id to item
-    matched = {}
-    for item in result:
+    matched: dict[Unique, dict] = {}
+    for item in cast(list, result):
         if isinstance(item, dict):
             unique = Unique(
                 id=str(item.get("unique_id", "")),
@@ -189,7 +190,13 @@ async def sync_tasks(downloader: Downloader, tasks: list[DownloadTask]):
     # update the download tasks
     for task in tasks:
         unique = Unique.from_task(task)
-        item = matched.get(unique)
+        item: dict | None = matched.get(unique)
+
+        # try to get the details if the details method is supported
+        if item is None and "details" in adapter.methods:
+            result = await adapter.call("details", asdict(unique))
+            if isinstance(result, dict):
+                item = result
 
         # continue the loop if the task is not matched
         if not item:
