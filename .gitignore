@@ -69,5 +69,9 @@ Temporary Items
 ### pre-commit
 .ruff_cache
 
+### scripts
+scripts/.frontend.json
+scripts/.backend.json
+
 ### kaloscope
 workspace/
