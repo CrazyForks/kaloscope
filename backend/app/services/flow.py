@@ -74,8 +74,11 @@ class FlowRepositoryService(BaseService[FlowRepository], model=FlowRepository):
                 "X-GitHub-Api-Version": "2022-11-28",
             }
             response = await client.get(url, headers=headers)
+            if response.status_code == 404:
+                raise NotFoundException
             if response.status_code == 200:
                 data = response.json()
+                repo.repo_name = data.get("full_name", repo_name)
                 repo.repo_url = data.get("clone_url")
                 repo.repo_description = data.get("description")
                 if owner := data.get("owner"):
