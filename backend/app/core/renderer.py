@@ -382,7 +382,7 @@ def b64encode(s: str | bytes) -> str:
     return base64.b64encode(s).decode(ENCODING)
 
 
-def parent_path(path: str, levels: int = 1, resolve: bool = False) -> str:
+def parent_path(path: Path | str, levels: int = 1, resolve: bool = False) -> str:
     """Return the parent directory of a path.
 
     Args:
@@ -393,7 +393,9 @@ def parent_path(path: str, levels: int = 1, resolve: bool = False) -> str:
     Returns:
         The parent directory path string.
     """
-    p = Path(path).resolve() if resolve else Path(path)
+    if not isinstance(path, Path):
+        path = Path(path)
+    p = path.resolve() if resolve else path
     for _ in range(levels):
         p = p.parent
     return str(p)
@@ -529,6 +531,44 @@ ENV.filters["b64encode"] = b64encode
 ENV.filters["parent_path"] = parent_path
 ENV.filters["strftime"] = strftime
 ENV.filters["year"] = year
+
+
+def is_file(path: Any) -> bool:
+    """Check if the given path is an existing file.
+
+    Args:
+        path: The path to check, can be a string or a Path object.
+
+    Returns:
+        True if the path exists and is a file, False otherwise.
+    """
+    if not isinstance(path, (str, Path)):
+        return False
+    if isinstance(path, str):
+        path = Path(path)
+    return path.exists() and path.is_file()
+
+
+def is_dir(path: Any) -> bool:
+    """Check if the given path is an existing directory.
+
+    Args:
+        path: The path to check, can be a string or a Path object.
+
+    Returns:
+        True if the path exists and is a directory, False otherwise.
+    """
+    if not isinstance(path, (str, Path)):
+        return False
+    if isinstance(path, str):
+        path = Path(path)
+    return path.exists() and path.is_dir()
+
+
+# register custom tests
+# https://jinja.palletsprojects.com/en/stable/api/#custom-tests
+ENV.tests["file"] = is_file
+ENV.tests["dir"] = is_dir
 
 
 def render(value: json.JSONType, context: dict, *, raw: bool = False) -> Any:
