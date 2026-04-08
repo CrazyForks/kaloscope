@@ -150,7 +150,7 @@
           element?.classList.add('dropdown-top');
         }
         element?.classList.remove('invisible');
-      }, 0);
+      });
     }}
   >
     <iconify-icon icon={icons.calendar} width="1.25rem" class="opacity-70"></iconify-icon>

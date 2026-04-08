@@ -129,7 +129,7 @@
                 delete _subroutes['/medialibs'];
                 subroutes.set(_subroutes);
               }
-            }, 0);
+            });
           } else {
             goto(route, { replaceState: true });
           }

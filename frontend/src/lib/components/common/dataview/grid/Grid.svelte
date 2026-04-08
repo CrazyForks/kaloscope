@@ -64,7 +64,7 @@
   function ondragstart(event: DragEvent, item: T) {
     const target = event.currentTarget;
     if (target instanceof HTMLLIElement) {
-      setTimeout(() => target.classList.add('!shadow-none', '!border-none', '*:invisible'), 0);
+      setTimeout(() => target.classList.add('!shadow-none', '!border-none', '*:invisible'));
       draggedItem = item;
     }
   }

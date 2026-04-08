@@ -112,7 +112,7 @@
           // reset the duration after the scroll
           panelSlide = 200;
         });
-      }, 0);
+      });
     }
   }
 
