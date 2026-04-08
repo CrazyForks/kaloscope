@@ -516,7 +516,8 @@
       "last_sync": "上次同步：{0}",
       "confirm_repo": "请输入 GitHub 仓库全称或地址：",
       "confirm_name": "请确认要使用的名称：",
-      "confirm_upgrade": "是否更新到最新版本？"
+      "confirm_upgrade": "是否更新到最新版本？",
+      "risk_warning": "使用第三方仓库流程定义可能存在安全风险，请确保信任该来源。"
     },
     "trigger": {
       "count": "流程数量",

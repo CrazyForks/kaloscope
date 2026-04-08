@@ -151,6 +151,7 @@
         icon: icons.box3d,
         title: $_('action.add', $_('entity.source')),
         message: $_('flow.tmpl.confirm_repo'),
+        hint: $_('flow.tmpl.risk_warning'),
         placeholder: 'kaloscope/workflows',
         onconfirm: (url) => addRepo(url)
       });

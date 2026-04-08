@@ -25,6 +25,8 @@
     title: string;
     /** The message content to display. */
     message?: string;
+    /** The hint text to display below the message content. */
+    hint?: string;
     /** The callback function when the dialog is canceled. */
     oncancel?: () => void;
     /** The callback function when the dialog is confirmed. */
@@ -149,6 +151,12 @@
       </p>
       {#if msg.prompt}
         <input required type="text" class="input w-full" value={msg.advice} placeholder={msg.placeholder} />
+      {/if}
+      {#if msg.hint}
+        <p class="flex items-center gap-1 text-xs opacity-50">
+          <iconify-icon icon={icons.info} width="1.125rem" class="size-4.5"></iconify-icon>
+          {msg.hint}
+        </p>
       {/if}
       <!-- action buttons -->
       <div class="modal-action">
