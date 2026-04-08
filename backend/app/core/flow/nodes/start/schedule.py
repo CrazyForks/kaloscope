@@ -15,7 +15,7 @@ class ScheduleStartNode(Node):
         "bootparams",
         language="jinja2",
         darkmode=True,
-        default="{{ params }}",
+        default="{{ params|tojson }}",
     )
 
     class Handles:

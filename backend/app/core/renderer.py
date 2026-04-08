@@ -399,27 +399,11 @@ def parent_path(path: str, levels: int = 1, resolve: bool = False) -> str:
     return str(p)
 
 
-def ternary[V](value: V, v1: V, v2: V) -> V:
-    """Return v1 if value is truthy, otherwise return v2.
-
-    Args:
-        value: The condition value.
-        v1: The value to return if truthy.
-        v2: The value to return if falsy.
-
-    Returns:
-        v1 if value is truthy, otherwise v2.
-    """
-    return v1 if value else v2
-
-
-_DATE_FORMATS = [
+_DATETIME_FORMATS = [
     "%Y-%m-%d",
     "%Y/%m/%d",
     "%Y-%m-%dT%H:%M:%S",
-    "%Y-%m-%dT%H:%M:%SZ",
     "%Y-%m-%dT%H:%M:%S.%f",
-    "%Y-%m-%dT%H:%M:%S.%fZ",
     "%Y-%m-%d %H:%M:%S",
     "%Y-%m-%d %H:%M:%S.%f",
     "%m/%d/%Y",
@@ -429,46 +413,94 @@ _DATE_FORMATS = [
 ]
 
 
-def year(value: Any) -> int | None:
-    """Extract the 4-digit year from a timestamp or date string.
+def _datetime(value: Any, tz: float | None = None) -> datetime.datetime | None:
+    """Convert a value to a datetime object.
 
     Args:
-        value: The value to extract the year from (datetime, date, int, float, or str).
+        value: The value to convert (datetime, date, int, float, or str).
+        tz: The timezone offset in hours (e.g. 8 for UTC+8).
 
     Returns:
-        The 4-digit year as an integer, or None if not found.
+        The converted datetime object, or None if the value cannot be parsed.
     """
-    if value is None:
-        return None
-    if isinstance(value, (datetime.datetime, datetime.date)):
-        return value.year
+    if isinstance(value, datetime.datetime):
+        return value
+    if isinstance(value, datetime.date):
+        return datetime.datetime(value.year, value.month, value.day)
+
+    tzinfo = datetime.timezone(datetime.timedelta(hours=tz)) if tz is not None else None
     if isinstance(value, (int, float)):
         ts = float(value)
         if ts > 1e11:  # milliseconds threshold
             ts /= 1000
         try:
-            return datetime.datetime.fromtimestamp(ts, tz=datetime.UTC).year
+            return datetime.datetime.fromtimestamp(ts, tz=tzinfo)
         except (OverflowError, OSError, ValueError):
             return None
+
     if isinstance(value, str):
         value = value.strip()
         # numeric string
         try:
-            return year(int(value))
+            return _datetime(float(value), tz)
         except ValueError:
             pass
+        # try ISO 8601
         try:
-            return year(float(value))
+            dt = datetime.datetime.fromisoformat(value)
+            if dt.tzinfo is not None and tzinfo is not None:
+                dt = dt.astimezone(tzinfo)
+            return dt
         except ValueError:
             pass
-        # try known date string formats
-        for fmt in _DATE_FORMATS:
+        # try known datetime formats
+        for fmt in _DATETIME_FORMATS:
             try:
-                return datetime.datetime.strptime(value, fmt).year
+                return datetime.datetime.strptime(value, fmt)
             except ValueError:
                 continue
-        # fallback to regex search for a 4-digit year
-        m = re.search(r"\b(\d{4})\b", value)
+    return None
+
+
+def strftime(
+    value: Any, format: str = "%Y-%m-%d %H:%M:%S", tz: float | None = None
+) -> str:
+    """Format a datetime value as a string.
+
+    Args:
+        value: The datetime value to format.
+        format: The datetime format string.
+        tz: The timezone offset in hours.
+
+    Returns:
+        The formatted datetime string, or the original value if it cannot be parsed.
+    """
+    if value is None or isinstance(value, bool):
+        return ""
+    dt = _datetime(value, tz)
+    if dt is not None:
+        return dt.strftime(format)
+    return str(value)
+
+
+def year(value: Any, tz: float | None = None) -> int | None:
+    """Extract the 4-digit year from a timestamp or date string.
+
+    Args:
+        value: The value to extract the year from.
+        tz: The timezone offset in hours.
+
+    Returns:
+        The 4-digit year as an integer, or None if not found.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    dt = _datetime(value, tz)
+    if dt is not None:
+        return dt.year
+    # fallback to regex search for a 4-digit year in strings
+    if isinstance(value, str):
+        m = re.search(r"\b(\d{4})\b", value.strip())
         if m:
             return int(m.group(1))
     return None
@@ -495,7 +527,7 @@ ENV.filters["duration"] = duration
 ENV.filters["b64decode"] = b64decode
 ENV.filters["b64encode"] = b64encode
 ENV.filters["parent_path"] = parent_path
-ENV.filters["ifel"] = ternary
+ENV.filters["strftime"] = strftime
 ENV.filters["year"] = year
 
 
