@@ -108,7 +108,10 @@
     loading.start();
     api
       .post(`flow/graph/${id}/upgrade`, { json: tmpl })
-      .then(() => search(pagination.current))
+      .then(() => {
+        alert({ level: 'success', message: 'upgrade_success' });
+        search(pagination.current);
+      })
       .catch(() => loading.end());
   }
 

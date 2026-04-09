@@ -322,6 +322,7 @@ class FlowGraphService(BaseService[FlowGraph], model=FlowGraph):
         return graph
 
     @classmethod
+    @atomic()
     async def upgrade_graph(cls, id: int, tmpl: dict) -> FlowGraph:
         """Upgrade the flow graph by referencing a new template.
 
@@ -336,7 +337,9 @@ class FlowGraphService(BaseService[FlowGraph], model=FlowGraph):
         # check if the graph is editable
         if graph.editable:
             return graph
-
+        # retract the graph first
+        await cls.retract_graph(id)
+        # update the graph with the new template
         graph.tmpl_id = tmpl["id"]
         graph.category = tmpl["category"]
         graph.revision = tmpl["revision"]

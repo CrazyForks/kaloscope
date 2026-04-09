@@ -516,7 +516,7 @@
       "last_sync": "Last sync: {0}",
       "confirm_repo": "Please enter the GitHub repository full name or URL:",
       "confirm_name": "Please confirm the name to use:",
-      "confirm_upgrade": "Upgrade to the latest version?",
+      "confirm_upgrade": "Upgrade to the latest version? Published items will be retracted.",
       "risk_warning": "Using workflow definitions from third-party repositories may pose security risks, please ensure you trust the source."
     },
     "trigger": {
@@ -556,7 +556,8 @@
     "select_export_items": "Please select at least one item to export.",
     "export_items_failed": "Failed to export the items!",
     "import_items_failed": "Failed to import the items!",
-    "import_items_success": "Successfully imported {0} items!"
+    "import_items_success": "Successfully imported {0} items!",
+    "upgrade_success": "Upgrade successful!"
   },
   "message": {
     "cancel": "Cancel",

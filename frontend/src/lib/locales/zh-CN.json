@@ -516,7 +516,7 @@
       "last_sync": "上次同步：{0}",
       "confirm_repo": "请输入 GitHub 仓库全称或地址：",
       "confirm_name": "请确认要使用的名称：",
-      "confirm_upgrade": "是否更新到最新版本？",
+      "confirm_upgrade": "是否更新到最新版本？已发布的流程将被撤回。",
       "risk_warning": "使用第三方仓库流程定义可能存在安全风险，请确保信任该来源。"
     },
     "trigger": {
@@ -556,7 +556,8 @@
     "select_export_items": "请先选择要导出的数据。",
     "export_items_failed": "导出数据失败！",
     "import_items_failed": "导入数据失败！",
-    "import_items_success": "成功导入 {0} 条数据！"
+    "import_items_success": "成功导入 {0} 条数据！",
+    "upgrade_success": "更新成功！"
   },
   "message": {
     "cancel": "取 消",
