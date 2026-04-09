@@ -23,7 +23,7 @@ RUN pnpm run build
 # ============================================================
 # stage 2: build the production image
 # ============================================================
-FROM python:3.13-slim AS production
+FROM python:3.13-slim
 
 # install system dependencies required by native Python packages
 # - git: required by gitpython
@@ -35,11 +35,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # install Poetry
-ENV POETRY_HOME="/opt/poetry" \
-    POETRY_NO_INTERACTION=1 \
+ENV POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=true
 RUN python -m pip install --no-cache-dir poetry
-ENV PATH="$POETRY_HOME/bin:$PATH"
 
 WORKDIR /app
 
@@ -47,19 +45,13 @@ WORKDIR /app
 COPY backend/pyproject.toml backend/poetry.lock backend/poetry.toml ./backend/
 
 # install backend dependencies
-WORKDIR /app/backend
-RUN poetry install --no-cache --no-root --only main
-
-WORKDIR /app
+RUN cd backend && poetry install --no-cache --no-root --only main
 
 # copy the backend source code
 COPY backend/ ./backend/
 
 # copy the built frontend from stage 1
-COPY --from=frontend /pages/build ./frontend/build/
-
-# copy static assets from the frontend
-COPY frontend/static ./frontend/static/
+COPY --from=frontend /pages/build/ ./frontend/build/
 
 # expose the Sanic server port
 EXPOSE 8000
