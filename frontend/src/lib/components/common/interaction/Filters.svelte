@@ -219,12 +219,12 @@
   {#if filter.options}
     <select
       class="select w-full appearance-none select-sm"
-      value={values[key]}
+      value={values[key] ?? ''}
       onchange={(event) => {
         values[key] = event.currentTarget.value;
-        // if (values[key] === '') {
-        //   delete values[key];
-        // }
+        if (values[key] === '') {
+          delete values[key];
+        }
       }}
     >
       <option value="">{$_('enum.all')}</option>

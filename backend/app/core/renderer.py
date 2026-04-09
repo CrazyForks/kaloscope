@@ -508,6 +508,44 @@ def year(value: Any, tz: float | None = None) -> int | None:
     return None
 
 
+def prefix(value: Any, prefix: str, strict: bool = True) -> str:
+    """Add a prefix to a string value.
+
+    Args:
+        value: The value to add the prefix to.
+        prefix: The prefix string.
+        strict: Whether to only add the prefix if the value is truthy.
+
+    Returns:
+        The prefixed string.
+    """
+    if strict and not value:
+        return ""
+    value = "" if (value is None or isinstance(value, bool)) else value
+    if not isinstance(value, str):
+        value = str(value)
+    return f"{prefix}{value}"
+
+
+def suffix(value: Any, suffix: str, strict: bool = True) -> str:
+    """Add a suffix to a string value.
+
+    Args:
+        value: The value to add the suffix to.
+        suffix: The suffix string.
+        strict: Whether to only add the suffix if the value is truthy.
+
+    Returns:
+        The suffixed string.
+    """
+    if strict and not value:
+        return ""
+    value = "" if (value is None or isinstance(value, bool)) else value
+    if not isinstance(value, str):
+        value = str(value)
+    return f"{value}{suffix}"
+
+
 # register custom filters
 # https://jinja.palletsprojects.com/en/stable/api/#custom-filters
 ENV.filters["trim"] = trim
@@ -531,6 +569,8 @@ ENV.filters["b64encode"] = b64encode
 ENV.filters["parent_path"] = parent_path
 ENV.filters["strftime"] = strftime
 ENV.filters["year"] = year
+ENV.filters["prefix"] = prefix
+ENV.filters["suffix"] = suffix
 
 
 def is_file(path: Any) -> bool:
