@@ -17,7 +17,7 @@ keyword:
 
 filters:
   key:
-    type: # text | calendar | radio | checkbox
+    type: # text | calendar | radio | checkbox | select
     label:
 """.lstrip()
 

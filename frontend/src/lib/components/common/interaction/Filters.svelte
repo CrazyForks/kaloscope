@@ -49,12 +49,14 @@
       <Label>{filter.label ?? key}</Label>
       {#if filter.type === 'text'}
         {@render text(key, filter)}
+      {:else if filter.type === 'calendar'}
+        {@render calendar(key, filter)}
       {:else if filter.type === 'radio'}
         {@render radio(key, filter)}
       {:else if filter.type === 'checkbox'}
         {@render checkbox(key, filter)}
-      {:else if filter.type === 'calendar'}
-        {@render calendar(key, filter)}
+      {:else if filter.type === 'select'}
+        {@render select(key, filter)}
       {/if}
     {/each}
   </fieldset>
@@ -68,68 +70,12 @@
     class="input input-sm w-full"
     value={values[key]}
     oninput={(event) => {
-      values[key] = event.currentTarget.value;
+      values[key] = event.currentTarget.value.trim();
       if (values[key] === '') {
         delete values[key];
       }
     }}
   />
-{/snippet}
-
-<!-- radio filter -->
-{#snippet radio(key: string, filter: Filter)}
-  {#if filter.options}
-    <div class="flex flex-wrap gap-4">
-      {#each Object.entries(filter.options) as [name, value] (name)}
-        <label class="label">
-          <input
-            type="radio"
-            class="radio radio-sm"
-            {name}
-            checked={values[key] === name}
-            onclick={() => {
-              if (values[key] === name) {
-                delete values[key];
-              } else {
-                values[key] = name;
-              }
-            }}
-          />
-          <span class="text-sm text-base-content/80">{value}</span>
-        </label>
-      {/each}
-    </div>
-  {/if}
-{/snippet}
-
-<!-- checkbox filter -->
-{#snippet checkbox(key: string, filter: Filter)}
-  {#if filter.options}
-    <div class="flex flex-wrap gap-4">
-      {#each Object.entries(filter.options) as [name, value] (name)}
-        <label class="label">
-          <input
-            type="checkbox"
-            class="checkbox checkbox-sm"
-            {name}
-            checked={values[key]?.includes(name)}
-            onclick={() => {
-              const names = (values[key] ?? []) as string[];
-              if (names.includes(name)) {
-                values[key] = names.filter((n) => n !== name);
-                if (values[key].length === 0) {
-                  delete values[key];
-                }
-              } else {
-                values[key] = [...names, name];
-              }
-            }}
-          />
-          <span class="text-sm text-base-content/80">{value}</span>
-        </label>
-      {/each}
-    </div>
-  {/if}
 {/snippet}
 
 <!-- calendar filter -->
@@ -210,4 +156,81 @@
       <calendar-month></calendar-month>
     </calendar-date>
   </div>
+{/snippet}
+
+<!-- radio filter -->
+{#snippet radio(key: string, filter: Filter)}
+  {#if filter.options}
+    <div class="flex flex-wrap gap-4">
+      {#each Object.entries(filter.options) as [value, label] (value)}
+        <label class="label">
+          <input
+            type="radio"
+            class="radio radio-sm"
+            name={value}
+            checked={values[key] === value}
+            onclick={() => {
+              if (values[key] === value) {
+                delete values[key];
+              } else {
+                values[key] = value;
+              }
+            }}
+          />
+          <span class="text-sm text-base-content/80">{label}</span>
+        </label>
+      {/each}
+    </div>
+  {/if}
+{/snippet}
+
+<!-- checkbox filter -->
+{#snippet checkbox(key: string, filter: Filter)}
+  {#if filter.options}
+    <div class="flex flex-wrap gap-4">
+      {#each Object.entries(filter.options) as [value, label] (value)}
+        <label class="label">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-sm"
+            name={value}
+            checked={values[key]?.includes(value)}
+            onclick={() => {
+              const selected = (values[key] ?? []) as string[];
+              if (selected.includes(value)) {
+                values[key] = selected.filter((n) => n !== value);
+                if (values[key].length === 0) {
+                  delete values[key];
+                }
+              } else {
+                values[key] = [...selected, value];
+              }
+            }}
+          />
+          <span class="text-sm text-base-content/80">{label}</span>
+        </label>
+      {/each}
+    </div>
+  {/if}
+{/snippet}
+
+<!-- select filter -->
+{#snippet select(key: string, filter: Filter)}
+  {#if filter.options}
+    <select
+      class="select w-full appearance-none select-sm"
+      value={values[key]}
+      onchange={(event) => {
+        values[key] = event.currentTarget.value;
+        // if (values[key] === '') {
+        //   delete values[key];
+        // }
+      }}
+    >
+      <option value="">{$_('enum.all')}</option>
+      {#each Object.entries(filter.options) as [value, label] (value)}
+        <option {value}>{label}</option>
+      {/each}
+    </select>
+  {/if}
 {/snippet}

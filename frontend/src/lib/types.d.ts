@@ -569,7 +569,7 @@ export type Favorite = {
  * The type of the search filter.
  */
 export type Filter = {
-  type: 'text' | 'radio' | 'checkbox' | 'calendar';
+  type: 'text' | 'calendar' | 'radio' | 'checkbox' | 'select';
   label?: string;
   options?: Record<string, string>;
 };
