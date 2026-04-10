@@ -3,8 +3,8 @@
 # ============================================================
 FROM node:25-slim AS frontend
 
-# install pnpm via corepack
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# install pnpm via npm
+RUN npm install -g pnpm
 
 WORKDIR /pages
 
@@ -23,21 +23,25 @@ RUN pnpm run build
 # ============================================================
 # stage 2: build the production image
 # ============================================================
-FROM python:3.13-slim
+FROM --platform=linux/amd64 python:3.13-slim
 
 # install system dependencies required by native Python packages
 # - git: required by gitpython
 # - libxml2/libxslt: required by lxml
+# - cmake/make/g++: required by opencc
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     libxml2 \
     libxslt1.1 \
+    cmake \
+    make \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 # install Poetry
 ENV POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=true
-RUN python -m pip install --no-cache-dir poetry
+RUN python -m pip install --no-cache-dir setuptools poetry
 
 WORKDIR /app
 
