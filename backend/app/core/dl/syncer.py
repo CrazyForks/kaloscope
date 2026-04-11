@@ -241,9 +241,9 @@ async def sync_tasks(downloader: Downloader, tasks: list[DownloadTask]):
 
         # update the download task
         await DownloadTask.filter(id=task.id).update(
-            name=str(item.get("name", task.name) or ""),
-            unique_id=str(item.get("unique_id", task.unique_id) or ""),
-            raw_state=str(item.get("raw_state", task.raw_state) or ""),
+            name=str(item.get("name") or task.name),
+            unique_id=str(item.get("unique_id") or task.unique_id),
+            raw_state=str(item.get("raw_state") or task.raw_state),
             files=files,
             state=state,
             error_msg=error_msg,
