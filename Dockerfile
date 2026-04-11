@@ -65,6 +65,7 @@ COPY --from=frontend /pages/build/ ./frontend/build/
 # environment variables
 ENV PUID=0
 ENV PGID=0
+ENV UMASK=022
 ENV ENABLE_ARIA2=false
 
 # entrypoint script
@@ -72,6 +73,9 @@ COPY <<'EOF' /app/entrypoint.sh
 #!/bin/sh
 set -e
 cd /app/backend
+
+# apply umask
+umask ${UMASK:-022}
 
 # setup user if PUID/PGID is set
 PUID=${PUID:-0}
