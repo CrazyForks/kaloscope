@@ -349,7 +349,7 @@
         <input class="input w-1/2" bind:value={interval_num} {...schema.interval_num} />
         <Select disabled options={[{ value: 'hours', label: $_('duration.hours') }]} class="w-1/2" />
       </div>
-      <div class="flex gap-2">
+      <div class="flex min-w-0 gap-2 *:min-w-0">
         <div class="w-1/2">
           <Label>{$_('field.interval_start')}</Label>
           <input class="input w-full" bind:value={interval_start} {...schema.interval_start} />
@@ -401,7 +401,7 @@
                 value={directory.path.split('').reverse().join('')}
                 readonly
               />
-              <span class="italic-text">{directory.free}</span>
+              <span class="italic-text max-sm:hidden">{directory.free}</span>
             </button>
           {:else}
             <label class="input input-sm w-full">
