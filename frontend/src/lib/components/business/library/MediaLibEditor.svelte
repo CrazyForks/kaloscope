@@ -95,13 +95,15 @@
       >
         <iconify-icon icon={icons.folder} width="1.5rem" class="opacity-50"></iconify-icon>
         <input
-          placeholder={$_('action.select', $_('field.dir'))}
+          type="text"
           autocomplete="off"
-          class="grow {id ? 'cursor-not-allowed' : 'cursor-pointer'}"
-          bind:value={dir}
-          {...schema.dir}
+          placeholder={$_('action.select', $_('field.dir'))}
+          class="grow truncate text-left direction-rtl {id ? 'cursor-not-allowed' : 'cursor-pointer'}"
+          value={dir?.split('').reverse().join('')}
           disabled={!!id}
+          readonly
         />
+        <input type="text" class="hidden" name="dir" value={dir} />
       </button>
       <Label>{$_('field.language')}</Label>
       <Select bind:value={language} name="language" class="w-full">
