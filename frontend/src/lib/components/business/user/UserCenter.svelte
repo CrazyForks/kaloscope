@@ -119,7 +119,9 @@
     {#if !standaloneMode.current && deferredPrompt}
       {@render option(icons.desktopArrowDown, $_('app.pwa_install'), () => deferredPrompt?.prompt())}
     {/if}
-    {@render option(icons.stars, $_('app.check_updates'), () => {})}
+    {@render option(icons.stars, $_('app.check_updates'), () => {
+      window.open('https://hub.docker.com/r/kaloscope/kaloscope/tags', '_blank', 'noreferrer');
+    })}
 
     <div class="divider my-0"></div>
     {@render option(
