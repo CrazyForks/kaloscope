@@ -73,6 +73,8 @@ COPY --from=frontend /pages/build/ ./frontend/build/
 ENV PUID=0
 ENV PGID=0
 ENV UMASK=022
+ENV AUTO_TLS=false
+ENV DEBUG_MODE=false
 ENV ENABLE_ARIA2=false
 
 # entrypoint script
@@ -115,7 +117,14 @@ if [ "$ENABLE_ARIA2" = "true" ]; then
 fi
 
 # start sanic web server
-exec poetry run sanic app.main:app --host 0.0.0.0 --port 8000 --fast
+SANIC_ARGS="--host 0.0.0.0 --port 8000 --fast"
+if [ "$AUTO_TLS" = "true" ]; then
+  SANIC_ARGS="$SANIC_ARGS --auto-tls"
+fi
+if [ "$DEBUG_MODE" = "true" ]; then
+  SANIC_ARGS="$SANIC_ARGS --debug"
+fi
+exec poetry run sanic app.main:app $SANIC_ARGS
 EOF
 RUN chmod +x /app/entrypoint.sh
 
