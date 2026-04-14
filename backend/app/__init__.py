@@ -5,6 +5,10 @@ import sanic.mixins.startup as startup
 from sanic import Sanic
 from sanic.constants import LocalCertCreator
 from sanic.http.tls.creators import CertCreator
+from sanic.worker.manager import WorkerManager
+
+# patch the WorkerManager to allow longer startup time
+WorkerManager.THRESHOLD = 600  # type: ignore
 
 
 def _patched_get_ssl_context(app: Sanic, ssl: ssl.SSLContext | None) -> ssl.SSLContext:
