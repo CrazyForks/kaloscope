@@ -1,7 +1,16 @@
 from pydantic import BaseModel, Field, PositiveInt
-from tortoise.fields import BooleanField, CharField, IntField, TextField
+from tortoise.fields import (
+    BooleanField,
+    CharEnumField,
+    CharField,
+    ForeignKeyField,
+    ForeignKeyNullableRelation,
+    IntField,
+    TextField,
+)
 
 from app.models.base import Pageable, TortoiseModel
+from app.models.user import User, UserRole
 
 
 # -------------------- ORM Models --------------------
@@ -28,6 +37,24 @@ class GlobalCookie(TortoiseModel):
         unique_together = (("name", "domain", "path"),)
 
 
+class Notification(TortoiseModel):
+    user_id: int | None
+    user: ForeignKeyNullableRelation[User] = ForeignKeyField(
+        "models.User", related_name="notifications", db_index=True, null=True
+    )
+    role = CharEnumField(max_length=16, enum_type=UserRole, null=True)
+    title = CharField(max_length=255)
+    content = TextField()
+    seen = BooleanField(default=False)
+
+    class Meta:
+        table = "notification"
+        ordering = ["-created_at"]
+
+    class PydanticMeta:
+        exclude = ("user",)
+
+
 # -------------------- Pydantic Models --------------------
 class VariableQuery(Pageable):
     key: str | None = None
@@ -38,3 +65,7 @@ class VariableUpsert(BaseModel):
     key: str | None = Field(min_length=1, max_length=64, default=None)
     value: str = Field(min_length=1, max_length=4096)
     encrypted: bool = False
+
+
+class NotificationQuery(Pageable):
+    seen: bool | None = None

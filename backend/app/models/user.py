@@ -45,13 +45,14 @@ class User(TortoiseModel):
     favorites: ReverseRelation["UserFavorite"]
     histories: ReverseRelation["UserHistory"]
     permissions: ReverseRelation["UserPermission"]
+    notifications: ReverseRelation
 
     class Meta:
         table = "user"
         ordering = ["role", "-created_at"]
 
     class PydanticMeta:
-        exclude = ("password", "favorites", "histories", "permissions")
+        exclude = ("password", "favorites", "histories", "permissions", "notifications")
 
 
 class UserSession(TortoiseModel):
