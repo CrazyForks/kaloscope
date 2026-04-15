@@ -63,8 +63,8 @@ class DNSResolver(TortoiseModel):
 
 class URLRule(TortoiseModel):
     pattern = CharField(max_length=255, unique=True)
-    proxy_enabled = BooleanField(default=True)
-    dns_enabled = BooleanField(default=True)
+    secure_dns = BooleanField(default=True)
+    http_proxy = BooleanField(default=True)
     priority = IntField(unique=True)
     proxy_id: int | None
     proxy: ForeignKeyNullableRelation[HTTPProxy] = ForeignKeyField(
@@ -130,7 +130,11 @@ class URLRuleQuery(Pageable):
 class URLRuleUpsert(BaseModel):
     id: PositiveInt | None = None
     pattern: str = Field(min_length=1, max_length=255)
-    proxy_enabled: bool = True
-    dns_enabled: bool = True
     proxy_id: PositiveInt | None = None
     resolver_ids: list[PositiveInt] = Field(max_length=99, default_factory=list)
+
+
+class URLRuleToggle(BaseModel):
+    id: PositiveInt
+    secure_dns: bool | None = None
+    http_proxy: bool | None = None

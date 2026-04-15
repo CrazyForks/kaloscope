@@ -160,6 +160,9 @@
     "total_limit": "总上限",
     "total_count": "已下载",
     "last_exec": "上次执行",
+    "pattern": "匹配模式",
+    "secure_dns": "安全 DNS",
+    "http_proxy": "HTTP 代理",
     "created": "创建时间",
     "updated": "更新时间",
     "actions": "操作"
@@ -171,6 +174,8 @@
     "users": "用户",
     "task": "任务",
     "tasks": "任务",
+    "rule": "规则",
+    "rules": "规则",
     "graph": "流程",
     "graphs": "流程",
     "job": "定时任务",

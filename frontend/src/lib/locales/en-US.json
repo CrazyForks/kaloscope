@@ -160,6 +160,9 @@
     "total_limit": "Total Limit",
     "total_count": "Downloaded",
     "last_exec": "Last Executed",
+    "pattern": "Pattern",
+    "secure_dns": "Secure DNS",
+    "http_proxy": "HTTP Proxy",
     "created": "Created Date",
     "updated": "Updated Date",
     "actions": "Actions"
@@ -171,6 +174,8 @@
     "users": "Users",
     "task": "Task",
     "tasks": "Tasks",
+    "rule": "Rule",
+    "rules": "Rules",
     "graph": "Graph",
     "graphs": "Graphs",
     "job": "Job",

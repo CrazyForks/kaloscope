@@ -175,6 +175,19 @@ export type GlobalVariable = {
 };
 
 /**
+ * The type of the URL rule.
+ */
+export type URLRule = {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  pattern: string;
+  secure_dns: boolean;
+  http_proxy: boolean;
+  priority: number;
+};
+
+/**
  * The type of the media library.
  */
 export type MediaLib = {

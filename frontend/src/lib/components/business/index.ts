@@ -18,6 +18,8 @@ export { default as Uploader } from './indexer/Uploader.svelte';
 
 export { default as MediaLibEditor } from './library/MediaLibEditor.svelte';
 
+export { default as URLRuleEditor } from './network/URLRuleEditor.svelte';
+
 export { default as UserCenter } from './user/UserCenter.svelte';
 export { default as UserCreator } from './user/UserCreator.svelte';
 export { default as UserPermissions } from './user/UserPermissions.svelte';
