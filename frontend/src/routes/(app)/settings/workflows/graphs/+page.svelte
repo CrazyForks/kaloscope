@@ -322,7 +322,7 @@
           }
         },
         {
-          condition: !!graph.last_execution,
+          condition: !!graph.last_exec,
           icon: icons.slideSearch,
           text: $_('action.view', $_('entity.logs')),
           onclick: () => flowLogs.showModal(graph.id)

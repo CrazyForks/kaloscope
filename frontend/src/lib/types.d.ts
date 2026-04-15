@@ -188,6 +188,19 @@ export type URLRule = {
 };
 
 /**
+ * The type of the DNS resolver.
+ */
+export type DNSResolver = {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  name: string;
+  protocol: 'tls' | 'https';
+  nameserver: string;
+  dnssec: boolean;
+};
+
+/**
  * The type of the media library.
  */
 export type MediaLib = {
@@ -410,7 +423,7 @@ export type FlowGraph = {
   editable: boolean;
   success_rate: number | null;
   average_time: number | null;
-  last_execution: string | null;
+  last_exec: string | null;
   node_types: string[];
   tmpl: FlowTemplate | null;
   newest_tmpl: FlowTemplate | null;

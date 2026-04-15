@@ -144,7 +144,7 @@ class FlowGraph(TortoiseModel):
             return total * 1000 / len(logs)
         return None
 
-    def last_execution(self) -> datetime | None:
+    def last_exec(self) -> datetime | None:
         """Extract the last execution time from the logs."""
         if hasattr(self, "logs") and self.logs:
             return self.logs[0].started_at
@@ -163,7 +163,7 @@ class FlowGraph(TortoiseModel):
 
     class PydanticMeta:
         exclude = ("jobs", "triggers", "variables", "instances", "favorites", "plans")
-        computed = ("success_rate", "average_time", "last_execution", "node_types")
+        computed = ("success_rate", "average_time", "last_exec", "node_types")
 
 
 class FlowLog(TortoiseModel):

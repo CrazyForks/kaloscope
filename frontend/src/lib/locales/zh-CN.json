@@ -133,8 +133,10 @@
     "type": "类型",
     "name": "名称",
     "size": "大小",
-    "value": "值",
+    "host": "主机",
+    "port": "端口",
     "role": "角色",
+    "value": "值",
     "title": "标题",
     "state": "状态",
     "status": "状态",
@@ -146,7 +148,6 @@
     "password": "密码",
     "description": "描述",
     "average_time": "平均耗时",
-    "last_execution": "上次执行",
     "graph": "工作流",
     "trigger": "触发方式",
     "bootparams": "启动参数",
@@ -161,8 +162,11 @@
     "total_count": "已下载",
     "last_exec": "上次执行",
     "pattern": "匹配模式",
-    "secure_dns": "安全 DNS",
+    "protocol": "协议",
     "http_proxy": "HTTP 代理",
+    "secure_dns": "安全 DNS",
+    "nameserver": "域名服务器",
+    "dnssec": "DNSSEC",
     "created": "创建时间",
     "updated": "更新时间",
     "actions": "操作"
@@ -195,7 +199,11 @@
     "download": "下载任务",
     "downloads": "下载任务",
     "media_lib": "媒体库",
-    "media_libs": "媒体库"
+    "media_libs": "媒体库",
+    "dns_resolver": "DNS 解析器",
+    "dns_resolvers": "DNS 解析器",
+    "proxy_server": "代理服务器",
+    "proxy_servers": "代理服务器"
   },
   "action": {
     "add": "新增{0}",
@@ -297,9 +305,7 @@
     "downloader": {
       "title": "下载器",
       "preset": "预设",
-      "config": "配置",
-      "host": "主机",
-      "port": "端口"
+      "config": "配置"
     },
     "dir": "保存到",
     "start": "立即开始",

@@ -133,8 +133,10 @@
     "type": "Type",
     "name": "Name",
     "size": "Size",
-    "value": "Value",
+    "host": "Host",
+    "port": "Port",
     "role": "Role",
+    "value": "Value",
     "title": "Title",
     "state": "State",
     "status": "Status",
@@ -146,7 +148,6 @@
     "password": "Password",
     "description": "Description",
     "average_time": "Average Time",
-    "last_execution": "Last Execution",
     "graph": "Graph",
     "trigger": "Trigger",
     "bootparams": "Boot Parameters",
@@ -161,8 +162,11 @@
     "total_count": "Downloaded",
     "last_exec": "Last Executed",
     "pattern": "Pattern",
-    "secure_dns": "Secure DNS",
+    "protocol": "Protocol",
     "http_proxy": "HTTP Proxy",
+    "secure_dns": "Secure DNS",
+    "nameserver": "Nameserver",
+    "dnssec": "DNSSEC",
     "created": "Created Date",
     "updated": "Updated Date",
     "actions": "Actions"
@@ -195,7 +199,11 @@
     "download": "Download",
     "downloads": "Downloads",
     "media_lib": "Media Library",
-    "media_libs": "Media Libraries"
+    "media_libs": "Media Libraries",
+    "dns_resolver": "DNS Resolver",
+    "dns_resolvers": "DNS Resolvers",
+    "proxy_server": "Proxy Server",
+    "proxy_servers": "Proxy Servers"
   },
   "action": {
     "add": "New {0}",
@@ -297,9 +305,7 @@
     "downloader": {
       "title": "Downloader",
       "preset": "Preset",
-      "config": "Configuration",
-      "host": "Host",
-      "port": "Port"
+      "config": "Configuration"
     },
     "dir": "Save at",
     "start": "Start when added",
