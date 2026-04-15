@@ -4,9 +4,6 @@
   type URLRuleEditorProps = Partial<{
     id: number;
     pattern: string;
-    http_proxy: boolean;
-    secure_dns: boolean;
-    proxy_id: number | null;
     onsave: (result: URLRule) => void;
   }>;
 </script>
@@ -19,27 +16,7 @@
   import { _ } from '$lib/i18n';
   import { icons } from '$lib/icons';
 
-  let { id, pattern, http_proxy = true, secure_dns = true, proxy_id = null, onsave }: URLRuleEditorProps = $props();
-
-  const HTTP = 'http://';
-  const HTTPS = 'https://';
-  let secure: boolean = $state(true);
-
-  function standardize(value: string): string {
-    value = value.trim();
-    if (value.toLowerCase().startsWith(HTTP)) {
-      secure = false;
-      return value.slice(7);
-    } else if (value.toLowerCase().startsWith(HTTPS)) {
-      secure = true;
-      return value.slice(8);
-    }
-    return value;
-  }
-
-  $effect(() => {
-    pattern = standardize(pattern ?? '');
-  });
+  let { id, pattern, onsave }: URLRuleEditorProps = $props();
 
   // the modal dialog instance
   let modal: Modal;
@@ -51,16 +28,21 @@
     pattern: text().maxlength(245)
   }));
 
+  // the HTTP/HTTPS prefixes
+  const HTTP = 'http://';
+  const HTTPS = 'https://';
+  let secure: boolean = $state(true);
+
   /**
    * Save or update the URL rule.
+   *
+   * @param form - The form element.
+   * @param data - The form data.
    */
   function upsert(form: HTMLFormElement, data: FormData) {
     loading.start();
     const jsonData: Record<string, unknown> = Object.fromEntries(data);
     jsonData.id = id;
-    jsonData.http_proxy = http_proxy;
-    jsonData.secure_dns = secure_dns;
-    jsonData.proxy_id = proxy_id;
     jsonData.pattern = `${secure ? HTTPS : HTTP}${pattern}`;
     api
       .post('network/rule/upsert', { json: jsonData })
@@ -74,9 +56,31 @@
         loading.end();
       });
   }
+
+  /**
+   * Standardize the URL.
+   *
+   * @param url - The URL to standardize.
+   * @returns The standardized URL.
+   */
+  function standardize(url: string): string {
+    url = url.trim();
+    if (url.toLowerCase().startsWith(HTTP)) {
+      secure = false;
+      return url.slice(7);
+    } else if (url.toLowerCase().startsWith(HTTPS)) {
+      secure = true;
+      return url.slice(8);
+    }
+    return url;
+  }
+
+  $effect(() => {
+    pattern = standardize(pattern ?? '');
+  });
 </script>
 
-<Modal icon={icons.globe} title={$_(id ? 'action.edit' : 'action.add', $_('entity.rule'))} bind:this={modal}>
+<Modal icon={icons.globeDesktop} title={$_(id ? 'action.edit' : 'action.add', $_('entity.rule'))} bind:this={modal}>
   <form
     method="post"
     use:enhance={({ formElement, formData, cancel }) => {
@@ -92,7 +96,7 @@
         <button type="button" class="cursor-pointer opacity-80" onclick={() => (secure = !secure)}>
           {secure ? HTTPS : HTTP}
         </button>
-        <input placeholder={$_('field.pattern')} class="grow truncate" bind:value={pattern} {...schema.pattern} />
+        <input placeholder="*" class="grow truncate" bind:value={pattern} {...schema.pattern} />
       </label>
     </fieldset>
     <div class="modal-action">

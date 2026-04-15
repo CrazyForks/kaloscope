@@ -16,6 +16,7 @@
     maxlength: number;
   } = $props();
 
+  // the HTTP/HTTPS prefixes
   const HTTP = 'http://';
   const HTTPS = 'https://';
   let secure: boolean = $state(true);
