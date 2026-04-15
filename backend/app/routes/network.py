@@ -4,9 +4,18 @@ from tortoise.expressions import Q
 
 from app.core.decorators import authorize
 from app.models.base import IDs
-from app.models.network import URLRule, URLRuleQuery, URLRuleToggle, URLRuleUpsert
+from app.models.network import (
+    DNSResolver,
+    DNSResolverUpsert,
+    HTTPProxy,
+    HTTPProxyUpsert,
+    URLRule,
+    URLRuleQuery,
+    URLRuleToggle,
+    URLRuleUpsert,
+)
 from app.models.user import UserRole
-from app.services.network import URLRuleService
+from app.services.network import DNSResolverService, HTTPProxyService, URLRuleService
 
 # subroutes for all network related operations
 network = Blueprint("network", url_prefix="/network")
@@ -61,4 +70,54 @@ async def toggle_rule(_, body: URLRuleToggle) -> HTTPResponse:
         fields["http_proxy"] = body.http_proxy
     if fields:
         await URLRule.filter(id=body.id).update(**fields)
+    return empty()
+
+
+@network.get("/dns/list")
+async def list_dns_resolvers(_) -> HTTPResponse:
+    """List the DNS resolvers."""
+    resolvers = await DNSResolverService.dump_list(DNSResolver.all())
+    return json(resolvers)
+
+
+@network.post("/dns/upsert")
+@authorize(role=UserRole.ADMIN)
+@validate(json=DNSResolverUpsert)
+async def upsert_dns_resolver(_, body: DNSResolverUpsert) -> HTTPResponse:
+    """Create or update a DNS resolver."""
+    resolver = await DNSResolverService.upsert(body)
+    return json(await DNSResolverService.dump(resolver))
+
+
+@network.post("/dns/delete")
+@authorize(role=UserRole.ADMIN)
+@validate(json=IDs)
+async def delete_dns_resolvers(_, body: IDs) -> HTTPResponse:
+    """Delete the DNS resolvers."""
+    await DNSResolver.filter(id__in=body.ids).delete()
+    return empty()
+
+
+@network.get("/proxy/list")
+async def list_proxy_servers(_) -> HTTPResponse:
+    """List the HTTP proxy servers."""
+    servers = await HTTPProxyService.dump_list(HTTPProxy.all())
+    return json(servers)
+
+
+@network.post("/proxy/upsert")
+@authorize(role=UserRole.ADMIN)
+@validate(json=HTTPProxyUpsert)
+async def upsert_proxy_server(_, body: HTTPProxyUpsert) -> HTTPResponse:
+    """Create or update an HTTP proxy server."""
+    server = await HTTPProxyService.upsert(body)
+    return json(await HTTPProxyService.dump(server))
+
+
+@network.post("/proxy/delete")
+@authorize(role=UserRole.ADMIN)
+@validate(json=IDs)
+async def delete_proxy_servers(_, body: IDs) -> HTTPResponse:
+    """Delete the HTTP proxy servers."""
+    await HTTPProxy.filter(id__in=body.ids).delete()
     return empty()

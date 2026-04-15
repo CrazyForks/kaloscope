@@ -2,7 +2,15 @@ from tortoise.expressions import Q
 from tortoise.transactions import atomic
 
 from app.core.exceptions import ErrorCode, KaloscopeException
-from app.models.network import URLRule, URLRuleDNS, URLRuleUpsert
+from app.models.network import (
+    DNSResolver,
+    DNSResolverUpsert,
+    HTTPProxy,
+    HTTPProxyUpsert,
+    URLRule,
+    URLRuleDNS,
+    URLRuleUpsert,
+)
 from app.services.base import BaseService
 
 
@@ -73,3 +81,61 @@ class URLRuleService(BaseService[URLRule], model=URLRule):
             )
 
         return rule
+
+
+class DNSResolverService(BaseService[DNSResolver], model=DNSResolver):
+    """The service class for all DNS resolver related operations."""
+
+    @classmethod
+    async def upsert(cls, obj: DNSResolverUpsert) -> DNSResolver:
+        """Create or update a DNS resolver.
+
+        Args:
+            obj: The DNS resolver data.
+
+        Raises:
+            KaloscopeException: If the name already exists.
+
+        Returns:
+            The DNS resolver instance.
+        """
+        # check if the name already exists
+        filter = ~Q(id=obj.id) if obj.id else Q()
+        if await DNSResolver.filter(filter & Q(name=obj.name)).count() > 0:
+            raise KaloscopeException(ErrorCode.NAME_ALREADY_EXISTS)
+
+        data = obj.model_dump(exclude={"id"})
+        if obj.id:
+            await DNSResolver.filter(id=obj.id).update(**data)
+            return await DNSResolver.get(id=obj.id)
+        else:
+            return await DNSResolver.create(**data)
+
+
+class HTTPProxyService(BaseService[HTTPProxy], model=HTTPProxy):
+    """The service class for all HTTP proxy server related operations."""
+
+    @classmethod
+    async def upsert(cls, obj: HTTPProxyUpsert) -> HTTPProxy:
+        """Create or update an HTTP proxy server.
+
+        Args:
+            obj: The HTTP proxy server data.
+
+        Raises:
+            KaloscopeException: If the name already exists.
+
+        Returns:
+            The HTTP proxy server instance.
+        """
+        # check if the name already exists
+        filter = ~Q(id=obj.id) if obj.id else Q()
+        if await HTTPProxy.filter(filter & Q(name=obj.name)).count() > 0:
+            raise KaloscopeException(ErrorCode.NAME_ALREADY_EXISTS)
+
+        data = obj.model_dump(exclude={"id"})
+        if obj.id:
+            await HTTPProxy.filter(id=obj.id).update(**data)
+            return await HTTPProxy.get(id=obj.id)
+        else:
+            return await HTTPProxy.create(**data)

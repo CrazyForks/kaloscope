@@ -166,7 +166,6 @@
     "http_proxy": "HTTP 代理",
     "secure_dns": "安全 DNS",
     "nameserver": "域名服务器",
-    "dnssec": "DNSSEC",
     "created": "创建时间",
     "updated": "更新时间",
     "actions": "操作"
@@ -200,8 +199,8 @@
     "downloads": "下载任务",
     "media_lib": "媒体库",
     "media_libs": "媒体库",
-    "dns_resolver": "DNS 解析器",
-    "dns_resolvers": "DNS 解析器",
+    "dns_resolver": " DNS 解析器",
+    "dns_resolvers": " DNS 解析器",
     "proxy_server": "代理服务器",
     "proxy_servers": "代理服务器"
   },

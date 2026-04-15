@@ -1,13 +1,24 @@
 <script lang="ts">
   import { api } from '$lib/api';
-  import { Button, Cell, DataView, HCell, Search, URLRuleEditor, confirm } from '$lib/components';
+  import {
+    Button,
+    Cell,
+    confirm,
+    DataView,
+    DNSResolverEditor,
+    HCell,
+    Modal,
+    Search,
+    URLRuleEditor
+  } from '$lib/components';
   import { createLoading } from '$lib/helpers';
   import { _, dateTime } from '$lib/i18n';
   import { icons } from '$lib/icons';
-  import type { Resp, URLRule } from '$lib/types';
+  import type { DNSResolver, Resp, URLRule } from '$lib/types';
   import { debounce } from '$lib/utils';
   import { onMount, tick } from 'svelte';
 
+  // URL rule states
   let rules: URLRule[] = $state([]);
   let pattern: string = $state('');
   let creator: URLRuleEditor | null = $state(null);
@@ -90,8 +101,39 @@
     sort();
   }
 
+  // DNS resolver states
+  let resolvers: DNSResolver[] = $state([]);
+  let resolverModal: Modal;
+  let resolverCreator: DNSResolverEditor | null = $state(null);
+  let resolverUpdater: DNSResolverEditor | null = $state(null);
+  let selectedResolver: DNSResolver | null = $state(null);
+
+  /**
+   * Get the DNS resolvers.
+   */
+  function getDNSResolvers() {
+    api
+      .get('network/dns/list')
+      .json<Resp<DNSResolver[]>>()
+      .then((resp) => (resolvers = resp.data));
+  }
+
+  /**
+   * Delete a DNS resolver by ID.
+   *
+   * @param id - The DNS resolver ID.
+   */
+  function delDNSResolver(id: number) {
+    api
+      .post('network/dns/delete', {
+        json: { ids: [id] }
+      })
+      .then(() => getDNSResolvers());
+  }
+
   onMount(() => {
     search();
+    getDNSResolvers();
   });
 </script>
 
@@ -100,8 +142,8 @@
     <Search label={$_('field.pattern')} bind:value={pattern} onsearch={() => search()} />
   {/snippet}
   {#snippet actions()}
-    <Button size="md" icon={icons.bookGlobe} text={$_('field.secure_dns')} />
-    <Button size="md" icon={icons.serverLink} text={$_('field.http_proxy')} />
+    <Button size="md" icon={icons.bookGlobe} text={$_('entity.dns_resolvers')} onclick={() => resolverModal.show()} />
+    <Button size="md" icon={icons.serverLink} text={$_('entity.proxy_servers')} />
     <Button
       size="md"
       icon={icons.addCircle}
@@ -179,4 +221,52 @@
 
 {#if selected}
   <URLRuleEditor bind:this={updater} {...selected} onsave={() => search()} />
+{/if}
+
+<Modal icon={icons.bookGlobe} title={$_('entity.dns_resolvers')} maxWidth="34rem" bind:this={resolverModal}>
+  <div class="flex max-h-96 min-h-18 flex-col gap-2 overflow-y-auto p-1">
+    {#each resolvers as resolver (resolver.id)}
+      <div class="my-auto flex items-center gap-2 rounded-selector bg-base-200 p-2">
+        <span class="grow truncate text-sm">{resolver.name}</span>
+        <span class="divider mx-0 divider-horizontal h-6 w-0 self-center"></span>
+        <Button
+          size="xs"
+          icon={icons.edit}
+          onclick={() => {
+            selectedResolver = resolver;
+            tick().then(() => resolverUpdater?.showModal());
+          }}
+        />
+        <Button
+          size="xs"
+          icon={icons.deleteDismiss}
+          onclick={() => {
+            confirm({
+              icon: icons.deleteDismiss,
+              title: `${$_('action.delete', $_('entity.dns_resolver'))} [${resolver.name}]`,
+              onconfirm: () => delDNSResolver(resolver.id)
+            });
+          }}
+        />
+      </div>
+    {/each}
+    {#if resolvers.length === 0}
+      <div class="m-auto text-sm opacity-50">{$_('data.nodata')}</div>
+    {/if}
+  </div>
+  <div class="flex justify-end border-t pt-4">
+    <Button
+      icon={icons.addCircle}
+      text={$_('action.add', $_('entity.dns_resolver'))}
+      square={false}
+      class="font-normal btn-soft"
+      onclick={() => resolverCreator?.showModal()}
+    />
+  </div>
+</Modal>
+
+<DNSResolverEditor bind:this={resolverCreator} onsave={() => getDNSResolvers()} />
+
+{#if selectedResolver}
+  <DNSResolverEditor bind:this={resolverUpdater} {...selectedResolver} onsave={() => getDNSResolvers()} />
 {/if}

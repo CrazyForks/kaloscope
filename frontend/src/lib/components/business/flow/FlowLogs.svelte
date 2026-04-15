@@ -93,7 +93,6 @@
                 {$_(`flow.node.${start || end ? 'group' : 'name'}.${log.type}`)}
                 {#if log.data}
                   <Button
-                    size="sm"
                     icon={icons.eye}
                     text={$_('flow.exec.node_data')}
                     onclick={() => showDocModal(log.data, $_('flow.exec.node_data'))}
@@ -102,7 +101,6 @@
               </span>
               <Button
                 disabled={!log.document}
-                size="sm"
                 icon={start || end ? icons.search : icons.searchInfo}
                 text={title}
                 onclick={() => showDocModal(log.document, title)}
