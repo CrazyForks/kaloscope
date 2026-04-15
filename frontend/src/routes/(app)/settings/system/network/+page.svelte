@@ -95,9 +95,9 @@
     />
   {/snippet}
   {#snippet header()}
-    <HCell width={['30%', '50%']} text={$_('field.pattern')} />
-    <HCell width={['15%', '25%']} text={$_('field.secure_dns')} />
-    <HCell width={['15%', '25%']} text={$_('field.http_proxy')} />
+    <HCell width={['30%', '48%']} text={$_('field.pattern')} />
+    <HCell width={['15%', '26%']} text={$_('field.secure_dns')} />
+    <HCell width={['15%', '26%']} text={$_('field.http_proxy')} />
     <HCell width={['20%', null]} text={$_('field.created')} />
     <HCell width={['20%', null]} text={$_('field.updated')} />
     <HCell actions />

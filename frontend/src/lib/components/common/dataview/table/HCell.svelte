@@ -76,7 +76,7 @@
         <div
           tabindex={sort ? 0 : undefined}
           role={sort ? 'button' : 'generic'}
-          class="group inline-flex min-h-8 items-center p-1 transition-all duration-300 {sortClass} {sortedClass}"
+          class="group flex min-h-8 min-w-0 items-center p-1 transition-all duration-300 {sortClass} {sortedClass}"
           onclick={() => sort && sort.toggle()}
         >
           <span class="truncate pt-px text-xs font-semibold uppercase">
