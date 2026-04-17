@@ -59,21 +59,6 @@ idna = ">=2.8"
 trio = ["trio (>=0.32.0)"]
 
 [[package]]
-name = "anysqlite"
-version = "0.0.5"
-description = ""
-optional = false
-python-versions = ">=3.8"
-groups = ["main"]
-files = [
-    {file = "anysqlite-0.0.5-py3-none-any.whl", hash = "sha256:cb345dc4f76f6b37f768d7a0b3e9cf5c700dfcb7a6356af8ab46a11f666edbe7"},
-    {file = "anysqlite-0.0.5.tar.gz", hash = "sha256:9dfcf87baf6b93426ad1d9118088c41dbf24ef01b445eea4a5d486bac2755cce"},
-]
-
-[package.dependencies]
-anyio = ">3.4.0"
-
-[[package]]
 name = "apscheduler"
 version = "3.11.2"
 description = "In-process task scheduler with Cron-like capabilities"
@@ -812,9 +797,6 @@ files = [
 ]
 
 [package.dependencies]
-anyio = {version = ">=4.9.0", optional = true, markers = "extra == \"httpx\""}
-anysqlite = {version = ">=0.0.5", optional = true, markers = "extra == \"httpx\""}
-httpx = {version = ">=0.28.1", optional = true, markers = "extra == \"httpx\""}
 msgpack = ">=1.1.2"
 typing-extensions = ">=4.14.1"
 
@@ -2986,4 +2968,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<4.0"
-content-hash = "64f09f0ba687b8ccc5619efe8d5f7d5e927a93314f25be28df5bd09055d74a96"
+content-hash = "bb777e15decfd3b12eb8b94be3e329e74f1cc98ce91e23cf16de6e4aedb23899"
