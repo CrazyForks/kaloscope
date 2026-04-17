@@ -19,6 +19,7 @@ from app.core.exceptions import error_handler
 from app.core.flow.engine import FlowEngine
 from app.core.media.watcher import LibWatcher
 from app.core.middleware import SessionHolder, on_request, on_response
+from app.core.network import NetworkTransport
 from app.utils.importer import register_blueprints
 from app.utils.json import dumps, loads
 
@@ -164,7 +165,10 @@ async def start_http_client(app: Sanic):
     app.ctx.cookies = SQLiteCookieJar(app)
     await app.ctx.cookies.load()
     app.ctx.httpx = AsyncCacheClient(
-        http2=True, follow_redirects=True, cookies=app.ctx.cookies
+        http2=True,
+        follow_redirects=True,
+        cookies=app.ctx.cookies,
+        transport=NetworkTransport(),
     )
     logger.debug(_msg(Colors.BLUE, "HTTP client initialized."), _worker(app))
 
