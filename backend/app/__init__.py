@@ -1,3 +1,4 @@
+import os
 import ssl
 from typing import cast
 
@@ -30,7 +31,9 @@ def _patched_get_ssl_context(app: Sanic, ssl: ssl.SSLContext | None) -> ssl.SSLC
         app.config.LOCAL_TLS_KEY,
         app.config.LOCAL_TLS_CERT,
     )
-    context = creator.generate_cert(app.config.LOCALHOST)
+    # prefer TLS_HOSTNAME env variable over app config
+    hostname = os.environ.get("TLS_HOSTNAME") or app.config.LOCALHOST
+    context = creator.generate_cert(hostname)
     return context
 
 
