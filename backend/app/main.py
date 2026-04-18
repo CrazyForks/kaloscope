@@ -4,7 +4,7 @@ from multiprocessing.managers import SyncManager
 from pathlib import Path
 
 import httpx
-from hishel.httpx import AsyncCacheClient
+from hishel.httpx import AsyncCacheTransport
 from sanic import Sanic
 from sanic.log import Colors, logger
 from tortoise import Tortoise
@@ -164,11 +164,11 @@ async def start_http_client(app: Sanic):
         logging.getLogger("httpcore").setLevel(logging.DEBUG)
     app.ctx.cookies = SQLiteCookieJar(app)
     await app.ctx.cookies.load()
-    app.ctx.httpx = AsyncCacheClient(
+    app.ctx.httpx = httpx.AsyncClient(
         http2=True,
         follow_redirects=True,
         cookies=app.ctx.cookies,
-        transport=NetworkTransport(),
+        transport=AsyncCacheTransport(next_transport=NetworkTransport(http2=True)),
     )
     logger.debug(_msg(Colors.BLUE, "HTTP client initialized."), _worker(app))
 
