@@ -6,7 +6,7 @@ from app.core.flow.handles import OutputHandle
 from app.core.flow.nodes.base import Node, start_node
 from app.core.renderer import render
 from app.models.flow import GraphCategory
-from app.utils.json import try_loads
+from app.utils import json
 
 
 @start_node(order=1, categories=(GraphCategory.SCHEDULE,))
@@ -31,5 +31,7 @@ class ScheduleStartNode(Node):
         rendered = render(
             bootparams, {**context._context, "params": context.bootparams}
         )
-        if rendered and isinstance((obj := try_loads(rendered)), dict):
+        if not rendered:
+            return
+        if isinstance((obj := json.try_loads(rendered, with_comments=True)), dict):
             context.update(obj)

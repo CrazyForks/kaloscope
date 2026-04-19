@@ -65,7 +65,7 @@ class HTTPNode(Node):
         # request body
         binary, form, json = None, None, None
         if body := cls.body.extract(node_data, context=context):
-            if (obj := try_loads(body)) is not None:
+            if (obj := try_loads(body, with_comments=True)) is not None:
                 content_type = headers.get("content-type", "").lower()
                 if "application/x-www-form-urlencoded" in content_type:
                     if isinstance(obj, dict):
@@ -82,8 +82,11 @@ class HTTPNode(Node):
                 method, url, headers=headers, content=binary, data=form, json=json
             )
             formatter = cls.formatter.extract(node_data)
+            # merge the rendered response into context
             rendered = render(formatter, {**context._context, "response": response})
-            if rendered and isinstance((obj := try_loads(rendered)), dict):
+            if not rendered:
+                return
+            if isinstance((obj := try_loads(rendered, with_comments=True)), dict):
                 context.update(obj)
         except httpx.RequestError as e:
             logger.error("An error occurred while requesting %s.", url, exc_info=True)
