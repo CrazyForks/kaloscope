@@ -39,11 +39,13 @@ async def list_libraries(request: Request) -> HTTPResponse:
         queries.append(Q(id__in=user.perms.media_lib_ids))
     # list the libraries without pagination
     media_libs = await MediaLibService.dump_list(MediaLib.filter(*queries))
-    # attach the list of flow triggers
+    # attach the triggers and scanning status for each library
+    watcher: LibWatcher = request.app.ctx.lib_watcher
     for media_lib in media_libs:
         media_lib["triggers"] = await FlowTriggerService.get_triggers(
             GraphCategory.INGEST, media_lib["id"]
         )
+        media_lib["scanning"] = watcher.is_scanning(media_lib["dir"])
     return json(media_libs)
 
 

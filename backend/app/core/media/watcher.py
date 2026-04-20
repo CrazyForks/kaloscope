@@ -261,6 +261,17 @@ class LibWatcher:
                 logger.error("Failed to consume the media event!", exc_info=True)
                 await asyncio.sleep(1)
 
+    def is_scanning(self, path: str) -> bool:
+        """Check if the specified path is being scanned.
+
+        Args:
+            path: The directory path to check.
+
+        Returns:
+            True if the path is being scanned, False otherwise.
+        """
+        return path in self._scanning_paths
+
     async def scan_directory(self, target: MediaLib | str, *, validation: bool = False):
         """Scan the directory for existing files and create events.
 
@@ -277,7 +288,7 @@ class LibWatcher:
 
         if validation:
             # check if the path is already being scanned
-            if path in self._scanning_paths:
+            if self.is_scanning(path):
                 raise KaloscopeException(ErrorCode.SCAN_IN_PROGRESS)
             self._scanning_paths.append(path)
 

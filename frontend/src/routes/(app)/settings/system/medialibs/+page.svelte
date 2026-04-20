@@ -15,15 +15,42 @@
   let selected: MediaLib | null = $state(null);
   const loading = createLoading();
 
+  let retryCount = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
   /**
    * Get the media libraries.
+   *
+   * @param retry - Whether this search is a retry attempt.
    */
-  function getAll() {
+  function getAll(retry: boolean = false) {
+    if (!retry) {
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      retryCount = 0;
+    }
     loading.start();
     api
       .get('media/lib/list')
       .json<Resp<MediaLib[]>>()
-      .then((resp) => (libs = resp.data))
+      .then((resp) => {
+        libs = resp.data;
+        // if any library is scanning, retry search after some time
+        if (libs.some((lib) => lib.scanning) && retryCount < 5) {
+          retryTimer = setTimeout(
+            () => {
+              retryTimer = null;
+              getAll(true);
+            },
+            1000 * Math.pow(2, retryCount)
+          );
+          retryCount++;
+        } else {
+          retryCount = 0;
+        }
+      })
       .finally(() => loading.end());
   }
 
@@ -97,6 +124,7 @@
       </div>
       <div class="flex items-center gap-1">
         <Button
+          loading={lib.scanning}
           icon={icons.folderSearch}
           onclick={() => {
             scan(lib.id);
@@ -179,8 +207,8 @@
   {/snippet}
 </Grid>
 
-<MediaLibEditor bind:this={creator} onsave={getAll} />
+<MediaLibEditor bind:this={creator} onsave={() => getAll()} />
 
 {#if selected}
-  <MediaLibEditor bind:this={updater} {...selected} onsave={getAll} />
+  <MediaLibEditor bind:this={updater} {...selected} onsave={() => getAll()} />
 {/if}

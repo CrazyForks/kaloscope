@@ -69,7 +69,7 @@
         pagination.size = size;
         pagination.total = resp.data.total;
         jobs = resp.data.items;
-        // if there are pending jobs, retry search with exponential backoff up to 5 times
+        // if any job is pending, retry search after some time
         if (jobs.some((job) => !JobState[job.state]) && retryCount < 5) {
           retryTimer = setTimeout(
             () => {

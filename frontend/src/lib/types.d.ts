@@ -228,6 +228,7 @@ export type MediaLib = {
   language: string | null;
   priority: number;
   triggers: FlowTrigger[];
+  scanning: boolean;
 };
 
 /**

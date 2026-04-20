@@ -187,5 +187,5 @@
 {/key}
 
 {#if selected}
-  <DownloaderEditor bind:this={updater} {...selected} preset={selected.preset ?? ''} onsave={getAll} />
+  <DownloaderEditor bind:this={updater} {...selected} preset={selected.preset ?? ''} onsave={() => getAll()} />
 {/if}
