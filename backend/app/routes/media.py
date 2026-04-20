@@ -10,6 +10,7 @@ from tortoise.expressions import Q, RawSQL
 
 from app.core.decorators import authorize
 from app.core.media.shelver import parse_nfo
+from app.core.media.watcher import LibWatcher
 from app.models.base import IDs, Range
 from app.models.flow import GraphCategory
 from app.models.media import (
@@ -75,6 +76,15 @@ async def delete_libraries(_, body: IDs) -> HTTPResponse:
             if len(body.ids) == 1:
                 raise e
             logger.error("Failed to delete the media library: %s", id, exc_info=True)
+    return empty()
+
+
+@media.get("/lib/<id:int>/scan")
+async def scan_library(request: Request, id: int) -> HTTPResponse:
+    """Scan the media library."""
+    lib = await MediaLib.get(id=id)
+    watcher: LibWatcher = request.app.ctx.lib_watcher
+    await watcher.scan_directory(lib)
     return empty()
 
 

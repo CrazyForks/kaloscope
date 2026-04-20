@@ -72,7 +72,7 @@ class MediaLibService(BaseService[MediaLib], model=MediaLib):
             )
             # add the observer
             watcher = cls.app_ctx().lib_watcher
-            await watcher.add_observer(lib, initialize=True)
+            await watcher.add_observer(lib)
 
         # bind the flow triggers to the media library
         await FlowTriggerService.bind_triggers(
