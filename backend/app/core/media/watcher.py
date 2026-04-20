@@ -198,7 +198,7 @@ class LibWatcher:
                     # create a task to consume events
                     self._app.add_task(self._event_consumer(events), name=encrypt(path))
                     # scan the directory for existing files
-                    self._app.add_task(self.scan_directory(lib))
+                    self._app.add_task(self.scan_directory(lib, validation=True))
                     self._observing_paths.append(path)
             finally:
                 self._watcher_lock.release()
@@ -261,11 +261,12 @@ class LibWatcher:
                 logger.error("Failed to consume the media event!", exc_info=True)
                 await asyncio.sleep(1)
 
-    async def scan_directory(self, target: MediaLib | str):
+    async def scan_directory(self, target: MediaLib | str, *, validation: bool = False):
         """Scan the directory for existing files and create events.
 
         Args:
             target: The media library instance or the directory path to scan.
+            validation: Whether to validate the scanning request.
         """
         lib = None
         if isinstance(target, MediaLib):
@@ -274,15 +275,16 @@ class LibWatcher:
         else:
             path = target
 
-        # check if the path is already being scanned
-        if path in self._scanning_paths:
-            raise KaloscopeException(ErrorCode.SCAN_IN_PROGRESS)
-        self._scanning_paths.append(path)
+        if validation:
+            # check if the path is already being scanned
+            if path in self._scanning_paths:
+                raise KaloscopeException(ErrorCode.SCAN_IN_PROGRESS)
+            self._scanning_paths.append(path)
 
-        # check if the path is observed by the current worker
-        if path not in self._observers:
-            self._watcher_actions[path] = LibAction.SCAN
-            return
+            # check if the path is observed by the current worker
+            if path not in self._observers:
+                self._watcher_actions[path] = LibAction.SCAN
+                return
 
         try:
             if lib is None:
