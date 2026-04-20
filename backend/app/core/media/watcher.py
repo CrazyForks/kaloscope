@@ -110,7 +110,7 @@ class LibWatcher:
     """The media library watcher."""
 
     _REMOVAL_LISTENER = "lib_removal_listener"
-    _observers: dict[str, BaseObserver] = {}
+    _observers: dict[str, tuple[BaseObserver, Queue]] = {}
 
     def __init__(self, app: Sanic):
         """Initialize the media library watcher.
@@ -145,6 +145,70 @@ class LibWatcher:
             await self.remove_observer(path, force=True)
         await self._app.cancel_task(self._REMOVAL_LISTENER)
 
+    async def add_observer(self, lib: MediaLib, *, initialize: bool = False):
+        """Add a directory observer to monitor the specified path.
+
+        Args:
+            lib: The media library that will be monitored.
+            initialize: Whether this is the first time to initialize the observer.
+        """
+        if self._watcher_lock.acquire(block=False):
+            try:
+                path = lib.dir
+                if path not in self._observing_paths:
+                    # create a new queue to store media events
+                    events = await self._create_queue(lib)
+                    handler = EventHandler(lib, self._app.loop, events)
+                    observer = Observer()
+                    observer.schedule(handler, path, recursive=True)
+                    observer.start()
+                    self._observers[path] = (observer, events)
+                    # create a task to consume events
+                    self._app.add_task(self._event_consumer(events), name=encrypt(path))
+                    # scan the directory for existing files
+                    self._app.add_task(self._scan_directory(lib, initialize=initialize))
+                    self._observing_paths.append(path)
+            finally:
+                self._watcher_lock.release()
+
+    async def remove_observer(self, path: str, *, force: bool = False):
+        """Remove the observer for the specified path.
+
+        Args:
+            path: The directory path to stop monitoring.
+            force: Whether to forcefully remove the observer.
+        """
+
+        if path not in self._observers:
+            self._removing_paths.append(path)
+            return
+
+        self._watcher_lock.acquire()
+        try:
+            if force or await MediaLib.filter(dir=path).count() == 0:
+                observer, _ = self._observers.pop(path)
+                observer.stop()
+                observer.join()
+                await self._app.cancel_task(encrypt(path))
+                self._observing_paths.remove(path)
+        finally:
+            self._watcher_lock.release()
+
+    async def _removal_listener(self):
+        """Listen for removal paths and remove the matching observers."""
+        while True:
+            try:
+                for path in self._removing_paths[:]:
+                    if path in self._observers:
+                        await self.remove_observer(path)
+                        self._removing_paths.remove(path)
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.error("Failed to remove the matching observers!", exc_info=True)
+                await asyncio.sleep(5)
+
     async def _create_queue(self, lib: MediaLib) -> Queue:
         """Create a new queue for the specified media library.
 
@@ -161,17 +225,35 @@ class LibWatcher:
             events.put(event)
         return events
 
-    async def _scan_directory(
-        self, lib: MediaLib, events: Queue, *, initialize: bool = False
-    ):
+    async def _event_consumer(self, events: Queue):
+        """Consume events from the queue and process them.
+
+        Args:
+            events: The queue to store media events.
+        """
+        while True:
+            try:
+                if not events.empty():
+                    event: MediaEvent = events.get_nowait()
+                    await consume_event(event)
+                await asyncio.sleep(1)
+            except queue.Empty:
+                continue
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.error("Failed to consume the media event!", exc_info=True)
+                await asyncio.sleep(1)
+
+    async def _scan_directory(self, lib: MediaLib, *, initialize: bool = False):
         """Scan the directory for existing files and create events.
 
         Args:
             lib: The media library instance.
-            events: The queue to store media events.
             initialize: Whether this is the first time to scan the directory.
         """
         logger.info(f"Scanning directory: {Colors.GREEN}%s{Colors.END}", lib.dir)
+        _, events = self._observers[lib.dir]
 
         async def _create_media_event(sys_event: FileSystemEvent):
             """Create a media event from a system event.
@@ -247,92 +329,6 @@ class LibWatcher:
             for item in items:
                 if item.id not in set(existing_ids) and not Path(item.path).exists():
                     await _create_media_event(FileDeletedEvent(item.path))
-
-    async def add_observer(self, lib: MediaLib, *, initialize: bool = False):
-        """Add a directory observer to monitor the specified path.
-
-        Args:
-            lib: The media library that will be monitored.
-            initialize: Whether this is the first time to initialize the observer.
-        """
-        if self._watcher_lock.acquire(block=False):
-            try:
-                path = lib.dir
-                if path not in self._observing_paths:
-                    # create a new queue to store media events
-                    events = await self._create_queue(lib)
-                    handler = EventHandler(lib, self._app.loop, events)
-                    observer = Observer()
-                    observer.schedule(handler, path, recursive=True)
-                    observer.start()
-                    self._observers[path] = observer
-                    # create a task to consume events
-                    self._app.add_task(self._event_consumer(events), name=encrypt(path))
-                    # scan the directory for existing files
-                    self._app.add_task(
-                        self._scan_directory(lib, events, initialize=initialize)
-                    )
-                    self._observing_paths.append(path)
-            finally:
-                self._watcher_lock.release()
-
-    async def remove_observer(self, path: str, *, force: bool = False):
-        """Remove the observer for the specified path.
-
-        Args:
-            path: The directory path to stop monitoring.
-            force: Whether to forcefully remove the observer.
-        """
-
-        if path not in self._observers:
-            self._removing_paths.append(path)
-            return
-
-        self._watcher_lock.acquire()
-        try:
-            if force or await MediaLib.filter(dir=path).count() == 0:
-                observer = self._observers.pop(path)
-                observer.stop()
-                observer.join()
-                await self._app.cancel_task(encrypt(path))
-                self._observing_paths.remove(path)
-        finally:
-            self._watcher_lock.release()
-
-    async def _removal_listener(self):
-        """Listen for removal paths and remove the matching observers."""
-        while True:
-            try:
-                for path in self._removing_paths[:]:
-                    if path in self._observers:
-                        await self.remove_observer(path)
-                        self._removing_paths.remove(path)
-                await asyncio.sleep(10)
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                logger.error("Failed to remove the matching observers!", exc_info=True)
-                await asyncio.sleep(5)
-
-    async def _event_consumer(self, events: Queue):
-        """Consume events from the queue and process them.
-
-        Args:
-            events: The queue to store media events.
-        """
-        while True:
-            try:
-                if not events.empty():
-                    event: MediaEvent = events.get_nowait()
-                    await consume_event(event)
-                await asyncio.sleep(1)
-            except queue.Empty:
-                continue
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                logger.error("Failed to consume the media event!", exc_info=True)
-                await asyncio.sleep(1)
 
 
 async def consume_event(event: MediaEvent):
