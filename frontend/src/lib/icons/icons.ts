@@ -53,6 +53,7 @@ const fluentUISystemIcons = {
   flowchart: 'fluent:flowchart-24-regular',
   flowchartFilled: 'fluent:flowchart-24-filled',
   folder: 'fluent:folder-24-regular',
+  folderSearch: 'fluent:folder-search-24-regular',
   fullScreenMaximizeFilled: 'fluent:full-screen-maximize-24-filled',
   fullScreenMinimizeFilled: 'fluent:full-screen-minimize-24-filled',
   globe: 'fluent:globe-24-regular',

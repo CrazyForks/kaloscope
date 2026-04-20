@@ -28,6 +28,19 @@
   }
 
   /**
+   * Scan a media library by ID.
+   *
+   * @param id - The media library ID.
+   */
+  function scan(id: number) {
+    loading.start();
+    api
+      .get(`media/lib/${id}/scan`)
+      .then(() => getAll())
+      .catch(() => loading.end());
+  }
+
+  /**
    * Delete a media library by ID.
    *
    * @param id - The media library ID.
@@ -83,6 +96,12 @@
         <div class="truncate text-base">{lib.name}</div>
       </div>
       <div class="flex items-center gap-1">
+        <Button
+          icon={icons.folderSearch}
+          onclick={() => {
+            scan(lib.id);
+          }}
+        />
         <Button
           icon={icons.edit}
           onclick={() => {
