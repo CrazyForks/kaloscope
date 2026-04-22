@@ -132,6 +132,18 @@ export type User = {
 };
 
 /**
+ * The type of the notification.
+ */
+type Notification = {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  title: string;
+  content: string;
+  seen: boolean;
+};
+
+/**
  * The type of the file path.
  */
 export type Path = {

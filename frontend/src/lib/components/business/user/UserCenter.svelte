@@ -12,6 +12,11 @@
     switchTheme?: () => void;
     /** Function to switch the language. */
     switchLanguage?: () => void;
+    /** Notifications configuration. */
+    notifications?: {
+      show: () => void;
+      count: number;
+    };
   } & Pick<DropdownProps, 'class' | 'triggerClass' | 'contentClass'>;
 
   // the standalone display mode media query
@@ -35,7 +40,15 @@
   import { token, user } from '$lib/stores';
   import { fullscreen } from '$lib/utils';
 
-  let { navs = [], switchTheme, switchLanguage, class: _class, triggerClass, contentClass }: UserCenterProps = $props();
+  let {
+    navs = [],
+    switchTheme,
+    switchLanguage,
+    notifications,
+    class: _class,
+    triggerClass,
+    contentClass
+  }: UserCenterProps = $props();
 
   // the duration of the user's login time
   let loginDuration: string = $state($duration($user?.login_at));
@@ -60,7 +73,13 @@
 
 <svelte:document onfullscreenchange={() => (isFullscreen = fullscreen.isFullscreen())} />
 
-{#snippet option(icon: string | IconifyIcon, text: string, onclick: MouseEventHandler<HTMLElement>, _class?: string)}
+{#snippet option(
+  icon: string | IconifyIcon,
+  text: string,
+  onclick: MouseEventHandler<HTMLElement>,
+  _class?: string,
+  count?: number
+)}
   <li class={_class}>
     <button
       onclick={(event) => {
@@ -70,6 +89,11 @@
     >
       <iconify-icon {icon} width="1.25rem" class="size-5"></iconify-icon>
       {text}
+      {#if count && count > 0}
+        <span class="badge badge-sm badge-primary">
+          {count > 99 ? '99+' : count}
+        </span>
+      {/if}
     </button>
   </li>
 {/snippet}
@@ -100,8 +124,8 @@
     {/if}
 
     <div class="divider my-0"></div>
-    {@render option(icons.language, $_('app.switch_language'), () => switchLanguage && switchLanguage(), 'sm:hidden')}
-    {@render option(icons.colorSwatch, $_('app.switch_theme'), () => switchTheme && switchTheme(), 'sm:hidden')}
+    {@render option(icons.language, $_('app.switch_language'), () => switchLanguage?.(), 'sm:hidden')}
+    {@render option(icons.colorSwatch, $_('app.switch_theme'), () => switchTheme?.(), 'sm:hidden')}
     {#if isFullscreen}
       {@render option(icons.fullScreenMinimizeFilled, $_('app.exit_fullscreen'), () => fullscreen.exit())}
     {:else}
@@ -109,11 +133,22 @@
     {/if}
 
     <div class="divider my-0"></div>
+    {@render option(
+      icons.alertUrgent,
+      $_('app.notifications'),
+      () => notifications?.show(),
+      'sm:hidden',
+      notifications?.count
+    )}
     {#each navs.filter((nav) => !nav.mobile) as nav (nav.path)}
       {@render option(nav.icon, $_(nav.title), () => goto(nav.path), 'sm:hidden')}
     {/each}
-    {@render option(icons.lockClosedKey, $_('nav.settings.personal.account'), () => goto('/settings/personal/account'))}
-    {@render option(icons.alertUrgent, $_('app.notifications'), () => {})}
+    {@render option(icons.lockClosedKey, $_('nav.settings.personal.account'), () => {
+      goto('/settings/personal/account');
+    })}
+    {@render option(icons.textGrammarSettings, $_('nav.settings.personal.preferences'), () => {
+      goto('/settings/personal/preferences');
+    })}
 
     <div class="divider my-0"></div>
     {#if !standaloneMode.current && deferredPrompt}

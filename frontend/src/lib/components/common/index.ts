@@ -16,6 +16,7 @@ export { default as Status, type StatusProps } from './display/Status.svelte';
 
 export { default as CodeMirror, type CodeMirrorProps } from './feature/CodeMirror.svelte';
 export { default as Languages, type LanguagesProps } from './feature/Languages.svelte';
+export { default as Notifications, type NotificationsProps } from './feature/Notifications.svelte';
 export { default as PageHeader, type PageHeaderProps } from './feature/PageHeader.svelte';
 export { default as Signposts, type SignpostsProps } from './feature/Signposts.svelte';
 export { default as Themes, type ThemesProps } from './feature/Themes.svelte';
