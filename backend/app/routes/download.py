@@ -179,9 +179,9 @@ async def pause_tasks(_, body: IDs) -> HTTPResponse:
     for id in body.ids:
         try:
             await DownloadTaskService.pause(int(id))
-        except Exception as e:
+        except Exception:
             if len(body.ids) == 1:
-                raise e
+                raise
             logger.error("Failed to pause the download task: %s", id, exc_info=True)
     return empty()
 
@@ -193,9 +193,9 @@ async def start_tasks(_, body: IDs) -> HTTPResponse:
     for id in body.ids:
         try:
             await DownloadTaskService.start(int(id))
-        except Exception as e:
+        except Exception:
             if len(body.ids) == 1:
-                raise e
+                raise
             logger.error("Failed to start the download task: %s", id, exc_info=True)
     return empty()
 
@@ -208,9 +208,9 @@ async def delete_tasks(_, body: DownloadDel) -> HTTPResponse:
     for id in body.ids:
         try:
             await DownloadTaskService.delete(int(id), body.local)
-        except Exception as e:
+        except Exception:
             if len(body.ids) == 1:
-                raise e
+                raise
             logger.error("Failed to delete the download task: %s", id, exc_info=True)
     return empty()
 

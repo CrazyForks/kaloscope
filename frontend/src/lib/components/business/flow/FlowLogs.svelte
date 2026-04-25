@@ -26,6 +26,7 @@
   let documentLang: LanguageSupport | null = $state(null);
   let document: string = $state('');
   let refreshKey: number = $state(0);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const showDocModal = (doc: any, title: string) => {
     documentTitle = title;

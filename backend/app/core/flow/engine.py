@@ -750,10 +750,10 @@ class FlowTask(ABC):
         Args:
             nodes: The specific nodes to execute.
         """
-        start_node = False
+        _root = False
         if nodes is None:
             # if no nodes are provided, start from the start nodes
-            start_node = True
+            _root = True
             nodes = self.start_nodes()
         if not nodes:
             return
@@ -805,17 +805,19 @@ class FlowTask(ABC):
             try:
                 for done_task in done:
                     done_task.result()
-            except Exception as e:
-                if isinstance(e, CancellationSignal):
-                    if pending:
-                        # cancel all pending tasks if a cancellation signal is raised
-                        for pending_task in pending:
-                            pending_task.cancel()
-                        await asyncio.gather(*pending, return_exceptions=True)
+            except CancellationSignal:
+                if pending:
+                    # cancel all pending tasks if a cancellation signal is raised
+                    for pending_task in pending:
+                        pending_task.cancel()
+                    await asyncio.gather(*pending, return_exceptions=True)
 
-                    if not start_node:
-                        # raise the cancellation signal to the caller
-                        raise e
+                if not _root:
+                    # raise the cancellation signal to the caller
+                    raise
+            except Exception:
+                # ignore branch failures so sibling branches can continue
+                pass
 
             # wait for the pending tasks to complete
             if pending:

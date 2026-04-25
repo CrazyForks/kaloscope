@@ -69,9 +69,9 @@ async def delete_repositories(_, body: IDs) -> HTTPResponse:
     for id in body.ids:
         try:
             await FlowRepositoryService.delete(int(id))
-        except Exception as e:
+        except Exception:
             if len(body.ids) == 1:
-                raise e
+                raise
             logger.error("Failed to delete the flow repository: %s", id, exc_info=True)
     return empty()
 
@@ -232,9 +232,9 @@ async def delete_graphs(_, body: IDs) -> HTTPResponse:
     for id in body.ids:
         try:
             await FlowGraphService.delete(int(id))
-        except Exception as e:
+        except Exception:
             if len(body.ids) == 1:
-                raise e
+                raise
             logger.error("Failed to delete the flow graph: %s", id, exc_info=True)
     return empty()
 

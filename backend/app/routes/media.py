@@ -74,9 +74,9 @@ async def delete_libraries(_, body: IDs) -> HTTPResponse:
     for id in body.ids:
         try:
             await MediaLibService.delete(int(id))
-        except Exception as e:
+        except Exception:
             if len(body.ids) == 1:
-                raise e
+                raise
             logger.error("Failed to delete the media library: %s", id, exc_info=True)
     return empty()
 

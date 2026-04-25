@@ -258,7 +258,7 @@ class DownloadTaskService(BaseService[DownloadTask], model=DownloadTask):
                 # the delete request was delivered.
                 pass
             else:
-                raise e
+                raise
 
         await DownloadTask.filter(id=id).delete()
 
