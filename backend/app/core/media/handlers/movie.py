@@ -54,6 +54,7 @@ class MovieMediaHandler(MediaHandler):
         """
         meta = MediaMeta()
         root = data.getroot()
+        meta.uniqueid = get_text(root, "uniqueid")
         meta.title = get_text(root, "title")
         meta.originaltitle = get_text(root, "originaltitle")
         meta.tagline = get_text(root, "tagline")

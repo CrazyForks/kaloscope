@@ -132,6 +132,7 @@ async def update_metadata(lib: MediaLib, path: Path | str):
         data = {
             "nfo_path": meta.nfo_path,
             "nfo_mtime": datetime.fromtimestamp(path.stat().st_mtime, tz=UTC),
+            "uniqueid": meta.uniqueid,
             "title": meta.title,
             "aired": meta.aired,
             "poster": meta.poster,

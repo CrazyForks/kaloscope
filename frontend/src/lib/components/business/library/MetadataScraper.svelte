@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { LibType } from '$lib/enums';
   import type { MediaItem, Resp } from '$lib/types';
 
   type MetadataScraperProps = {
@@ -12,6 +13,24 @@
     year: number | null;
     rating: number | null;
   } & Record<string, unknown>;
+
+  const NFO_TYPES: Record<keyof typeof LibType, string> = {
+    movie: 'movie',
+    tv_show: 'tvshow'
+  };
+
+  /**
+   * Get the corresponding NFO type for the given library type.
+   *
+   * @param libType - The library type.
+   * @returns The corresponding NFO type, or null if not applicable.
+   */
+  function getNFOType(libType: keyof typeof LibType | null | undefined): string | null {
+    if (!libType) {
+      return null;
+    }
+    return NFO_TYPES[libType] ?? null;
+  }
 </script>
 
 <script lang="ts">
@@ -100,10 +119,11 @@
     api
       .post(`flow/graph/${graphId}/execute`, {
         json: {
+          $manual: true,
           item_path: item.path,
           item_name: item.name,
           nfo_path: item.nfo_path,
-          nfo_type: item.lib?.lib_type === 'tv_show' ? 'tvshow' : 'movie',
+          nfo_type: getNFOType(item.lib?.lib_type),
           language: language || null,
           title: title.trim(),
           year: year || null,

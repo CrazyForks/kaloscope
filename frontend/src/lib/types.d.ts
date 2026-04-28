@@ -240,6 +240,8 @@ export type MediaLib = {
   priority: number;
   triggers: FlowTrigger[];
   scanning: boolean;
+  danmaku_server: string | null;
+  danmaku_cache_hours: number;
 };
 
 /**
@@ -283,6 +285,7 @@ export type Actor = {
  */
 export type MediaMeta = {
   nfo_path: string;
+  uniqueid: string | null;
   title: string | null;
   originaltitle: string | null;
   tagline: string | null;

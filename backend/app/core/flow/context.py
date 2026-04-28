@@ -19,6 +19,9 @@ with open(Path(__file__).parents[3] / "pyproject.toml", "rb") as _f:
 AUTH_KEY = "auth"
 """The key to the indexer authentication in the local variables."""
 
+MANUAL_KEY = "$manual"
+"""The key to the manual execution flag in the boot parameters."""
+
 START_KEY = "$start"
 """The key to the start node type in the boot parameters."""
 
