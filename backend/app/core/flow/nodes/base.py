@@ -8,6 +8,7 @@ import yaml
 from sanic.log import Colors, logger
 
 from app.core.flow.context import OUTPUT_KEY, Context
+from app.core.flow.edge import Source
 from app.core.flow.fields import DividerField, Field
 from app.core.flow.handles import (
     STOP,
@@ -124,8 +125,10 @@ class NodeExecutor(Protocol):
         graph_id: int,
         node_id: str,
         node_data: dict[str, Any],
-        input_handle: InputHandle | None = None,
         context: Context,
+        input_handle: InputHandle | None = None,
+        source: Source | None = None,
+        sources: list[Source] | None = None,
     ) -> OutputHandle | None: ...
 
 
@@ -212,8 +215,10 @@ class Node(metaclass=NodeMeta):
         graph_id: int,
         node_id: str,
         node_data: dict[str, Any],
-        input_handle: InputHandle | None = None,
         context: Context,
+        input_handle: InputHandle | None = None,
+        source: Source | None = None,
+        sources: list[Source] | None = None,
     ) -> OutputHandle | None:
         """Execute the node with the given data.
 
@@ -221,8 +226,10 @@ class Node(metaclass=NodeMeta):
             graph_id: The flow graph ID.
             node_id: The node ID.
             node_data: The node data.
-            input_handle: The input handle.
             context: The context to store the intermediate data.
+            input_handle: The input handle.
+            source: The edge source for this execution.
+            sources: The incoming edge sources for this execution.
 
         Returns:
             The output handle.
@@ -243,8 +250,10 @@ class Node(metaclass=NodeMeta):
                 graph_id=graph_id,
                 node_id=node_id,
                 node_data=node_data,
-                input_handle=input_handle,
                 context=context,
+                input_handle=input_handle,
+                source=source,
+                sources=sources,
             )
             if output_handle is STOP:
                 # explicitly abort flow, skip default handle fallback

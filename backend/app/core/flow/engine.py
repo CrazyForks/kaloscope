@@ -26,6 +26,7 @@ from tortoise.transactions import in_transaction
 
 from app.core.exceptions import ErrorCode, KaloscopeException, NotFoundException
 from app.core.flow.context import OUTPUT_KEY, RETVAL_KEY, START_KEY, Context
+from app.core.flow.edge import Source, Target
 from app.core.flow.fetcher import RepoFetcher
 from app.core.flow.handles import InputHandle
 from app.core.flow.nodes.base import CancellationSignal, Node, NodeGroup
@@ -39,8 +40,20 @@ from app.models.flow import (
     JobState,
 )
 
+# the execution policy for the flow jobs
 type ExecutionPolicy = Literal["date", "cron", "interval", "immediate"]
+
+# the interval unit for the interval trigger
 type IntervalUnit = Literal["weeks", "days", "hours", "minutes", "seconds"]
+
+
+class JobAction(Enum):
+    """The actions for the flow jobs."""
+
+    PAUSE = auto()
+    RESUME = auto()
+    DELETE = auto()
+    REFRESH = auto()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -143,31 +156,6 @@ class NodeWrapper:
             The loop node ID.
         """
         return self.input_handle.loop_id if self.input_handle else None
-
-
-@dataclass(frozen=True)
-class SourceWrapper:
-    """The edge source data wrapper."""
-
-    node_id: str
-    handle_id: str = field(kw_only=True)
-
-
-@dataclass(frozen=True)
-class TargetWrapper:
-    """The edge target data wrapper."""
-
-    node_id: str
-    handle_id: str = field(kw_only=True)
-
-
-class JobAction(Enum):
-    """The actions for the flow jobs."""
-
-    PAUSE = auto()
-    RESUME = auto()
-    DELETE = auto()
-    REFRESH = auto()
 
 
 class FlowEngine:
@@ -541,8 +529,8 @@ class FlowTask(ABC):
         # the flow graph definition
         self._definition: dict
         self._nodes: dict[str, NodeWrapper] | None = None
-        self._incomers: dict[TargetWrapper, list[SourceWrapper]] | None = None
-        self._outgoers: dict[SourceWrapper, list[TargetWrapper]] | None = None
+        self._incomers: dict[Target, list[Source]] | None = None
+        self._outgoers: dict[Source, list[Target]] | None = None
         # the context for the flow task
         self._context: Context
         self._merge_lock = asyncio.Lock()
@@ -655,7 +643,7 @@ class FlowTask(ABC):
         return self._nodes
 
     @property
-    def incomers(self) -> dict[TargetWrapper, list[SourceWrapper]]:
+    def incomers(self) -> dict[Target, list[Source]]:
         """Construct the target-sources mapping from the edges.
 
         Returns:
@@ -664,8 +652,8 @@ class FlowTask(ABC):
         if self._incomers is None:
             incomers = {}
             for edge in self._definition["edges"]:
-                target = TargetWrapper(edge["target"], handle_id=edge["targetHandle"])
-                source = SourceWrapper(edge["source"], handle_id=edge["sourceHandle"])
+                target = Target(edge["target"], handle_id=edge["targetHandle"])
+                source = Source(edge["source"], handle_id=edge["sourceHandle"])
                 if target in incomers:
                     incomers[target].append(source)
                 else:
@@ -674,7 +662,7 @@ class FlowTask(ABC):
         return self._incomers
 
     @property
-    def outgoers(self) -> dict[SourceWrapper, list[TargetWrapper]]:
+    def outgoers(self) -> dict[Source, list[Target]]:
         """Construct the source-targets mapping from the edges.
 
         Returns:
@@ -683,8 +671,8 @@ class FlowTask(ABC):
         if self._outgoers is None:
             outgoers = {}
             for edge in self._definition["edges"]:
-                source = SourceWrapper(edge["source"], handle_id=edge["sourceHandle"])
-                target = TargetWrapper(edge["target"], handle_id=edge["targetHandle"])
+                source = Source(edge["source"], handle_id=edge["sourceHandle"])
+                target = Target(edge["target"], handle_id=edge["targetHandle"])
                 if source in outgoers:
                     outgoers[source].append(target)
                 else:
@@ -765,11 +753,14 @@ class FlowTask(ABC):
         """
         raise NotImplementedError
 
-    async def run(self, nodes: list[NodeWrapper] | None = None):
+    async def run(
+        self, nodes: list[NodeWrapper] | None = None, *, source: Source | None = None
+    ):
         """Run the flow task.
 
         Args:
             nodes: The specific nodes to execute.
+            source: The edge source for the nodes to execute.
         """
         _root = False
         if nodes is None:
@@ -785,6 +776,13 @@ class FlowTask(ABC):
             Args:
                 node: The node to execute.
             """
+            input = node.input_handle
+            if input is not None:
+                tgt = Target(node.node_id, handle_id=input.id)
+                sources = self.incomers.get(tgt)
+            else:
+                sources = None
+
             output = None
             async with self.context(node) as context:
                 # call the executor for the node type
@@ -792,21 +790,23 @@ class FlowTask(ABC):
                     graph_id=self.graph_id,
                     node_id=node.node_id,
                     node_data=node.node_data,
-                    input_handle=node.input_handle,
                     context=context,
+                    input_handle=input,
+                    source=source,
+                    sources=sources,
                 )
+
             if output is not None:
                 # get the target nodes from the outgoers mapping
-                targets = self.outgoers.get(
-                    SourceWrapper(node.node_id, handle_id=output.id)
-                )
+                src = Source(node.node_id, handle_id=output.id)
+                targets = self.outgoers.get(src)
                 if targets:
                     # run the next nodes recursively
                     next_nodes = [
                         self.nodes[t.node_id].bind(t.handle_id, output.loop_id)
                         for t in targets
                     ]
-                    await self.run(next_nodes)
+                    await self.run(next_nodes, source=src)
 
         async def _wait(tasks: Iterable[asyncio.Task]):
             """Wait for the tasks to complete and handle exceptions.

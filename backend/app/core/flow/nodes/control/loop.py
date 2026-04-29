@@ -32,8 +32,8 @@ class LoopNode(Node):
         *,
         node_id: str,
         node_data: dict[str, Any],
-        input_handle: InputHandle,
         context: Context,
+        input_handle: InputHandle,
         **kwargs,
     ) -> OutputHandle | None:
         # extract the loop variable
