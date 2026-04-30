@@ -83,6 +83,7 @@ class MediaItem(TortoiseModel):
     size = IntField(null=True)
     visible = BooleanField(default=True)
     danmaku_id = CharField(max_length=255, null=True)
+    danmaku_path = CharField(max_length=4096, null=True)
     nfo_path = CharField(max_length=4096, null=True)
     nfo_mtime = DatetimeField(null=True)
     nfo_source = CharField(max_length=64, null=True)

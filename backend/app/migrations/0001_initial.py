@@ -365,6 +365,7 @@ class Migration(migrations.Migration):
                 ('size', fields.IntField(null=True)),
                 ('visible', fields.BooleanField(default=True)),
                 ('danmaku_id', fields.CharField(null=True, max_length=255)),
+                ('danmaku_path', fields.CharField(null=True, max_length=4096)),
                 ('nfo_path', fields.CharField(null=True, max_length=4096)),
                 ('nfo_mtime', fields.DatetimeField(null=True, auto_now=False, auto_now_add=False)),
                 ('nfo_source', fields.CharField(null=True, max_length=64)),
