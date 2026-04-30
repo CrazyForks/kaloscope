@@ -1,5 +1,8 @@
+import asyncio
+import hashlib
 from pathlib import Path
 
+import aiofiles
 from sanic import Sanic
 from tortoise.expressions import Q
 from tortoise.transactions import atomic
@@ -104,6 +107,8 @@ class MediaLibService(BaseService[MediaLib], model=MediaLib):
 class MediaItemService(BaseService[MediaItem], model=MediaItem):
     """The service class for all media item related operations."""
 
+    HASH_READ_SIZE = 16 * 1024 * 1024  # 16MB
+
     @classmethod
     async def create(
         cls, lib_id: int, parent_id: int | None, m: MetaKeywords
@@ -118,7 +123,7 @@ class MediaItemService(BaseService[MediaItem], model=MediaItem):
         Returns:
             The media item instance.
         """
-        item, _ = await MediaItem.get_or_create(
+        item, created = await MediaItem.get_or_create(
             lib_id=lib_id,
             path=m.item_path,
             defaults={
@@ -131,7 +136,27 @@ class MediaItemService(BaseService[MediaItem], model=MediaItem):
                 "visible": True,
             },
         )
+        if created:
+            asyncio.create_task(cls.update_file_info(item.id, m.item_path))
+
         return item
+
+    @classmethod
+    async def update_file_info(cls, item_id: int, item_path: str) -> None:
+        """Calculate and persist the hash and size of a media file.
+
+        Args:
+            item_id: The media item ID.
+            item_path: The file path of the media item.
+        """
+        path = Path(item_path)
+        if not path.is_file():
+            return
+        size = path.stat().st_size
+        md5 = hashlib.md5()
+        async with aiofiles.open(path, "rb") as f:
+            md5.update(await f.read(cls.HASH_READ_SIZE))
+        await MediaItem.filter(id=item_id).update(hash=md5.hexdigest(), size=size)
 
     @classmethod
     async def refresh_episodes(cls, item: MediaItem, meta: MediaMetadata):
