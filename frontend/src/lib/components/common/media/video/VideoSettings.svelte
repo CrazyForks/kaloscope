@@ -185,7 +185,7 @@
 >
   <div class="tabs-border tabs">
     <!-- The video settings tab. -->
-    {@render tabLabel('video', icons.videoFill, $_('media.video.tab'))}
+    {@render tabLabel('video', icons.videoFill, $_('media.video.settings'))}
     <div class="tab-content">
       <div>
         {@render optionName($_('media.video.speed'))}
@@ -250,7 +250,7 @@
     </div>
 
     <!-- The danmaku settings tab. -->
-    {@render tabLabel('danmaku', icons.danmakuFill, $_('media.danmaku.tab'))}
+    {@render tabLabel('danmaku', icons.danmakuFill, $_('media.danmaku.settings'))}
     <div class="tab-content">
       {#if $danmaku !== null && danmakuPlugin !== null}
         <div>
@@ -329,6 +329,10 @@
         </div>
       {/if}
     </div>
+
+    <!-- The danmaku match tab. -->
+    {@render tabLabel('match', icons.boxMultipleSearchFilled, $_('media.danmaku.match'))}
+    <div class="tab-content"></div>
   </div>
 </Modal>
 
@@ -377,7 +381,7 @@
         ></iconify-icon>
       {/if}
     </span>
-    <span class="text-xs">{$_(`media.danmaku.${mode}`)}</span>
+    <span class="text-xs">{$_(`media.danmaku.mode.${mode}`)}</span>
   </button>
 {/snippet}
 

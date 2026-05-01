@@ -171,8 +171,6 @@
     "http_proxy": "HTTP 代理",
     "secure_dns": "安全 DNS",
     "nameserver": "域名服务器",
-    "danmaku_server": "弹幕服务器",
-    "danmaku_ttl": "弹幕缓存（小时）",
     "created": "创建时间",
     "updated": "更新时间",
     "actions": "操作"
@@ -342,7 +340,7 @@
     "parts": "分段",
     "tags": "标签",
     "video": {
-      "tab": "视频",
+      "settings": "视频",
       "speed": "倍速",
       "rotate": "旋转",
       "default": "默认",
@@ -355,17 +353,23 @@
       }
     },
     "danmaku": {
-      "tab": "弹幕",
+      "settings": "弹幕",
       "toggle": "弹幕开关",
-      "block": "屏蔽类型",
-      "scroll": "滚动",
-      "top": "顶部",
-      "bottom": "底部",
-      "color": "彩色",
       "area": "显示区域",
+      "speed": "弹幕速度",
       "opacity": "不透明度",
       "font_size": "弹幕字号",
-      "speed": "弹幕速度"
+      "block": "屏蔽类型",
+      "mode": {
+        "scroll": "滚动",
+        "top": "顶部",
+        "bottom": "底部",
+        "color": "彩色"
+      },
+      "match": "匹配",
+      "server": "弹幕服务器",
+      "server_tip": "兼容 dandanplay API 格式的弹幕服务器地址。",
+      "ttl": "弹幕缓存（小时）"
     },
     "xgplayer": {
       "error_types": {

@@ -143,22 +143,17 @@
         />
         <input type="text" class="hidden" name="dir" value={dir} />
       </button>
-      <div class="flex gap-2">
-        <div class="w-3/5 space-y-1.5">
-          <Label>{$_('field.danmaku_server')}</Label>
+      <div class="flex flex-wrap gap-2">
+        <div class="flex-3/5 space-y-1.5">
+          <Label tip={$_('media.danmaku.server_tip')}>{$_('media.danmaku.server')}</Label>
           <URLWrapper bind:secure bind:this={urlWrapper}>
-            <input
-              placeholder={$_('field.danmaku_server')}
-              class="grow truncate"
-              bind:value={danmaku_server}
-              {...schema.danmaku_server}
-            />
+            <input class="grow truncate" bind:value={danmaku_server} {...schema.danmaku_server} />
           </URLWrapper>
         </div>
-        <div class="w-2/5 space-y-1.5">
-          <Label>{$_('field.danmaku_ttl')}</Label>
+        <div class="grow space-y-1.5">
+          <Label>{$_('media.danmaku.ttl')}</Label>
           <input
-            placeholder={$_('field.danmaku_ttl')}
+            placeholder={$_('media.danmaku.ttl')}
             class="input w-full"
             bind:value={danmaku_ttl}
             {...schema.danmaku_ttl}
