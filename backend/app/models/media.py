@@ -127,6 +127,8 @@ class MediaLibUpsert(BaseModel):
     dir: str | None = Field(min_length=1, max_length=4096, default=None)
     name: str = Field(min_length=1, max_length=64)
     language: str | None = None
+    danmaku_server: str | None = Field(max_length=255, default=None)
+    danmaku_ttl: int | None = Field(ge=0, le=8760, default=None)
     triggers: list[GraphRef] | None = None
 
     @model_validator(mode="after")

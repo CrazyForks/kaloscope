@@ -64,6 +64,8 @@ class MediaLibService(BaseService[MediaLib], model=MediaLib):
             await MediaLib.filter(id=obj.id).update(
                 name=obj.name,
                 language=obj.language or None,
+                danmaku_server=obj.danmaku_server,
+                danmaku_ttl=obj.danmaku_ttl,
             )
             lib = await MediaLib.get(id=obj.id)
         else:
@@ -71,9 +73,11 @@ class MediaLibService(BaseService[MediaLib], model=MediaLib):
             priorities: list = await MediaLib.all().values_list("priority", flat=True)
             lib = await MediaLib.create(
                 lib_type=obj.lib_type,
-                name=obj.name,
                 dir=obj.dir,
+                name=obj.name,
                 language=obj.language or None,
+                danmaku_server=obj.danmaku_server,
+                danmaku_ttl=obj.danmaku_ttl,
                 priority=(max(priorities) + 1 if priorities else 1),
             )
             # add the observer

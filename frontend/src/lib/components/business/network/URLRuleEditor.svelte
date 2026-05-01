@@ -15,7 +15,7 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
   import { api } from '$lib/api';
-  import { Label, Modal } from '$lib/components';
+  import { Label, Modal, URLWrapper } from '$lib/components';
   import { createFormSchema, createLoading } from '$lib/helpers';
   import { _ } from '$lib/i18n';
   import { icons } from '$lib/icons';
@@ -34,16 +34,15 @@
   let modal: Modal;
   export const showModal = () => modal.show();
 
+  // the URL wrapper instance
+  let urlWrapper: URLWrapper | null = $state(null);
+  let secure: boolean = $state(true);
+
   // the loading state and form schema
   const loading = createLoading();
   const schema = createFormSchema(({ text }) => ({
     pattern: text().maxlength(245)
   }));
-
-  // the HTTP/HTTPS prefixes
-  const HTTP = 'http://';
-  const HTTPS = 'https://';
-  let secure: boolean = $state(true);
 
   /**
    * Save or update the URL rule.
@@ -55,7 +54,7 @@
     loading.start();
     const json: Record<string, unknown> = Object.fromEntries(data);
     json.id = id;
-    json.pattern = `${secure ? HTTPS : HTTP}${pattern}`;
+    json.pattern = urlWrapper?.full(pattern);
     json.proxy_id = proxy_id;
     json.resolver_ids = resolver_ids;
     api
@@ -75,26 +74,10 @@
       });
   }
 
-  /**
-   * Standardize the URL.
-   *
-   * @param url - The URL to standardize.
-   * @returns The standardized URL.
-   */
-  function standardize(url: string): string {
-    url = url.trim();
-    if (url.toLowerCase().startsWith(HTTP)) {
-      secure = false;
-      return url.slice(7);
-    } else if (url.toLowerCase().startsWith(HTTPS)) {
-      secure = true;
-      return url.slice(8);
-    }
-    return url;
-  }
-
   $effect(() => {
-    pattern = standardize(pattern ?? '');
+    if (urlWrapper) {
+      pattern = urlWrapper.standardize(pattern);
+    }
   });
 </script>
 
@@ -108,14 +91,9 @@
   >
     <fieldset class="fieldset">
       <Label required>{$_('field.pattern')}</Label>
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-      <label class="input w-full gap-0" onclick={(event) => event.preventDefault()}>
-        <button type="button" class="cursor-pointer opacity-80" onclick={() => (secure = !secure)}>
-          {secure ? HTTPS : HTTP}
-        </button>
+      <URLWrapper bind:secure bind:this={urlWrapper}>
         <input placeholder="*" class="grow truncate" bind:value={pattern} {...schema.pattern} />
-      </label>
+      </URLWrapper>
       {#if resolvers.length > 0}
         <Label class="mt-4">{$_('entity.dns_resolvers')}</Label>
         <div class="flex flex-wrap gap-4">

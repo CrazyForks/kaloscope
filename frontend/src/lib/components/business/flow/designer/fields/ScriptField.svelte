@@ -150,7 +150,9 @@ def execute(node_id, node_data, context):
       class={validatorClass}
       editorClass="nodrag nowheel"
       onchange={(doc) => {
-        updateNodeData(field.nodeId, { [field.id]: { language: data.language, code: doc } });
+        updateNodeData(field.nodeId, {
+          [field.id]: { language: data.language, code: doc }
+        });
       }}
     />
   {/key}

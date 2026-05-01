@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Label } from '$lib/components';
+  import { Label, URLWrapper } from '$lib/components';
   import { nodeFormatter } from '$lib/i18n';
   import type { Field, FlowGraphContext } from '$lib/types';
   import { useSvelteFlow } from '@xyflow/svelte';
@@ -16,15 +16,11 @@
     maxlength: number;
   } = $props();
 
-  // the HTTP/HTTPS prefixes
-  const HTTP = 'http://';
-  const HTTPS = 'https://';
-  let secure: boolean = $state(true);
-
   // svelte-ignore state_referenced_locally
   // eslint-disable-next-line svelte/prefer-writable-derived
-  let url: string = $state(standardize(data));
+  let url: string = $state(data);
   let urlInput: HTMLInputElement;
+  let urlWrapper: URLWrapper;
 
   const { updateNodeData } = useSvelteFlow();
   const { label, tooltip, placeholder } = nodeFormatter;
@@ -43,36 +39,18 @@
   }
 
   /**
-   * Standardize the URL.
-   *
-   * @param url - The URL to standardize.
-   * @returns The standardized URL.
-   */
-  function standardize(url: string): string {
-    url = url.trim();
-    if (url.toLowerCase().startsWith(HTTP)) {
-      secure = false;
-      return url.slice(7);
-    } else if (url.toLowerCase().startsWith(HTTPS)) {
-      secure = true;
-      return url.slice(8);
-    }
-    return url;
-  }
-
-  /**
    * Update the URL field data.
    */
   function updateFieldData() {
-    url = standardize(url);
+    url = urlWrapper.standardize(url);
     updateNodeData(field.nodeId, {
-      [field.id]: `${secure ? HTTPS : HTTP}${url}`
+      [field.id]: urlWrapper.full(url)
     });
   }
 
   $effect(() => {
     // standardize the URL when the data changes externally
-    url = standardize(data);
+    url = urlWrapper.standardize(data);
   });
 </script>
 
@@ -80,18 +58,7 @@
   <Label required={field.required} tip={$tooltip(field.tooltip)}>
     {$label(field.label)}
   </Label>
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <label class="input input-sm w-full gap-0" onclick={(event) => event.preventDefault()}>
-    <button
-      class="cursor-pointer pt-px opacity-80"
-      onclick={() => {
-        secure = !secure;
-        updateFieldData();
-      }}
-    >
-      {secure ? HTTPS : HTTP}
-    </button>
+  <URLWrapper secure class="input-sm [&_button]:pt-px" bind:this={urlWrapper} onclick={updateFieldData}>
     <input
       type="text"
       class="nodrag grow truncate"
@@ -106,5 +73,5 @@
         updateFieldData();
       }}
     />
-  </label>
+  </URLWrapper>
 </fieldset>

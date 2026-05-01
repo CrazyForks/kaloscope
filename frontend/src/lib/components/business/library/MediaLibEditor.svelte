@@ -18,7 +18,7 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
   import { api } from '$lib/api';
-  import { FileTree, FlowTriggers, Label, Modal, Select } from '$lib/components';
+  import { FileTree, FlowTriggers, Label, Modal, Select, URLWrapper } from '$lib/components';
   import { createFormSchema, createLoading } from '$lib/helpers';
   import { _, locales } from '$lib/i18n';
   import { icons } from '$lib/icons';
@@ -35,20 +35,24 @@
     onsave
   }: MediaLibEditorProps = $props();
 
-  // the file tree instance
-  let fileTree: FileTree;
-
   // the modal dialog instance
   let modal: Modal;
   export const showModal = () => modal.show();
+
+  // the file tree instance
+  let fileTree: FileTree;
+
+  // the URL wrapper instance
+  let urlWrapper: URLWrapper | null = $state(null);
+  let secure: boolean = $state(false);
 
   // the loading state and form schema
   const loading = createLoading();
   const schema = createFormSchema(({ text, number }) => ({
     dir: text().maxlength(4096),
     name: text().maxlength(64),
-    danmaku_server: text().maxlength(255),
-    danmaku_ttl: number().min(0).max(8760)
+    danmaku_server: text().maxlength(245).required(false),
+    danmaku_ttl: number().min(0).max(8760).required(false)
   }));
 
   /**
@@ -61,6 +65,7 @@
     loading.start();
     const json: Record<string, unknown> = Object.fromEntries(data);
     json.id = id;
+    json.danmaku_server = urlWrapper?.full(danmaku_server);
     json.triggers = triggers;
     api
       .post('media/lib/upsert', { json })
@@ -74,6 +79,12 @@
         loading.end();
       });
   }
+
+  $effect(() => {
+    if (urlWrapper) {
+      danmaku_server = urlWrapper.standardize(danmaku_server);
+    }
+  });
 </script>
 
 <Modal
@@ -135,18 +146,20 @@
       <div class="flex gap-2">
         <div class="w-3/5 space-y-1.5">
           <Label>{$_('field.danmaku_server')}</Label>
-          <input
-            placeholder={$_('field.danmaku_server')}
-            class="input w-full truncate"
-            bind:value={danmaku_server}
-            {...schema.danmaku_server}
-          />
+          <URLWrapper bind:secure bind:this={urlWrapper}>
+            <input
+              placeholder={$_('field.danmaku_server')}
+              class="grow truncate"
+              bind:value={danmaku_server}
+              {...schema.danmaku_server}
+            />
+          </URLWrapper>
         </div>
         <div class="w-2/5 space-y-1.5">
           <Label>{$_('field.danmaku_ttl')}</Label>
           <input
             placeholder={$_('field.danmaku_ttl')}
-            class="input w-full truncate"
+            class="input w-full"
             bind:value={danmaku_ttl}
             {...schema.danmaku_ttl}
           />
