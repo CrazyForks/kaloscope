@@ -60,6 +60,12 @@ class TestExtractSeason:
     def test_chinese_season_marker(self):
         assert extract_season("庆余年 第2季 全集") == 2
 
+    def test_chinese_season_number_1(self):
+        assert extract_season("某某动漫.第一季.全集") == 1
+
+    def test_chinese_season_number_21(self):
+        assert extract_season("[某某动漫] [第二十一季]") == 21
+
     def test_no_season(self):
         assert extract_season("Inception.2010.1080p") is None
 
@@ -88,6 +94,15 @@ class TestExtractEpisode:
 
     def test_chinese_episode_marker_hua(self):
         assert extract_episode("海贼王 第1000話") == 1000
+
+    def test_chinese_episode_number_1(self):
+        assert extract_episode("某某动漫 第一季 第一集") == 1
+
+    def test_chinese_episode_number_21(self):
+        assert extract_episode("某某动漫.第二季.第二十一集") == 21
+
+    def test_chinese_episode_number_321(self):
+        assert extract_episode("【某某动漫】【第三季】【第三百二十一回】") == 321
 
     def test_episode_zero(self):
         assert extract_episode("Show.S01E00.Special") == 0

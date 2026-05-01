@@ -1,5 +1,7 @@
 import re
 
+from app.utils.numeral import cn_to_int
+
 # pattern to match common separators: dot, underscore, hyphen, space
 _SEPARATOR_PATTERN = re.compile(r"[._\-\s]+")
 
@@ -9,26 +11,28 @@ _PREFIX_PATTERN = re.compile(r"^[\[\(【][^\]\)】]*[\]\)】]\s*")
 # year pattern: a 4-digit year between 1900 and 2099
 _YEAR_PATTERN = re.compile(r"(?<!\d)(19|20)\d{2}(?!\d)")
 
-# season pattern: S01, S01E01, s1, Season 1, 第1季 etc.
+# season pattern: S01, S01E01, s1, Season 1, 第1季, 第二季 etc.
 _SEASON_PATTERN = re.compile(
     r"""
     (?:
         [Ss]eason\s*(\d{1,3})
-        | 第\s*(\d{1,3})\s*季
         | [Ss](\d{1,3})(?:[Ee]\d{1,4}|\b)
+        | 第\s*(\d{1,3})\s*季
+        | 第\s*([零一二三四五六七八九十百千]+)\s*季
     )
     """,
     re.VERBOSE,
 )
 
-# episode pattern: E01, ep1, 第1集, [01] etc.
+# episode pattern: E01, ep1, [01], 第1集, 第一话 etc.
 _EPISODE_PATTERN = re.compile(
     r"""
     (?:
         [Ee][Pp]?\.?(\d{1,4})
-        | 第\s*(\d{1,4})\s*[集話话回]
         | \s-\s0*(\d{1,4})\s*(?:\[|$)
         | \[0*(\d{1,4})\]
+        | 第\s*(\d{1,4})\s*[集话話回]
+        | 第\s*([零一二三四五六七八九十百千]+)\s*[集话話回]
     )
     """,
     re.VERBOSE,
@@ -98,7 +102,7 @@ def extract_season(name: str) -> int | None:
     match = _SEASON_PATTERN.search(name)
     if match:
         value = next(g for g in match.groups() if g is not None)
-        return int(value)
+        return int(value) if value.isdigit() else cn_to_int(value)
     return None
 
 
@@ -114,7 +118,7 @@ def extract_episode(name: str) -> int | None:
     match = _EPISODE_PATTERN.search(name)
     if match:
         value = next(g for g in match.groups() if g is not None)
-        return int(value)
+        return int(value) if value.isdigit() else cn_to_int(value)
     return None
 
 
