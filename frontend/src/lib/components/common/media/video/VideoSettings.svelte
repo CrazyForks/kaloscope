@@ -1,5 +1,8 @@
 <script lang="ts" module>
-  import type { Definition } from '$lib/types';
+  import { isWhite } from '$lib/utils';
+  import { v4 as uuidv4 } from 'uuid';
+
+  import type { Danmaku, Definition } from '$lib/types';
   import type { IconifyIcon } from 'iconify-icon';
   import type Player from 'xgplayer';
   import type { IUrl } from 'xgplayer/es/defaultConfig';
@@ -35,10 +38,40 @@
     fontSize: 20,
     speed: 50
   });
+
+  /**
+   * Formats the danmakus to the format required by the player.
+   *
+   * @param danmakus - The list of video comments.
+   * @returns The formatted danmakus.
+   */
+  export function formatDanmakus(danmakus: Danmaku[] | null | undefined) {
+    if (!danmakus || danmakus.length === 0) {
+      return [];
+    }
+    // https://github.com/bytedance/danmu.js
+    return danmakus
+      .filter((danmaku) => danmaku.text)
+      .map(({ id, text, start, duration, mode, color }) => {
+        return {
+          id: id || uuidv4(), // unique id
+          txt: text, // comment text
+          start: start || 0, // start time in milliseconds
+          duration: duration || undefined, // duration in milliseconds
+          moveV: duration ? undefined : 200, // speed of scrolling (pixels per second)
+          mode: mode || 'scroll', // display mode: 'scroll', 'top', 'bottom'
+          color: !!color && !isWhite(color), // mark the danmaku as colored
+          style: {
+            color: color || '#fff' // comment color
+          }
+        };
+      });
+  }
 </script>
 
 <script lang="ts">
   import { Modal, Range, Select } from '$lib/components';
+  import { MEDIA_STREAM_PREFIX } from '$lib/constants';
   import { _ } from '$lib/i18n';
   import { icons } from '$lib/icons';
   import { persisted } from '$lib/stores';
@@ -46,21 +79,32 @@
   import { Events } from 'xgplayer';
 
   let { player }: { player: Player | null } = $props();
+  // whether the current video is a local media file
+  let localMedia: boolean = $derived.by(() => {
+    const url = player?.config.url;
+    return typeof url === 'string' && url.startsWith(MEDIA_STREAM_PREFIX);
+  });
+
+  // the plugins used in the settings
   let startPlugin: StartPlugin | null = $derived.by(() => player?.getPlugin('start'));
   let rotatePlugin: RotatePlugin | null = $derived.by(() => player?.getPlugin('rotate'));
   let danmakuPlugin: DanmakuPlugin | null = $derived.by(() => player?.getPlugin('danmu'));
   let playbackRatePlugin: PlaybackRatePlugin | null = $derived.by(() => player?.getPlugin('playbackRate'));
 
-  let modal: Modal;
-  let tabId: string = $state('video');
-  let rotateFullscreen: boolean = $state(false);
-
+  // the settings states
   let playbackRates: Record<string, number> = $state({});
   let playbackRate: number = $state(1);
   let rotateDegrees: number[] = $state([0, 90, 180, 270]);
   let rotateDegree: number = $state(0);
   let definitions: Definition[] = $state([]);
   let definition: string = $state('');
+
+  // the modal dialog instance
+  let modal: Modal;
+  // the current active tab in the settings modal
+  let tabId: string = $state('video');
+  // whether the player is in rotate fullscreen mode
+  let rotateFullscreen: boolean = $state(false);
 
   /**
    * Show the settings modal.
@@ -118,6 +162,7 @@
         danmakuPlugin.stop();
       }
     }
+    loadLocalDanmakus();
   }
 
   /**
@@ -174,6 +219,19 @@
       rotatePlugin.rotate(true, true, (degree - rotateDegree) / 90);
       rotateDegree = degree;
     }
+  }
+
+  /**
+   * Load the danmaku data for the current video.
+   */
+  export function loadLocalDanmakus() {
+    if (!localMedia || !danmakuPlugin) {
+      return;
+    }
+    // TODO: load the danmaku data
+    const danmakus: Danmaku[] = [];
+    danmakuPlugin.clear();
+    danmakuPlugin.updateComments(formatDanmakus(danmakus), true);
   }
 </script>
 
@@ -331,8 +389,10 @@
     </div>
 
     <!-- The danmaku match tab. -->
-    {@render tabLabel('match', icons.boxMultipleSearchFilled, $_('media.danmaku.match'))}
-    <div class="tab-content"></div>
+    {#if localMedia}
+      {@render tabLabel('match', icons.boxMultipleSearchFilled, $_('media.danmaku.match'))}
+      <div class="tab-content"></div>
+    {/if}
   </div>
 </Modal>
 

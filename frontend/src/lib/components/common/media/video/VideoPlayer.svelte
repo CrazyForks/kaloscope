@@ -108,28 +108,38 @@
 </script>
 
 <script lang="ts">
-  import { isWhite, sniffer } from '$lib/utils';
+  import { sniffer } from '$lib/utils';
   import { onMount, tick } from 'svelte';
   import { v4 as uuidv4 } from 'uuid';
   import Player, { Events, SimplePlayer } from 'xgplayer';
   import DefaultPreset from './plugins/preset';
-  import VideoSettings from './VideoSettings.svelte';
+  import VideoSettings, { formatDanmakus } from './VideoSettings.svelte';
 
   const { width = '100%', height = '100%' }: VideoPlayerProps = $props();
+  // player ID
   const id: string = `player-${uuidv4()}`;
+  // video container
   let container: HTMLDivElement;
+  // danmaku container
   let danmakuContainer: HTMLDivElement;
+
+  // the player instance
+  let player: Player | null = $state(null);
+  // the video settings instance
   let videoSettings: VideoSettings;
 
-  let player: Player | null = $state(null);
+  // the plugins used in the player
   let mobilePlugin: MobilePlugin | null = $derived.by(() => player?.getPlugin('mobile'));
   let danmakuPlugin: DanmakuPlugin | null = $derived.by(() => player?.getPlugin('danmu'));
   let chaptersPlugin: OptionsPlugin | null = $derived.by(() => player?.getPlugin('chapters'));
   let fullscreenPlugin: FullscreenPlugin | null = $derived.by(() => player?.getPlugin('fullscreen'));
   let playbackRatePlugin: OptionsPlugin | null = $derived.by(() => player?.getPlugin('playbackRate'));
 
+  // the theme color before entering fullscreen mode
   let themeColor: string | null = null;
+  // whether the screen orientation is locked in fullscreen mode
   let screenLocked: boolean = $state(false);
+  // whether the player is in rotate fullscreen mode
   let rotateFullscreen: boolean = $state(false);
 
   /**
@@ -206,37 +216,12 @@
   };
 
   /**
-   * Formats the danmakus to the format required by the player.
-   *
-   * @param danmakus - The list of video comments.
-   */
-  const formatDanmakus = (danmakus: Danmaku[] | null | undefined) => {
-    if (!danmakus || danmakus.length === 0) {
-      return [];
-    }
-    return danmakus
-      .filter((danmaku) => danmaku.text)
-      .map(({ id, text, start, duration, mode, color }) => {
-        return {
-          id: id || uuidv4(),
-          txt: text,
-          start: start || 0,
-          duration: duration || 5000,
-          mode: mode || 'scroll',
-          color: !!color && !isWhite(color),
-          style: {
-            color: color || '#fff'
-          }
-        };
-      });
-  };
-
-  /**
    * Extracts the definitions from the video options.
    *
    * @param options - The video options.
+   * @returns The list of definitions.
    */
-  const formatDefinitions = (options: VideoOptions): Definition[] => {
+  const extractDefinitions = (options: VideoOptions): Definition[] => {
     if (options.definitions && options.definitions.length > 0) {
       return options.definitions.filter((d) => d.url && d.definition);
     }
@@ -247,8 +232,9 @@
    * Extracts the chapters from the video options.
    *
    * @param options - The video options.
+   * @returns The list of chapters.
    */
-  const formatChapters = (options: VideoOptions): Chapter[] => {
+  const extractChapters = (options: VideoOptions): Chapter[] => {
     if (options.chapters && options.chapters.length > 0) {
       return options.chapters
         .filter((c) => (c.id || c.url) && c.title)
@@ -259,7 +245,7 @@
           definition: false
         }));
     }
-    return formatDefinitions(options).map((d) => ({
+    return extractDefinitions(options).map((d) => ({
       id: null,
       url: d.url,
       title: String(d.definition),
@@ -311,7 +297,7 @@
       videoType: options.videoType,
       // bind the video settings component to the player config
       settings: videoSettings,
-      definitions: formatDefinitions(options),
+      definitions: extractDefinitions(options),
       topBarAutoHide: false,
       topBar: {
         back: options.back,
@@ -336,7 +322,7 @@
       },
       chapters: {
         index: 99,
-        list: formatChapters(options),
+        list: extractChapters(options),
         chapterId: options.chapterId,
         chapterChange: options.chapterChange
       },
@@ -372,6 +358,21 @@
    * @param player - The player instance.
    */
   function listenEvents(player: Player) {
+    player.once(Events.PLAYING, () => {
+      // enable the gestures on mobile devices
+      if (mobilePlugin) {
+        mobilePlugin.config.gestureX = true;
+        mobilePlugin.config.disablePress = false;
+      }
+      // enable the auto-hide for the top bar
+      player.root?.querySelector('.xg-top-bar')?.classList.add('top-bar-autohide');
+    });
+
+    player.on(Events.PLAYNEXT, () => {
+      // update the danmakus when the next video is played
+      videoSettings.loadLocalDanmakus();
+    });
+
     [Events.FULLSCREEN_CHANGE, Events.CSS_FULLSCREEN_CHANGE].forEach((event) => {
       player.on(event, (fullscreen) => {
         // remove the width style to fix the resizing issue
@@ -390,16 +391,6 @@
           }
         }
       });
-    });
-
-    player.once(Events.PLAYING, () => {
-      // enable the gestures on mobile devices
-      if (mobilePlugin) {
-        mobilePlugin.config.gestureX = true;
-        mobilePlugin.config.disablePress = false;
-      }
-      // enable the auto-hide for the top bar
-      player.root?.querySelector('.xg-top-bar')?.classList.add('top-bar-autohide');
     });
 
     if (mobilePlugin) {
