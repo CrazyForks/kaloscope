@@ -52,12 +52,18 @@ class MediaLibService(BaseService[MediaLib], model=MediaLib):
             The media library instance.
         """
 
-        # check if the name or directory already exists
+        # check if the name already exists
         filter = ~Q(id=obj.id) if obj.id else Q()
         if await MediaLib.filter(filter & Q(name=obj.name)).count() > 0:
             raise KaloscopeException(ErrorCode.NAME_ALREADY_EXISTS)
-        if obj.dir and await MediaLib.filter(filter & Q(dir=obj.dir)).count() > 0:
-            raise KaloscopeException(ErrorCode.DUPLICATE_DIRECTORY)
+        # check if the directory overlaps with existing ones
+        if obj.dir:
+            dir = Path(obj.dir)
+            dirs: list = await MediaLib.filter(filter).values_list("dir", flat=True)
+            for d in dirs:
+                existing = Path(d)
+                if dir.is_relative_to(existing) or existing.is_relative_to(dir):
+                    raise KaloscopeException(ErrorCode.DUPLICATE_DIRECTORY)
 
         if obj.id:
             # update the media library
