@@ -241,6 +241,11 @@
         const danmakus = resp.data || [];
         if (danmakus.length > 0) {
           danmakuPlugin.updateComments(formatDanmakus(danmakus), true);
+          // The font size needs to be reset after updating the comments;
+          // this may be a bug in danmu.js where the style is reset after updating.
+          if ($danmaku !== null) {
+            danmakuPlugin.setFontSize($danmaku.fontSize, null);
+          }
         }
       });
   }
