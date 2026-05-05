@@ -62,16 +62,14 @@
   // the search results
   let results: ScrapeResult[] = $state([]);
   let index: number = $state(-1);
-  let searching = createLoading();
+  const searching = createLoading();
+  const confirming = createLoading();
 
   // the modal dialog instance
   let modal: Modal;
   export const showModal = () => {
     init().then(() => modal.show());
   };
-
-  // the loading state
-  const loading = createLoading();
 
   /**
    * Initialize the component.
@@ -151,7 +149,7 @@
     if (!result) {
       return;
     }
-    loading.start();
+    confirming.start();
     api
       .post(`media/${item?.id}/gen_nfo`, {
         json: { graph_id: graphId, metadata: result }
@@ -161,7 +159,7 @@
         onscrape?.();
       })
       .finally(() => {
-        loading.end();
+        confirming.end();
       });
   }
 </script>
@@ -265,9 +263,9 @@
     <button type="button" class="btn" onclick={() => modal.close()}>
       {$_('message.cancel')}
     </button>
-    <button type="button" class="btn btn-submit" disabled={$loading !== null || index < 0} onclick={confirm}>
+    <button type="button" class="btn btn-submit" disabled={$confirming !== null || index < 0} onclick={confirm}>
       {$_('message.confirm')}
-      {#if $loading}
+      {#if $confirming}
         <span class="loading loading-xs loading-dots"></span>
       {/if}
     </button>
