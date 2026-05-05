@@ -3,6 +3,7 @@ from typing import Any, Self
 
 from pydantic import BaseModel, Field, PositiveInt, model_validator
 from tortoise.fields import (
+    BigIntField,
     BooleanField,
     CharEnumField,
     CharField,
@@ -81,7 +82,7 @@ class MediaItem(TortoiseModel):
     path = CharField(max_length=4096)
     name = CharField(max_length=255)
     hash = CharField(max_length=32, null=True)
-    size = IntField(null=True)
+    size = BigIntField(null=True)
     visible = BooleanField(default=True)
     nfo_path = CharField(max_length=4096, null=True)
     nfo_mtime = DatetimeField(null=True)

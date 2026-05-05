@@ -362,7 +362,7 @@ class Migration(migrations.Migration):
                 ('path', fields.CharField(max_length=4096)),
                 ('name', fields.CharField(max_length=255)),
                 ('hash', fields.CharField(null=True, max_length=32)),
-                ('size', fields.IntField(null=True)),
+                ('size', fields.BigIntField(null=True)),
                 ('visible', fields.BooleanField(default=True)),
                 ('nfo_path', fields.CharField(null=True, max_length=4096)),
                 ('nfo_mtime', fields.DatetimeField(null=True, auto_now=False, auto_now_add=False)),
