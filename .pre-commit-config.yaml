@@ -11,13 +11,13 @@ repos:
       - id: trailing-whitespace
       - id: check-added-large-files
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.13.10
+    rev: v4.15.1
     hooks:
       - id: commitizen
         stages: [commit-msg]
   - repo: https://github.com/python-poetry/poetry
     # https://python-poetry.org/docs/main/pre-commit-hooks/#why-does-pre-commit-autoupdate-not-update-to-the-latest-version
-    rev: 2.3.4
+    rev: 2.4.0
     hooks:
       - id: poetry-check
         args: [-C, ./backend]
@@ -40,5 +40,5 @@ repos:
           # https://github.com/sveltejs/prettier-plugin-svelte/issues/155#issuecomment-1932256171
           - prettier-plugin-svelte@3.5.1
           # https://github.com/tailwindlabs/prettier-plugin-tailwindcss/issues/228#issuecomment-1920361470
-          - prettier-plugin-tailwindcss@0.7.3
+          - prettier-plugin-tailwindcss@0.8.0
         args: [--config, ./frontend/.prettierrc, --ignore-path, ./frontend/.prettierignore, --write, ./frontend]
