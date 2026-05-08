@@ -43,6 +43,7 @@ class APIResponse(BaseModel):
     each: str | None = None
     mappings: dict[str, str] | None = None
     expected: dict[str, str] | str | None = None
+    unexpected: dict[str, str] | str | None = None
 
 
 class API(BaseModel):
@@ -201,7 +202,7 @@ class Adapter(BaseModel):
             # form encoded data
             form = _render(api.form, variables, raw=True)
             for key, value in form.items():
-                if _is_file(value):
+                if _is_multipart_file(value):
                     if files is None:
                         files = {}
                     files[key] = value
@@ -253,7 +254,9 @@ class Adapter(BaseModel):
             raise KaloscopeException(ErrorCode.HTTP_REQUEST_FAILED, extra=extra)
 
         # raise an exception if the response is not successful
-        if not _successful(self._expected(api), response.text):
+        if _failed(self._unexpected(api), response.text) or (
+            not _successful(self._expected(api), response.text)
+        ):
             logger.debug(f"HTTP Response: {Colors.RED}%s{Colors.END}", response.text)
             raise KaloscopeException(ErrorCode.HTTP_REQUEST_FAILED)
 
@@ -270,13 +273,13 @@ class Adapter(BaseModel):
         return response.text
 
     def _expected(self, api: API) -> dict[str, str] | str | None:
-        """Get the expected response for the given API.
+        """Get the expected response format for the given API.
 
         Args:
             api: The API schema.
 
         Returns:
-            The expected response value.
+            The expected response format.
         """
         if api.response and api.response.expected:
             return api.response.expected
@@ -284,12 +287,27 @@ class Adapter(BaseModel):
             return self.response.expected
         return None
 
+    def _unexpected(self, api: API) -> dict[str, str] | str | None:
+        """Get the unexpected response format for the given API.
+
+        Args:
+            api: The API schema.
+
+        Returns:
+            The unexpected response format.
+        """
+        if api.response and api.response.unexpected:
+            return api.response.unexpected
+        elif self.response and self.response.unexpected:
+            return self.response.unexpected
+        return None
+
 
 def _successful(expected: dict[str, str] | str | None, actual: JSONType) -> bool:
-    """Check if the response is successful based on the expected value.
+    """Check if the response is successful based on the expected format.
 
     Args:
-        expected: The expected response value.
+        expected: The expected response format.
         actual: The actual response value.
 
     Returns:
@@ -299,9 +317,28 @@ def _successful(expected: dict[str, str] | str | None, actual: JSONType) -> bool
         return True
     if isinstance(expected, dict):
         return all(
-            jsonpath_first(actual, path) == code for code, path in expected.items()
+            code == jsonpath_first(actual, path) for code, path in expected.items()
         )
     return actual == expected
+
+
+def _failed(unexpected: dict[str, str] | str | None, actual: JSONType) -> bool:
+    """Check if the response is failed based on the unexpected format.
+
+    Args:
+        unexpected: The unexpected response format.
+        actual: The actual response value.
+
+    Returns:
+        Whether the response is failed.
+    """
+    if unexpected is None:
+        return False
+    if isinstance(unexpected, dict):
+        return any(
+            code == jsonpath_first(actual, path) for code, path in unexpected.items()
+        )
+    return actual == unexpected
 
 
 def _error_msg(response: httpx.Response) -> str | None:
@@ -323,6 +360,22 @@ def _error_msg(response: httpx.Response) -> str | None:
     return None
 
 
+def _render[T: dict | list | str](value: T, variables: dict, *, raw: bool = False) -> T:
+    """Render the given value with the given variables.
+
+    Args:
+        value: The value to render.
+        variables: The variables to render the value with.
+        raw: Whether to render the value as raw object.
+
+    Returns:
+        The rendered value.
+    """
+    if not variables:
+        return value
+    return render(value, variables, raw=raw)
+
+
 def _mapping(json: Any, mappings: dict[str, str]) -> dict[str, Any]:
     """Map the JSON response with the given mappings using JSONPath.
 
@@ -341,14 +394,14 @@ def _mapping(json: Any, mappings: dict[str, str]) -> dict[str, Any]:
     return {k: jsonpath(k)(json, v) for k, v in mappings.items()}
 
 
-def _is_file(value: Any) -> bool:
+def _is_multipart_file(value: Any) -> bool:
     """Check if the given value is a multipart file tuple.
 
     Args:
         value: The value to check.
 
     Returns:
-        Whether the value is a file tuple.
+        Whether the value is a multipart file tuple.
     """
     if not isinstance(value, tuple):
         return False
@@ -357,22 +410,6 @@ def _is_file(value: Any) -> bool:
     if not isinstance(value[0], str | type(None)):
         return False
     return isinstance(value[1], bytes)
-
-
-def _render[T: dict | list | str](value: T, variables: dict, *, raw: bool = False) -> T:
-    """Render the given value with the given variables.
-
-    Args:
-        value: The value to render.
-        variables: The variables to render the value with.
-        raw: Whether to render the value as raw object.
-
-    Returns:
-        The rendered value.
-    """
-    if not variables:
-        return value
-    return render(value, variables, raw=raw)
 
 
 def load_config(config: str) -> Adapter:

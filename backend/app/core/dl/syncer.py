@@ -198,7 +198,13 @@ async def sync_tasks(downloader: Downloader, tasks: list[DownloadTask]):
         if item is None and "details" in adapter.methods:
             result = await adapter.call("details", asdict(unique))
             if isinstance(result, dict):
-                item = result
+                metadata, gid = _followed_by(result)
+                if not metadata:
+                    item = result
+                elif gid:
+                    result = await adapter.call("details", {"id": gid})
+                    if isinstance(result, dict):
+                        item = result
 
         # continue the loop if the task is not matched
         if not item:
@@ -215,12 +221,16 @@ async def sync_tasks(downloader: Downloader, tasks: list[DownloadTask]):
         if state == DownloadState.PAUSED and task.dl_speed == 0 and dl_speed > 0:
             state = DownloadState.DOWNLOADING
 
-        # update the state to `ERROR` if the error message is not empty
-        error_msg = str(item.get("error_msg", ""))
-        if error_msg:
+        # update the state to `ERROR` if the raw state indicates an error
+        name = str(item.get("name") or task.name)
+        raw_state = str(item.get("raw_state") or task.raw_state)
+        error_msg = str(item.get("error_msg") or "")
+        if error_msg or raw_state.lower() == "error":
             state = DownloadState.ERROR
+            up_speed = 0
+            dl_speed = 0
             await Notifications.send(
-                NotificationTemplate.DOWNLOAD_FAILED, name=task.name, error=error_msg
+                NotificationTemplate.DOWNLOAD_FAILED, name=name, error=error_msg or "--"
             )
 
         # update the state to `COMPLETED` if the percentage has reached 100
@@ -234,9 +244,7 @@ async def sync_tasks(downloader: Downloader, tasks: list[DownloadTask]):
             dl_speed = 0
             completed_at = timezone.now()
             state = DownloadState.COMPLETED
-            await Notifications.send(
-                NotificationTemplate.DOWNLOAD_COMPLETED, name=task.name
-            )
+            await Notifications.send(NotificationTemplate.DOWNLOAD_COMPLETED, name=name)
 
         # get the files if the details method is supported
         files = item.get("files")
@@ -248,10 +256,11 @@ async def sync_tasks(downloader: Downloader, tasks: list[DownloadTask]):
             files = [str(f).removeprefix(f"{task.dir}/") for f in files if f]
 
         # update the download task
+        unique_id = str(item.get("unique_id") or task.unique_id)
         await DownloadTask.filter(id=task.id).update(
-            name=str(item.get("name") or task.name),
-            unique_id=str(item.get("unique_id") or task.unique_id),
-            raw_state=str(item.get("raw_state") or task.raw_state),
+            name=name,
+            unique_id=unique_id,
+            raw_state=raw_state,
             files=files,
             state=state,
             error_msg=error_msg,
@@ -275,6 +284,46 @@ async def sync_tasks(downloader: Downloader, tasks: list[DownloadTask]):
                     task.id,
                     exc_info=True,
                 )
+
+
+def _followed_by(result: dict) -> tuple[bool, str | None]:
+    """Extract the followed-by GID from an aria2 task result.
+
+    When a magnet link or info-hash is added to aria2, it first creates a
+    metadata-fetching task whose `files` contains a single `[METADATA]`
+    placeholder entry. Once the metadata is resolved, aria2 creates the actual
+    download task and exposes its GID via the `followedBy` field. This
+    function detects that metadata state and returns the followed GID so the
+    syncer can track the real download task instead of the ephemeral metadata
+    task.
+
+    Args:
+        result: A single task result object returned by aria2.
+
+    Returns:
+        A tuple of (is_metadata, followed_gid). `is_metadata` is True if the
+        result is detected as a metadata-fetching task, and `followed_gid` is
+        the GID of the actual download task if available, or None otherwise.
+    """
+    metadata = False
+    if (
+        isinstance(files := result.get("files"), list)
+        and len(files) == 1
+        and isinstance(files[0], str)
+        and files[0] == "[METADATA]"
+    ):
+        metadata = True
+
+    gid = None
+    if metadata and (
+        isinstance(ids := result.get("followed_by"), list)
+        and len(ids) == 1
+        and isinstance(ids[0], str)
+    ):
+        gid = ids[0]
+
+    logger.debug("Checked for followedBy: metadata=%s, gid=%s", metadata, gid)
+    return (metadata, gid)
 
 
 async def transfer_files(task: DownloadTask, files: list[str] | None):
