@@ -31,6 +31,7 @@ class MediaPathInfo:
     year: int | None = None
     season: int | None = None
     episode: int | None = None
+    series_id: str | None = None
 
     @property
     def item_dir(self) -> str:

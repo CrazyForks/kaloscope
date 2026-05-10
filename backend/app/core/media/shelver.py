@@ -216,18 +216,19 @@ async def update_metadata(
             "nfo_mtime": datetime.fromtimestamp(path.stat().st_mtime, tz=UTC),
             "nfo_source": meta.nfo_source,
             "unique_id": meta.unique_id,
-            "title": meta.title,
             "aired": meta.aired,
+            "rating": meta.rating,
             "poster": meta.poster,
             "backdrop": meta.backdrop,
-            "rating": meta.rating,
         }
         if (year := meta.year or _alternative("year")) is not None:
             data["year"] = year
         if (season := meta.season or _alternative("season")) is not None:
             data["season"] = season
-        if (episode := meta.episode or _alternative("episode")) is not None:
+        if (episode := meta.episode) is not None:
             data["episode"] = episode
+        if title := meta.title:
+            data["title"] = title
 
         # match the media item by library, directory and name
         await MediaItem.filter(

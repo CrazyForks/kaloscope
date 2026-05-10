@@ -9,7 +9,7 @@ from app.core.media.handlers.base import (
     MediaMeta,
     MediaPathInfo,
 )
-from app.models.media import LibType, MediaLib, NFOType
+from app.models.media import LibType, MediaItem, MediaLib, NFOType
 from app.services.media import MediaItemService
 from app.utils.extractor import (
     extract_episode,
@@ -131,7 +131,7 @@ class TVShowMediaHandler(MediaHandler):
             return info
 
         # helper function to create child media path info
-        def _child(path: Path, *, parent: MediaPathInfo) -> MediaPathInfo:
+        def _child(path: Path, *, parent: MediaItem) -> MediaPathInfo:
             info = MediaPathInfo(path)
             if info.item_name != (dir := Path(info.item_dir)).name:
                 info.nfo_path = dir / f"{info.item_name}.nfo"
@@ -142,6 +142,7 @@ class TVShowMediaHandler(MediaHandler):
             info.year = parent.year
             info.season = parent.season
             info.episode = extract_episode(info.item_name)
+            info.series_id = parent.unique_id
             return info
 
         dir = Path(lib.dir)
@@ -168,7 +169,8 @@ class TVShowMediaHandler(MediaHandler):
         parent_item = await MediaItemService.create(lib.id, path_info=parent_info)
         result.append(parent_info)
         # create child item for the file
-        child_info = _child(path, parent=parent_info)
+        parent_item.title = parent_item.title or parent_info.title
+        child_info = _child(path, parent=parent_item)
         await MediaItemService.create(
             lib.id,
             path_info=child_info,
