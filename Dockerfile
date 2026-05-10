@@ -108,7 +108,7 @@ fi
 
 # start aria2 if enabled
 if [ "$ENABLE_ARIA2" = "true" ]; then
-  mkdir -p /workspace/aria2 /workspace/downloads
+  mkdir -p /workspace/aria2
   ARIA2_SESSION=/workspace/aria2/aria2.session
   touch "$ARIA2_SESSION"
   aria2c \
@@ -122,7 +122,6 @@ if [ "$ENABLE_ARIA2" = "true" ]; then
     --input-file="$ARIA2_SESSION" \
     --save-session="$ARIA2_SESSION" \
     --save-session-interval=60 \
-    --dir=/workspace/downloads \
     --daemon
 fi
 
