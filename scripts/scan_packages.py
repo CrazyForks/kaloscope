@@ -115,13 +115,13 @@ def generate_table(packages: list[Package], title: str) -> list[str]:
         "|---------|---------|---------|-------------|",
     ]
     for pkg in pkgs:
-        name = pkg.name
-        repo = pkg.repository
-        display_name = f"[{name}]({repo})" if repo else name
+        repo = pkg.repository.removeprefix("git+") if pkg.repository else None
+        name = f"[{pkg.name}]({repo})" if repo else pkg.name
         version = pkg.version or "-"
         license = pkg.license or "Unknown"
+        # escape pipes in description to avoid breaking table structure
         description = (pkg.description or "-").replace("|", "\\|")
-        rows.append(f"| {display_name} | {version} | {license} | {description} |")
+        rows.append(f"| {name} | {version} | {license} | {description} |")
     rows.append("")
     return rows
 
