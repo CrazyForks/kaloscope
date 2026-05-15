@@ -11,7 +11,7 @@ repos:
       - id: trailing-whitespace
       - id: check-added-large-files
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.15.1
+    rev: v4.16.2
     hooks:
       - id: commitizen
         stages: [commit-msg]
@@ -26,7 +26,7 @@ repos:
       - id: poetry-install
         args: [-C, ./backend]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.12
+    rev: v0.15.13
     hooks:
       - id: ruff-check
         args: [--fix]
@@ -38,7 +38,7 @@ repos:
         additional_dependencies:
           - prettier@3.8.3
           # https://github.com/sveltejs/prettier-plugin-svelte/issues/155#issuecomment-1932256171
-          - prettier-plugin-svelte@3.5.1
+          - prettier-plugin-svelte@3.5.2
           # https://github.com/tailwindlabs/prettier-plugin-tailwindcss/issues/228#issuecomment-1920361470
           - prettier-plugin-tailwindcss@0.8.0
         args: [--config, ./frontend/.prettierrc, --ignore-path, ./frontend/.prettierignore, --write, ./frontend]

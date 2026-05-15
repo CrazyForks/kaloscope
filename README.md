@@ -11,7 +11,7 @@ _以可视化工作流驱动的本地媒体库管理工具_
 [![Docker Pulls](https://img.shields.io/docker/pulls/kaloscope/kaloscope?logo=docker&label=Docker%20Pulls&color=2496ED)](https://hub.docker.com/r/kaloscope/kaloscope)
 [![GPLv3 License](https://img.shields.io/badge/License-GPLv3-BD0000)](LICENSE)
 [![xyflow Version](https://img.shields.io/badge/xyflow-v1.5.2-1A192B?logo=xyflow)](https://xyflow.com/)
-[![Svelte Version](https://img.shields.io/badge/Svelte-v5.55.5-FF3E00?logo=svelte)](https://svelte.dev/)
+[![Svelte Version](https://img.shields.io/badge/Svelte-v5.55.7-FF3E00?logo=svelte)](https://svelte.dev/)
 [![Sanic Version](https://img.shields.io/badge/Sanic-v25.12.0-FF0D68?logo=sanic)](https://sanic.dev/)
 [![Python Version](https://img.shields.io/badge/Python-3.13+-3776AB?logo=python)](https://www.python.org/)
 [![Telegram Group](https://img.shields.io/badge/Telegram-696969?logo=telegram)](https://t.me/kaloscope_official)
