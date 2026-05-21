@@ -163,7 +163,7 @@
     {:else if rsrc.category}
       <Badge class="line-clamp-2 w-18 text-center">{rsrc.category}</Badge>
     {/if}
-    <div class="flex w-full flex-col gap-4">
+    <div class="flex w-full flex-col gap-3">
       <div class={detailsConfig ? 'transition-colors group-hover:text-primary' : ''}>
         <span class="text-sm">{rsrc.title}</span>
         {#if rsrc.misc}
