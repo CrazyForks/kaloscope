@@ -17,7 +17,7 @@ dependencies = [
   "jinja2 (>=3.1.6,<4.0.0)",
   "orjson (>=3.11.9,<4.0.0)",
   "jsonpath-ng (>=1.8.0,<2.0.0)",
-  "lxml (>=6.1.0,<7.0.0)",
+  "lxml (>=6.1.1,<7.0.0)",
   "lxml-stubs (>=0.5.1,<0.6.0)",
   "pyyaml (>=6.0.3,<7.0.0)",
   "stpyv8 (>=13.1.201.22,<14.0.0.0)",
@@ -35,7 +35,7 @@ package-mode = false
 packages = [{ include = "app" }]
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.15.13"
+ruff = "^0.15.14"
 pytest = "^9.0.3"
 pre-commit = "^4.6.0"
 commitizen = "^4.16.2"

@@ -26,7 +26,7 @@ repos:
       - id: poetry-install
         args: [-C, ./backend]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.13
+    rev: v0.15.14
     hooks:
       - id: ruff-check
         args: [--fix]
@@ -38,7 +38,7 @@ repos:
         additional_dependencies:
           - prettier@3.8.3
           # https://github.com/sveltejs/prettier-plugin-svelte/issues/155#issuecomment-1932256171
-          - prettier-plugin-svelte@3.5.2
+          - prettier-plugin-svelte@4.0.1
           # https://github.com/tailwindlabs/prettier-plugin-tailwindcss/issues/228#issuecomment-1920361470
           - prettier-plugin-tailwindcss@0.8.0
         args: [--config, ./frontend/.prettierrc, --ignore-path, ./frontend/.prettierignore, --write, ./frontend]
