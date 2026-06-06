@@ -13,7 +13,8 @@
 
 <div class="flex items-center justify-between gap-4 pr-1 text-xs opacity-50 {_class}">
   {#if up || at}
-    <span>{up ? `UP: ${up}` : ''}{up && at ? ' ・ ' : ''}{at}</span>
+    {@const info = [up && `UP: ${up}`, at].filter(Boolean).join(' ・ ')}
+    <span class="line-clamp-2" title={info}>{info}</span>
   {/if}
   {#if extra}
     <span class="italic">{extra}</span>
