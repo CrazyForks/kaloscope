@@ -37,7 +37,7 @@ RUN echo "deb http://deb.debian.org/debian trixie non-free non-free-firmware" >>
 # - libnss3-tools:          required by mkcert to install CA certificates
 # - media-types:            required to guess MIME types of files based on their extensions
 # - ffmpeg:                 used to transcode videos for streaming
-# - intel-media-va-driver:  Intel iHD VA-API driver for GPU hardware video acceleration
+# - intel-media-va-driver:  Intel iHD VA-API driver for GPU hardware video acceleration (amd64 only)
 RUN apt-get update && apt-get install -y --no-install-recommends \
   git \
   libxml2 \
@@ -48,7 +48,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libnss3-tools \
   media-types \
   ffmpeg \
-  intel-media-va-driver \
+  && dpkg --print-architecture | grep -q '^amd64$' \
+  && apt-get install -y --no-install-recommends intel-media-va-driver || true \
   && rm -rf /var/lib/apt/lists/*
 
 # download and install mkcert
