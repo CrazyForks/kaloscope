@@ -311,11 +311,13 @@
               title={item.keyword}
             >
               <div class="flex min-w-0 flex-col gap-1">
-                <span class="truncate text-sm font-medium">{item.keyword}</span>
-                <div class="flex items-center gap-2 text-xs opacity-50">
-                  <span>{item.graph?.name ?? $_('nav.websearch.global.search')}</span>
-                  <span>·</span>
-                  <span>{$dateTime(item.updated_at)}</span>
+                <span class="truncate text-sm font-medium">
+                  {item.keyword}
+                </span>
+                <div class="flex min-w-0 items-center gap-2 text-xs">
+                  <span class="truncate opacity-70">{item.graph?.name ?? $_('nav.websearch.global.search')}</span>
+                  <span class="shrink-0 opacity-50">·</span>
+                  <span class="shrink-0 opacity-50">{$dateTime(item.updated_at)}</span>
                 </div>
               </div>
             </div>
@@ -341,6 +343,8 @@
       <div class="divider mt-0 mb-1"></div>
       <ul class="list mx-2 max-h-96 overflow-y-auto rounded-box bg-base-100 shadow-sm">
         {#each watches as item (item.id)}
+          {@const media = item.media}
+          {@const parent = media?.parent}
           <li class="list-row relative items-center rounded-none pt-2 pb-2.5 hover:bg-base-200">
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <div
@@ -348,12 +352,23 @@
               role="button"
               class="list-col-grow flex min-w-0 cursor-pointer items-center gap-3"
               onclick={() => playMedia(item)}
-              title={mediaTitle(item.media)}
+              title={parent?.title ?? parent?.name ?? mediaTitle(media)}
             >
-              <Image proxy="store" src={item.media?.parent?.poster ?? item.media?.poster} width="3rem" ratio="2/3" />
+              <Image proxy="store" src={parent?.poster ?? media?.poster} width="3rem" ratio="2/3" />
               <div class="flex min-w-0 flex-col gap-1">
-                <span class="truncate text-sm font-medium">{mediaTitle(item.media)}</span>
-                <span class="text-xs opacity-50">{$dateTime(item.updated_at)}</span>
+                {#if parent}
+                  <span class="truncate text-sm font-medium">
+                    {parent.title ?? parent.name}
+                  </span>
+                  <div class="flex min-w-0 items-center gap-2 text-xs">
+                    <span class="truncate opacity-70">{mediaTitle(media)}</span>
+                    <span class="shrink-0 opacity-50">·</span>
+                    <span class="shrink-0 opacity-50">{$dateTime(item.updated_at)}</span>
+                  </div>
+                {:else}
+                  <span class="truncate text-sm font-medium">{mediaTitle(media)}</span>
+                  <span class="text-xs opacity-50">{$dateTime(item.updated_at)}</span>
+                {/if}
               </div>
             </div>
             <Button
