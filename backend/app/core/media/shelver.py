@@ -12,6 +12,7 @@ from app.core.flow.context import RETVAL_KEY, Context
 from app.core.media.handlers.base import MediaMeta, get_handler
 from app.core.renderer import render
 from app.models.media import LibType, MediaItem, MediaLib, NFOType
+from app.utils.extractor import extract_title
 
 # the path to the NFO templates
 TEMPLATES_PATH = Path(__file__).resolve().parents[3] / "static/templates"
@@ -190,14 +191,14 @@ def parse_nfo(lib_type: LibType, path: Path | str) -> MediaMeta | None:
 
 
 async def update_metadata(
-    lib: MediaLib, path: Path | str, *, alternative: dict | None = None
+    lib: MediaLib, path: Path | str, *, fallback: dict | None = None
 ):
     """Update the metadata of the media item corresponding to the given NFO file.
 
     Args:
         lib: The media library instance.
         path: The path to the NFO file.
-        alternative: An alternative metadata dictionary.
+        fallback: The fallback metadata dictionary.
     """
     # parse the NFO file to get the metadata
     if not isinstance(path, Path):
@@ -206,14 +207,14 @@ async def update_metadata(
 
     # update the media item in the database
     if meta is not None:
-        # helper function to get the value from the alternative metadata
-        def _alternative(key: str) -> Any:
+        # helper function to get the value from the fallback metadata
+        def _fallback(key: str) -> Any:
             value = None
             if hasattr(meta, key):
                 value = getattr(meta, key)
             if value is not None:
                 return value
-            return alternative.get(key) if alternative else None
+            return fallback.get(key) if fallback else None
 
         # prepare the data to update the media item
         data = {
@@ -226,14 +227,18 @@ async def update_metadata(
             "poster": meta.poster,
             "backdrop": meta.backdrop,
         }
-        if (year := _alternative("year")) is not None:
+        if (year := _fallback("year")) is not None:
             data["year"] = year
-        if (season := _alternative("season")) is not None:
+        if (season := _fallback("season")) is not None:
             data["season"] = season
         if (episode := meta.episode) is not None:
             data["episode"] = episode
+
+        # extract title from the filename if not provided
         if title := meta.title:
             data["title"] = title
+        else:
+            data["title"] = extract_title(path.stem)
 
         # match the media item by library, directory and name
         await MediaItem.filter(

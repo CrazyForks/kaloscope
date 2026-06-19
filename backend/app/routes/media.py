@@ -177,7 +177,7 @@ async def generate_nfo(_, body: MediaMetadata, id: int) -> HTTPResponse:
     nfo_type = get_nfo_type(lib.lib_type)
     nfo_path = item.nfo_path or get_nfo_path(item.path)
     if await gen_nfo(nfo_type, nfo_path, body.metadata, overwrite=True):
-        await update_metadata(lib, nfo_path, alternative=body.metadata)
+        await update_metadata(lib, nfo_path, fallback=body.metadata)
     # also update the metadata of the child episodes if it's a TV show
     if lib.lib_type == LibType.TV_SHOW:
         await MediaItemService.refresh_episodes(item, body)
