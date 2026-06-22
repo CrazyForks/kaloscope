@@ -52,6 +52,5 @@
     oninput={() => {
       reportValidity();
       updateNodeData(field.nodeId, { [field.id]: data });
-    }}
-  ></textarea>
+    }}></textarea>
 </fieldset>

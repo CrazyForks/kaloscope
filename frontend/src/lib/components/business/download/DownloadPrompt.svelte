@@ -272,8 +272,7 @@
         class="textarea w-full"
         name="link"
         bind:value={link}
-        disabled={files && files.length > 0}
-      ></textarea>
+        disabled={files && files.length > 0}></textarea>
       <input type="file" accept=".torrent" class="file-input w-full file-input-sm" name="torrent" bind:files />
       <label class="mt-2 fieldset-label w-fit">
         <input type="checkbox" class="checkbox checkbox-sm" checked={true} name="start" />

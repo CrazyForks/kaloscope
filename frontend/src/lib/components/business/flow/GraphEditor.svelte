@@ -144,8 +144,7 @@
         placeholder={$_('field.description')}
         class="textarea w-full"
         bind:value={description}
-        {...schema.description}
-      ></textarea>
+        {...schema.description}></textarea>
     </fieldset>
     <div class="modal-action">
       <button type="button" class="btn" onclick={() => modal.close()}>
