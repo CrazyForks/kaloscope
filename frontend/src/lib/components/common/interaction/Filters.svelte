@@ -239,7 +239,7 @@
           <input
             type="radio"
             class="radio radio-sm"
-            name={value}
+            name={key}
             checked={values[key] === value}
             onclick={() => {
               if (values[key] === value) {
@@ -265,7 +265,7 @@
           <input
             type="checkbox"
             class="checkbox checkbox-sm"
-            name={value}
+            name={key}
             checked={values[key]?.includes(value)}
             onclick={() => {
               const selected = (values[key] ?? []) as string[];
