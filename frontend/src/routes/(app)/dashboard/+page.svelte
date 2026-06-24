@@ -91,6 +91,11 @@
   let searches: SearchHistory[] = $state([]);
   let showWatches = $derived($user?.preferences?.recent_watches ?? false);
   let showSearches = $derived($user?.preferences?.recent_searches ?? false);
+  let hasWatchHistory = $derived(showWatches && watches.length > 0);
+  let hasSearchHistory = $derived(showSearches && searches.length > 0);
+  let hasBothHistories = $derived(hasWatchHistory && hasSearchHistory);
+  const historyDeleteClass =
+    'absolute top-0 right-0 flex h-8 w-8 items-start justify-end rounded-bl-full bg-base-content/5 pt-1 pr-1 text-base-content/45 opacity-0 transition-all group-hover:opacity-70 hover:bg-error/15 hover:text-error hover:opacity-100 focus-visible:bg-error/15 focus-visible:text-error focus-visible:opacity-100 focus-visible:outline-none';
 
   // the player instance and playing state
   let player: VideoPlayer | null = $state(null);
@@ -291,100 +296,129 @@
 </script>
 
 <Container padding="1rem 0" maxWidth="max(150vh,72rem)">
-  <!-- recent searches -->
-  {#if showSearches && searches.length > 0}
-    <div class="mb-10" transition:fade={{ duration: 200 }}>
-      <div class="flex h-8 items-center justify-between px-4">
-        <span class="text-xl font-bold opacity-80">{$_('preference.dashboard.search')}</span>
-        <Button icon={icons.clear} iconClass="opacity-80" onclick={() => deleteAllHistories('search')} />
-      </div>
-      <div class="divider mt-0 mb-1"></div>
-      <ul class="list mx-2 max-h-96 overflow-y-auto rounded-box bg-base-100 shadow-sm">
-        {#each searches as item (item.id)}
-          <li class="list-row items-center rounded-none hover:bg-base-200">
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <div
-              tabindex="0"
-              role="button"
-              class="list-col-grow min-w-0 cursor-pointer"
-              onclick={() => gotoSearch(item)}
-              title={item.keyword}
-            >
-              <div class="flex min-w-0 flex-col gap-1">
-                <span class="truncate text-sm font-medium">
-                  {item.keyword}
-                </span>
-                <div class="flex min-w-0 items-center gap-2 text-xs">
-                  <span class="truncate opacity-70">{item.graph?.name ?? $_('nav.websearch.global.search')}</span>
-                  <span class="shrink-0 opacity-50">·</span>
-                  <span class="shrink-0 opacity-50">{$dateTime(item.updated_at)}</span>
-                </div>
-              </div>
-            </div>
+  <!-- recent histories -->
+  {#if hasSearchHistory || hasWatchHistory}
+    <div class="mb-10 grid gap-4 {hasBothHistories ? 'xl:grid-cols-2' : ''}" transition:fade={{ duration: 200 }}>
+      <!-- recent searches -->
+      {#if hasSearchHistory}
+        <section class="min-w-0">
+          <div class="flex h-8 items-center justify-between px-2">
+            <span class="text-xl font-bold opacity-80">{$_('preference.dashboard.search')}</span>
             <Button
-              icon={icons.dismiss}
-              onclick={() => deleteHistory(item.id, 'search')}
-              class="btn-circle"
-              iconClass="opacity-50"
+              icon={icons.clear}
+              text={$_('action.clear', $_('preference.dashboard.search'))}
+              iconClass="opacity-80"
+              onclick={() => deleteAllHistories('search')}
             />
-          </li>
-        {/each}
-      </ul>
-    </div>
-  {/if}
-
-  <!-- recent watches -->
-  {#if showWatches && watches.length > 0}
-    <div class="mb-10" transition:fade={{ duration: 200 }}>
-      <div class="flex h-8 items-center justify-between px-4">
-        <span class="text-xl font-bold opacity-80">{$_('preference.dashboard.watch')}</span>
-        <Button icon={icons.clear} iconClass="opacity-80" onclick={() => deleteAllHistories('video')} />
-      </div>
-      <div class="divider mt-0 mb-1"></div>
-      <ul class="list mx-2 max-h-96 overflow-y-auto rounded-box bg-base-100 shadow-sm">
-        {#each watches as item (item.id)}
-          {@const media = item.media}
-          {@const parent = media?.parent}
-          <li class="list-row relative items-center rounded-none pt-2 pb-2.5 hover:bg-base-200">
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <div
-              tabindex="0"
-              role="button"
-              class="list-col-grow flex min-w-0 cursor-pointer items-center gap-3"
-              onclick={() => playMedia(item)}
-              title={parent?.title ?? parent?.name ?? mediaTitle(media)}
-            >
-              <Image proxy="store" src={parent?.poster ?? media?.poster} width="3rem" ratio="2/3" />
-              <div class="flex min-w-0 flex-col gap-1">
-                {#if parent}
-                  <span class="truncate text-sm font-medium">
-                    {parent.title ?? parent.name}
-                  </span>
-                  <div class="flex min-w-0 items-center gap-2 text-xs">
-                    <span class="truncate opacity-70">{mediaTitle(media)}</span>
-                    <span class="shrink-0 opacity-50">·</span>
-                    <span class="shrink-0 opacity-50">{$dateTime(item.updated_at)}</span>
+          </div>
+          <div class="divider mt-0 mb-1"></div>
+          <ul
+            class="grid max-h-96 grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-2 overflow-y-auto px-2 py-1"
+          >
+            {#each searches as item (item.id)}
+              <li
+                class="group relative min-w-0 overflow-hidden rounded-lg bg-base-100 p-3 pr-10 shadow-sm transition-colors hover:bg-base-200"
+              >
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <div
+                  tabindex="0"
+                  role="button"
+                  class="min-w-0 cursor-pointer rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  onclick={() => gotoSearch(item)}
+                  title={item.keyword}
+                >
+                  <div class="flex min-w-0 flex-col gap-1">
+                    <span class="truncate text-sm font-medium">
+                      {item.keyword}
+                    </span>
+                    <div class="flex min-w-0 items-center gap-2 text-xs">
+                      <span class="truncate opacity-70">{item.graph?.name ?? $_('nav.websearch.global.search')}</span>
+                      <span class="shrink-0 opacity-50">·</span>
+                      <span class="shrink-0 opacity-50">{$dateTime(item.updated_at)}</span>
+                    </div>
                   </div>
-                {:else}
-                  <span class="truncate text-sm font-medium">{mediaTitle(media)}</span>
-                  <span class="text-xs opacity-50">{$dateTime(item.updated_at)}</span>
-                {/if}
-              </div>
-            </div>
+                </div>
+                <button
+                  type="button"
+                  class={historyDeleteClass}
+                  title={$_('action.delete', $_('preference.history.search'))}
+                  aria-label={$_('action.delete', $_('preference.history.search'))}
+                  onclick={() => deleteHistory(item.id, 'search')}
+                >
+                  <iconify-icon icon={icons.dismiss} width="1rem"></iconify-icon>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/if}
+
+      <!-- recent watches -->
+      {#if hasWatchHistory}
+        <section class="min-w-0">
+          <div class="flex h-8 items-center justify-between px-2">
+            <span class="text-xl font-bold opacity-80">{$_('preference.dashboard.watch')}</span>
             <Button
-              icon={icons.dismiss}
-              onclick={() => deleteHistory(item.id, 'video')}
-              class="btn-circle"
-              iconClass="opacity-50"
+              icon={icons.clear}
+              text={$_('action.clear', $_('preference.dashboard.watch'))}
+              iconClass="opacity-80"
+              onclick={() => deleteAllHistories('video')}
             />
-            {#if item.percentage !== null}
-              <div class="absolute bottom-0 left-0 h-0.5 w-full bg-base-200">
-                <div class="h-full bg-primary/50" style="width: {item.percentage}%"></div>
-              </div>
-            {/if}
-          </li>
-        {/each}
-      </ul>
+          </div>
+          <div class="divider mt-0 mb-1"></div>
+          <ul
+            class="grid max-h-96 grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] gap-2 overflow-y-auto px-2 py-1"
+          >
+            {#each watches as item (item.id)}
+              {@const media = item.media}
+              {@const parent = media?.parent}
+              <li
+                class="group relative min-w-0 overflow-hidden rounded-lg bg-base-100 p-2 pr-10 pb-2.5 shadow-sm transition-colors hover:bg-base-200"
+              >
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <div
+                  tabindex="0"
+                  role="button"
+                  class="flex min-w-0 cursor-pointer items-center gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  onclick={() => playMedia(item)}
+                  title={parent?.title ?? parent?.name ?? mediaTitle(media)}
+                >
+                  <Image proxy="store" src={parent?.poster ?? media?.poster} width="3rem" ratio="2/3" />
+                  <div class="flex min-w-0 flex-col gap-1">
+                    {#if parent}
+                      <span class="truncate text-sm font-medium">
+                        {parent.title ?? parent.name}
+                      </span>
+                      <div class="flex min-w-0 items-center gap-2 text-xs">
+                        <span class="truncate opacity-70">{mediaTitle(media)}</span>
+                        <span class="shrink-0 opacity-50">·</span>
+                        <span class="shrink-0 opacity-50">{$dateTime(item.updated_at)}</span>
+                      </div>
+                    {:else}
+                      <span class="truncate text-sm font-medium">{mediaTitle(media)}</span>
+                      <span class="text-xs opacity-50">{$dateTime(item.updated_at)}</span>
+                    {/if}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class={historyDeleteClass}
+                  title={$_('action.delete', $_('preference.history.watch'))}
+                  aria-label={$_('action.delete', $_('preference.history.watch'))}
+                  onclick={() => deleteHistory(item.id, 'video')}
+                >
+                  <iconify-icon icon={icons.dismiss} width="1rem"></iconify-icon>
+                </button>
+                {#if item.percentage !== null}
+                  <div class="absolute bottom-0 left-0 h-0.5 w-full bg-base-200">
+                    <div class="h-full bg-primary/50" style="width: {item.percentage}%"></div>
+                  </div>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/if}
     </div>
   {/if}
 
