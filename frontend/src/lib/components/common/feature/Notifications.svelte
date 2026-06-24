@@ -23,6 +23,13 @@
   import { Modal } from '$lib/components';
   import { _, dateTime, number } from '$lib/i18n';
   import { icons } from '$lib/icons';
+  import {
+    collectServiceWorkerNotifications,
+    createNotificationDispatchState,
+    SERVICE_WORKER_NOTIFICATIONS_MESSAGE,
+    type ServiceWorkerNotificationMessage,
+    type ServiceWorkerNotificationPayload
+  } from '$lib/notifications';
   import { token } from '$lib/stores';
   import { onMount } from 'svelte';
 
@@ -30,6 +37,7 @@
 
   // the modal dialog for the notifications center
   let modal: Modal;
+  const notificationDispatchState = createNotificationDispatchState();
 
   // show the notifications center
   export const showModal = () => {
@@ -44,9 +52,43 @@
       .get('notification/list')
       .json<Resp<Notification[]>>()
       .then(({ data }) => {
+        const systemNotifications = collectServiceWorkerNotifications(
+          data,
+          notificationDispatchState,
+          (notification) => ({
+            title: title(notification),
+            body: content(notification)
+          })
+        );
         notifications = data;
+        sendServiceWorkerNotifications(systemNotifications);
         onrefresh?.(unread);
       });
+  }
+
+  /**
+   * Send newly received notifications to the service worker for system display.
+   *
+   * @param notifications - The notifications to show via the service worker.
+   */
+  async function sendServiceWorkerNotifications(notifications: ServiceWorkerNotificationPayload[]) {
+    if (
+      notifications.length === 0 ||
+      !('Notification' in window) ||
+      window.Notification.permission !== 'granted' ||
+      !('serviceWorker' in navigator)
+    ) {
+      return;
+    }
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      registration.active?.postMessage({
+        type: SERVICE_WORKER_NOTIFICATIONS_MESSAGE,
+        notifications
+      } satisfies ServiceWorkerNotificationMessage);
+    } catch {
+      return;
+    }
   }
 
   /**
