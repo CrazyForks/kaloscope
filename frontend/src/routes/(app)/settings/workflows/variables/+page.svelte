@@ -112,7 +112,11 @@
     <Cell>
       <iconify-icon icon={variable.encrypted ? icons.lockClosed : icons.lockOpen} width="1.25rem" class="opacity-70">
       </iconify-icon>
-      <div class="truncate" title={variable.encrypted ? undefined : variable.value}>
+      <div
+        class="truncate"
+        class:text-clip={variable.encrypted}
+        title={variable.encrypted ? undefined : variable.value}
+      >
         {variable.encrypted ? '•'.repeat(variable.value_length) : variable.value}
       </div>
     </Cell>
