@@ -1,3 +1,5 @@
+"""JSON serialization and parsing utilities."""
+
 import decimal
 import re
 from functools import partial

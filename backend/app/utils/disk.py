@@ -1,3 +1,5 @@
+"""Disk usage and filesystem cleanup utilities."""
+
 import shutil
 from dataclasses import dataclass
 from pathlib import Path

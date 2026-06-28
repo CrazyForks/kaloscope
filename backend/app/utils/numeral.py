@@ -1,3 +1,5 @@
+"""Chinese numeral conversion utilities."""
+
 _DIGITS: dict[str, int] = {
     "零": 0,
     "一": 1,

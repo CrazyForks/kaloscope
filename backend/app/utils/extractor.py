@@ -1,3 +1,5 @@
+"""Media filename metadata extraction utilities."""
+
 import re
 
 from app.utils.numeral import cn_to_int

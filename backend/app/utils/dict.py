@@ -1,3 +1,5 @@
+"""Dictionary helper utilities."""
+
 from collections.abc import Callable
 from multiprocessing.managers import DictProxy
 

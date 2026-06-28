@@ -1,3 +1,5 @@
+"""Password hashing and lightweight encoding utilities."""
+
 import base64
 import hashlib
 

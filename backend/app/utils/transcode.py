@@ -1,3 +1,5 @@
+"""Media probing and HLS transcoding utilities."""
+
 import asyncio
 import contextlib
 import math

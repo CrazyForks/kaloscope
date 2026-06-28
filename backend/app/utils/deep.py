@@ -1,3 +1,5 @@
+"""Recursive data structure utilities."""
+
 from collections.abc import Mapping, MutableMapping
 from typing import Any, Literal
 

@@ -1,3 +1,5 @@
+"""BitTorrent link and torrent metadata utilities."""
+
 import base64
 import contextlib
 import re

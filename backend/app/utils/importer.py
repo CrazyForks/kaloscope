@@ -1,3 +1,5 @@
+"""Dynamic import and blueprint registration utilities."""
+
 import importlib
 import inspect
 import os

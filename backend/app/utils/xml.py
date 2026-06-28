@@ -1,3 +1,5 @@
+"""XML element parsing utilities."""
+
 from decimal import Decimal
 
 from lxml import etree
