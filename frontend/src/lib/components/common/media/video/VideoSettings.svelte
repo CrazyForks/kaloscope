@@ -709,7 +709,7 @@
               {/if}
               <Button
                 icon={icons.delete}
-                text={$_('action.delete')}
+                text={$_('action.delete', $_('media.danmaku.cache'))}
                 class={btnClass}
                 onclick={() => deleteLocalDanmakus()}
               />
