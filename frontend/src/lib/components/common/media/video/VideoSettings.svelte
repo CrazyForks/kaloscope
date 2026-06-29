@@ -522,7 +522,7 @@
   bind:this={modal}
   class="video-settings {rotateFullscreen ? 'inset-0 left-full h-dvw w-dvh origin-top-left rotate-90' : ''}"
   boxClass="bg-[hsla(0,0%,10%,0.9)] backdrop-blur-sm {rotateFullscreen ? '' : 'auto-margin-bottom'}"
-  cornerClass="text-white/80 [&>button]:hover:bg-white/80"
+  cornerClass="[&>button]:not-hover:text-white/50 [&>button]:hover:bg-white/80"
 >
   <div class="tabs-border tabs">
     <!-- The video settings tab. -->
