@@ -550,7 +550,7 @@
         >
           {#each Object.entries(playbackRates) as [text, rate] (rate)}
             <button
-              class="btn join-item {playbackRate === rate ? 'btn-active' : ''}"
+              class="btn join-item {playbackRate === rate ? 'btn-active' : 'hover:brightness-125'}"
               onclick={() => changePlaybackRate(rate)}
             >
               {text}
@@ -566,7 +566,7 @@
         >
           {#each rotateDegrees as degree (degree)}
             <button
-              class="btn join-item {rotateDegree === degree ? 'btn-active' : ''}"
+              class="btn join-item {rotateDegree === degree ? 'btn-active' : 'hover:brightness-125'}"
               onclick={() => changeRotateDegree(degree)}
             >
               {degree}°
@@ -837,7 +837,9 @@
 {#snippet danmakuBlock(mode: DanmakuMode, icon: IconifyIcon)}
   {@const blocked = $danmaku?.blocks.includes(mode)}
   <button
-    class="flex-col-center cursor-pointer transition-all {blocked ? 'text-white/80' : 'text-white/20'}"
+    class="flex-col-center cursor-pointer transition-all {blocked
+      ? 'text-white/80'
+      : 'text-white/20 hover:text-white/50'}"
     onclick={() => {
       if ($danmaku !== null && danmakuPlugin !== null) {
         if (blocked) {
