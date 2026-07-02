@@ -327,6 +327,49 @@ class TestExtractTitle:
         )
         assert result == "Raise wa Tanin ga Ii"
 
+    def test_title_with_collection_episode_range_and_specials(self):
+        result = extract_title(
+            "[7³ACG] 龙与虎/Toradora! S01 | 01-25+SPx6 "
+            "[简繁字幕] BDrip 1080p x265 OPUS 2.0"
+        )
+        assert result == "龙与虎/Toradora!"
+
+    def test_title_with_chinese_collection_episode_range(self):
+        result = extract_title(
+            "[Alice Raw][アニメ] 一疊間漫畫咖啡廳日常 "
+            "一畳間まんきつ暮らし！ 第01-11話 (3840x2160 x265 AAC)"
+        )
+        assert result == "一疊間漫畫咖啡廳日常 一畳間まんきつ暮らし！"
+
+    def test_title_with_bracketed_collection_range(self):
+        result = extract_title(
+            "[LoliHouse] 最强的职业不是勇者也不是贤者好像是鉴定士(暂定)的样子？ / "
+            "Kanteishi (Kari) [01-12 合集][WebRip 1080p HEVC-10bit AAC]"
+            "[无中字][Fin]"
+        )
+        assert (
+            result == "最强的职业不是勇者也不是贤者好像是鉴定士(暂定)的样子？ / "
+            "Kanteishi (Kari)"
+        )
+
+    def test_title_with_bracketed_wave_collection_range(self):
+        result = extract_title(
+            "[晚街与灯][命运-奇异赝品_Fate strange Fake][合集][00~13]"
+            "[BDRip][1080P_HEVC-10bit_FLAC][简繁日双语外挂PGS]"
+        )
+        assert result == "命运 奇异赝品 Fate strange Fake"
+
+    def test_title_with_dash_wave_collection_range_and_total(self):
+        result = extract_title(
+            "[晚街与灯][Re：从零开始的异世界生活 第四季丧失篇合集 / "
+            "Re:Zero kara Hajimeru Isekai Seikatsu 4th - 01~11]"
+            "[总第67~77][WEB-DL Remux][1080P_AVC_AAC][简繁日内封PGS]"
+        )
+        assert (
+            result == "Re：从零开始的异世界生活 丧失篇合集 / "
+            "Re:Zero kara Hajimeru Isekai Seikatsu"
+        )
+
     def test_title_keeps_subtitle_tag_prefix_words(self):
         result = extract_title("Some.简繁字幕组.2024.1080p.WEB-DL")
         assert result == "Some 简繁字幕组"

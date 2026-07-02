@@ -86,10 +86,24 @@ _EPISODE_PATTERN = re.compile(
     re.VERBOSE,
 )
 
-# trailing collection range pattern, e.g. "| 01-12"
+# collection range pattern, e.g. "| 01-12", "[01-12 合集]", "第01-11話"
 _COLLECTION_RANGE_PATTERN = re.compile(
-    r"\s*\|\s*(?!0*(?:19|20)\d{2}\b)0*\d{1,4}\s*-\s*"
-    r"(?!0*(?:19|20)\d{2}\b)0*\d{1,4}\s*$"
+    r"""
+    (?:
+        \s*\|\s*(?!0*(?:19|20)\d{2}\b)0*\d{1,4}\s*[-~～]\s*
+        (?!0*(?:19|20)\d{2}\b)0*\d{1,4}(?:\+[Ss][Pp]x\d+)?(?=\s*(?:[\[\(]|$))
+        | \s*第\s*0*\d{1,4}\s*[-~～]\s*0*\d{1,4}\s*[集话話回](?=\s*(?:[\[\(]|$))
+        | \s*[\[\(【]\s*合集\s*[\]\)】]\s*[\[\(【]\s*
+          0*\d{1,4}\s*[~～]\s*0*\d{1,4}\s*[\]\)】]
+        | \s*[\[\(【]\s*0*\d{1,4}\s*[-~～]\s*0*\d{1,4}
+          (?:\s*合集)?\s*[\]\)】]
+        | \s*[\[\(【]\s*[总總]第\s*0*\d{1,4}\s*[-~～]\s*
+          0*\d{1,4}\s*[\]\)】]
+        | \s+(?:\d{1,3}(?:[Ss][Tt]|[Nn][Dd]|[Rr][Dd]|[Tt][Hh])\s*)?
+          -\s*0*\d{1,4}\s*[~～]\s*0*\d{1,4}(?=\]\s*(?:[\[\(【]|$))
+    )
+    """,
+    re.VERBOSE,
 )
 
 # pattern to match common video tags and everything after them
@@ -207,10 +221,13 @@ def extract_title(name: str) -> str:
     # remove standalone year token before video tags
     title = _YEAR_PATTERN.sub(" ", title)
 
+    # remove collection episode ranges before technical tags truncate context
+    title = _COLLECTION_RANGE_PATTERN.sub(" ", title)
+
     # remove trailing technical tags and everything after them
     title = _VIDEO_TAGS_PATTERN.sub("", title)
 
-    # remove trailing collection episode ranges
+    # remove any collection episode ranges exposed by technical tag cleanup
     title = _COLLECTION_RANGE_PATTERN.sub(" ", title)
 
     # remove season and episode markers
