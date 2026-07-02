@@ -249,6 +249,17 @@ class TestExtractTitle:
         )
         assert result == "花样少年少女"
 
+    def test_title_with_viutv_source(self):
+        result = extract_title(
+            "Re：從零開始的異世界生活 第四季 / "
+            "Re：Zero kara Hajimeru Isekai Seikatsu 4th Season - 11 "
+            "[ViuTV][WEB-DL][CHT][1080p][AVC AAC]"
+        )
+        assert (
+            result
+            == "Re：從零開始的異世界生活 / Re：Zero kara Hajimeru Isekai Seikatsu"
+        )
+
     def test_title_with_cr_source(self):
         result = extract_title("LV999的村民 - 02 [CR WebRip AI2160p NVENC AAC]")
         assert result == "LV999的村民"

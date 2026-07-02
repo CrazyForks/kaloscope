@@ -68,7 +68,7 @@ _VIDEO_TAGS_PATTERN = re.compile(
         | WEB-DL | WEBRip | WEBDL | WEB
         | DVDRip | DVD
         | HD(?:TV|CAM)?
-        | AMZN | NF | DSNP | HMAX | ATVP | IQIYI | B-Global\s+Donghua
+        | AMZN | NF | DSNP | HMAX | ATVP | IQIYI | ViuTV | B-Global\s+Donghua
         | (?-i:CR) | (?-i:iT)
         # encoding
         | [Hh]\.?26[45] | HEVC | AVC | x26[45] | xvid | divx
