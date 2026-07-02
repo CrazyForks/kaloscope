@@ -142,6 +142,7 @@ _VIDEO_TAGS_PATTERN = re.compile(
         | [Ss]ub(?:bed)?
         # misc
         | PROPER | REPACK | REMUX | EXTENDED | THEATRICAL | DIRECTORS\.CUT
+        | Pre-Air
         | [Ss]eason\s*\d+
     )
     (?=[\.\s\]\)\-_]|$)  # tag must be complete, not a word prefix

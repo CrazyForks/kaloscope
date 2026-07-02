@@ -276,6 +276,13 @@ class TestExtractTitle:
         )
         assert result == "LV999的村民 / Lv999 no Murabito"
 
+    def test_title_with_pre_air_release_tag(self):
+        result = extract_title(
+            "[Prejudice-Studio] 与你相恋至生命尽头 Kimi ga Shinu made Koi wo Shitai "
+            "- 01 [Pre-Air][WebRip 1080P AVC 8bit AAC MKV][简繁日内封][V2]"
+        )
+        assert result == "与你相恋至生命尽头 Kimi ga Shinu made Koi wo Shitai"
+
     def test_title_with_leading_language_prefix(self):
         result = extract_title(
             "[jibaketa合成&音頻壓制][代理商粵語]咒術迴戰 第三季 / "
