@@ -289,6 +289,13 @@ class TestExtractTitle:
         )
         assert result == "杖與劍的魔劍譚 / Tsue to Tsurugi no Wistoria"
 
+    def test_title_with_split_bracket_title(self):
+        result = extract_title(
+            "【TSDM字幕组】[淡岛百景][Awajima Hyakkei][11]"
+            "[HEVC-10bit 1080p AAC][MKV][简繁日内封字幕]淡島百景"
+        )
+        assert result == "淡岛百景 Awajima Hyakkei"
+
     def test_title_with_gb_subtitle_tag(self):
         result = extract_title("[Group][Anime Title][10][GB][1080P][MP4]")
         assert result == "Anime Title"

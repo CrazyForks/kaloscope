@@ -27,6 +27,9 @@ _LEADING_META_PREFIX_PATTERN = re.compile(
 # pattern to match leading seasonal broadcast markers like ★04月新番★
 _LEADING_BROADCAST_MARKER_PATTERN = re.compile(r"^[★☆]\s*\d{1,2}\s*月\s*新番\s*[★☆]\s*")
 
+# pattern to merge adjacent bracketed title segments, e.g. [中文][English]
+_BRACKET_BOUNDARY_PATTERN = re.compile(r"[\]\)】]\s*[\[\(【]")
+
 # year pattern: a 4-digit year between 1900 and 2099, excluding dimensions
 _YEAR_PATTERN = re.compile(
     r"(?<![\dxX])[\(\[（]?(?P<year>(?:19|20)\d{2})"
@@ -197,6 +200,7 @@ def extract_title(name: str) -> str:
 
     # replace common separators with spaces and collapse whitespace
     title = _SEPARATOR_PATTERN.sub(" ", title).strip()
+    title = _BRACKET_BOUNDARY_PATTERN.sub(" ", title).strip()
 
     # unwrap a single surrounding bracket pair left after stripping the prefix
     title = re.sub(r"^[\[\(【](.*?)[\]\)】]$", r"\1", title).strip()
