@@ -17,7 +17,7 @@ _YEAR_PATTERN = re.compile(r"(?<!\d)(19|20)\d{2}(?!\d)")
 _SEASON_PATTERN = re.compile(
     r"""
     (?:
-        [Ss]eason\s*(\d{1,3})
+        [Ss]eason[._\-\s]*(\d{1,3})
         | (?<![A-Za-z0-9])[Ss](\d{1,3})(?:[Ee]\d{1,4}|\b)
         | 第\s*(\d{1,3})\s*季
         | 第\s*([零一二三四五六七八九十百千]+)\s*季

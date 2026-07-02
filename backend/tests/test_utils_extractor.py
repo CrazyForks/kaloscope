@@ -51,6 +51,9 @@ class TestExtractSeason:
     def test_season_word_format(self):
         assert extract_season("The Crown Season 4 Complete") == 4
 
+    def test_season_word_with_dot_separator(self):
+        assert extract_season("The.Crown.Season.4.Complete") == 4
+
     def test_season_one_digit(self):
         assert extract_season("[SubGroup] Naruto S1E01") == 1
 
