@@ -501,6 +501,13 @@ class TestExtractTitle:
         result = extract_title("Show - 02 - 1080p")
         assert result == "Show"
 
+    def test_ep_end_subtitle(self):
+        result = extract_title(
+            "女神「异世界转生想成为什么」我「勇者的肋骨」 - EP12 END "
+            "[简／繁] (1080p H.264 AAC DDP SRTx2)"
+        )
+        assert result == "女神「异世界转生想成为什么」我「勇者的肋骨」"
+
     def test_resolution_dimensions(self):
         result = extract_title("Reborn.as.a.Cat.1920x1080.HEVC")
         assert result == "Reborn as a Cat"
