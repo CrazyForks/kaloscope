@@ -57,6 +57,9 @@ class TestExtractSeason:
     def test_season_word_with_dot_separator(self):
         assert extract_season("The.Crown.Season.4.Complete") == 4
 
+    def test_ordinal_season_word_format(self):
+        assert extract_season("Re Zero kara Hajimeru Isekai Seikatsu 4th Season") == 4
+
     def test_season_one_digit(self):
         assert extract_season("[SubGroup] Naruto S1E01") == 1
 
@@ -184,6 +187,10 @@ class TestExtractTitle:
         result = extract_title("The Crown Season 4 Complete 1080p WEB-DL")
         assert "the crown" in result.lower()
 
+    def test_tv_show_ordinal_season_word(self):
+        result = extract_title("Show Title 4th Season - 01 [1080p]")
+        assert result == "Show Title"
+
     def test_tv_show_chinese_episode(self):
         result = extract_title("庆余年 第2季 第03集 WEB-DL 1080P H264")
         assert "庆余年" in result
@@ -209,8 +216,7 @@ class TestExtractTitle:
             "[10 - 总第76][WEB-DL Remux][1080P_AVC_AAC][简繁日内封PGS]"
         )
         assert (
-            result == "Re：从零开始的异世界生活 / "
-            "Re:Zero kara Hajimeru Isekai Seikatsu 4th Season"
+            result == "Re：从零开始的异世界生活 / Re:Zero kara Hajimeru Isekai Seikatsu"
         )
 
     # --- Edge cases ---
