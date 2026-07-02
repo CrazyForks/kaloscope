@@ -281,6 +281,14 @@ class TestExtractTitle:
         )
         assert result == "咒術迴戰 / Jujutsu Kaisen"
 
+    def test_title_with_anime_broadcast_marker(self):
+        result = extract_title(
+            "【喵萌奶茶屋】★04月新番★"
+            "[杖與劍的魔劍譚 / Tsue to Tsurugi no Wistoria]"
+            "[24][1080p][繁日雙語]"
+        )
+        assert result == "杖與劍的魔劍譚 / Tsue to Tsurugi no Wistoria"
+
     def test_title_with_gb_subtitle_tag(self):
         result = extract_title("[Group][Anime Title][10][GB][1080P][MP4]")
         assert result == "Anime Title"
