@@ -69,6 +69,9 @@ class TestExtractSeason:
     def test_chinese_season_number_1(self):
         assert extract_season("某某动漫.第一季.全集") == 1
 
+    def test_chinese_season_period_number_2(self):
+        assert extract_season("某某动漫.第二期.全集") == 2
+
     def test_chinese_season_number_21(self):
         assert extract_season("[某某动漫] [第二十一季]") == 21
 
@@ -201,6 +204,17 @@ class TestExtractTitle:
     def test_title_keeps_tag_prefix_words(self):
         result = extract_title("Some.Webster.BDrive.2024.1080p.WEB-DL")
         assert result == "Some Webster BDrive"
+
+    def test_title_with_chinese_season_period(self):
+        result = extract_title(
+            "[绿茶字幕组] 关于邻家的天使大人不知不觉把我惯成了废人这件事 "
+            "第二期 / Otonari no Tenshi-sama ni Itsunomanika Dame Ningen ni "
+            "Sareteita Ken S2 [12][WebRip][1080p][简日内嵌]"
+        )
+        assert (
+            result == "关于邻家的天使大人不知不觉把我惯成了废人这件事 / "
+            "Otonari no Tenshi sama ni Itsunomanika Dame Ningen ni Sareteita Ken"
+        )
 
     def test_title_with_resolution_dimensions(self):
         result = extract_title("Reborn.as.a.Cat.1920x1080.HEVC")

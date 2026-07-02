@@ -16,14 +16,14 @@ _YEAR_PATTERN = re.compile(
     r"(?!\d|[xX]\d{3,4})[\)\]）]?"
 )
 
-# season pattern: S01, S01E01, s1, Season 1, 第1季, 第二季 etc.
+# season pattern: S01, S01E01, s1, Season 1, 第1季, 第二季, 第二期 etc.
 _SEASON_PATTERN = re.compile(
     r"""
     (?:
         [Ss]eason[._\-\s]*(\d{1,3})
         | (?<![A-Za-z0-9])[Ss](\d{1,3})(?:[Ee]\d{1,4}|\b)
-        | 第\s*(\d{1,3})\s*季
-        | 第\s*([零一二三四五六七八九十百千]+)\s*季
+        | 第\s*(\d{1,3})\s*[季期]
+        | 第\s*([零一二三四五六七八九十百千]+)\s*[季期]
     )
     """,
     re.VERBOSE,
