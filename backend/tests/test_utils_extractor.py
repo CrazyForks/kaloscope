@@ -119,6 +119,9 @@ class TestExtractEpisode:
     def test_movie_year_is_not_episode(self):
         assert extract_episode("Movie.2023") is None
 
+    def test_bracketed_movie_year_is_not_episode(self):
+        assert extract_episode("Movie.Title.[2023]") is None
+
 
 class TestExtractTitle:
     # --- Movies ---
