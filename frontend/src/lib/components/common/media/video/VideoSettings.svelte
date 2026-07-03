@@ -657,7 +657,9 @@
     <div class="video-settings-header">
       <div class="video-settings-tabs tabs-border tabs">
         {@render tabLabel('video', icons.videoFill, $_('media.video.settings'))}
-        {@render tabLabel('subtitle', icons.subtitlesFilled, $_('media.xgplayer.texttrack'))}
+        {#if localMedia}
+          {@render tabLabel('subtitle', icons.subtitlesFilled, $_('media.xgplayer.texttrack'))}
+        {/if}
         {@render tabLabel('danmaku', icons.danmakuFill, $_('media.danmaku.settings'))}
         {#if localMedia}
           {@render tabLabel('match', icons.boxMultipleSearchFilled, $_('media.danmaku.match'))}
@@ -761,88 +763,93 @@
     </div>
 
     <!-- The subtitle settings tab. -->
-    <div class="video-settings-content" hidden={tabId !== 'subtitle'}>
-      {#if $subtitle !== null}
-        <div>
-          {@render optionLabel($_('media.subtitle.auto_show'))}
-          <input
-            type="checkbox"
-            class="toggle"
-            bind:checked={$subtitle.autoShow}
-            onchange={() => applySubtitleSettings(true)}
-          />
-        </div>
-        <div>
-          {@render optionLabel($_('media.subtitle.language_preference'), $_('media.subtitle.language_preference_tip'))}
-          <input
-            class="input subtitle-setting-field"
-            bind:value={$subtitle.languagePreference}
-            placeholder={$_('media.subtitle.language_preference_placeholder')}
-            disabled={!$subtitle.autoShow}
-            onchange={() => applySubtitleSettings(true)}
-          />
-        </div>
-        <div>
-          {@render optionLabel($_('media.subtitle.display_mode'))}
-          <Select
-            native={!rotateFullscreen}
-            options={[
-              { value: 'stroke', label: 'media.subtitle.display_mode_options.stroke' },
-              { value: 'bg', label: 'media.subtitle.display_mode_options.bg' }
-            ]}
-            bind:value={$subtitle.displayMode}
-            onchange={() => applySubtitleSettings()}
-            class="dropdown-top [&_p]:max-h-32!"
-          />
-        </div>
-        <div>
-          {@render optionLabel($_('media.subtitle.time_offset'))}
-          <label class="input subtitle-setting-field subtitle-time-offset-field">
+    {#if localMedia}
+      <div class="video-settings-content" hidden={tabId !== 'subtitle'}>
+        {#if $subtitle !== null}
+          <div>
+            {@render optionLabel($_('media.subtitle.auto_show'))}
             <input
-              type="number"
-              min="-3600"
-              max="3600"
-              step="0.1"
-              bind:value={$subtitle.timeOffset}
-              onchange={() => {
-                if ($subtitle !== null) {
-                  const value = Number($subtitle.timeOffset);
-                  const roundedValue = Math.round(value * 10) / 10;
-                  $subtitle.timeOffset = Number.isFinite(value) ? Math.max(-3600, Math.min(3600, roundedValue)) : 0;
-                  applySubtitleSettings();
-                }
-              }}
+              type="checkbox"
+              class="toggle"
+              bind:checked={$subtitle.autoShow}
+              onchange={() => applySubtitleSettings(true)}
             />
-            <span class="subtitle-time-offset-unit">s</span>
-          </label>
-        </div>
-        <div>
-          {@render optionLabel($_('media.subtitle.font_scale'))}
-          <Range
-            bind:value={$subtitle.fontScale}
-            min={50}
-            max={200}
-            step={5}
-            class="pt-2"
-            textClass="text-white/80"
-            sliderClass="range-primary"
-            onchange={() => applySubtitleSettings()}
-          />
-        </div>
-        <div>
-          {@render optionLabel($_('media.subtitle.vertical_position'))}
-          <Range
-            bind:value={$subtitle.verticalPosition}
-            min={0}
-            max={15}
-            class="pt-2"
-            textClass="text-white/80"
-            sliderClass="range-primary"
-            onchange={() => applySubtitleSettings()}
-          />
-        </div>
-      {/if}
-    </div>
+          </div>
+          <div>
+            {@render optionLabel(
+              $_('media.subtitle.language_preference'),
+              $_('media.subtitle.language_preference_tip')
+            )}
+            <input
+              class="input subtitle-setting-field"
+              bind:value={$subtitle.languagePreference}
+              placeholder={$_('media.subtitle.language_preference_placeholder')}
+              disabled={!$subtitle.autoShow}
+              onchange={() => applySubtitleSettings(true)}
+            />
+          </div>
+          <div>
+            {@render optionLabel($_('media.subtitle.display_mode'))}
+            <Select
+              native={!rotateFullscreen}
+              options={[
+                { value: 'stroke', label: 'media.subtitle.display_mode_options.stroke' },
+                { value: 'bg', label: 'media.subtitle.display_mode_options.bg' }
+              ]}
+              bind:value={$subtitle.displayMode}
+              onchange={() => applySubtitleSettings()}
+              class="dropdown-top [&_p]:max-h-32!"
+            />
+          </div>
+          <div>
+            {@render optionLabel($_('media.subtitle.time_offset'))}
+            <label class="input subtitle-setting-field subtitle-time-offset-field">
+              <input
+                type="number"
+                min="-3600"
+                max="3600"
+                step="0.1"
+                bind:value={$subtitle.timeOffset}
+                onchange={() => {
+                  if ($subtitle !== null) {
+                    const value = Number($subtitle.timeOffset);
+                    const roundedValue = Math.round(value * 10) / 10;
+                    $subtitle.timeOffset = Number.isFinite(value) ? Math.max(-3600, Math.min(3600, roundedValue)) : 0;
+                    applySubtitleSettings();
+                  }
+                }}
+              />
+              <span class="subtitle-time-offset-unit">s</span>
+            </label>
+          </div>
+          <div>
+            {@render optionLabel($_('media.subtitle.font_scale'))}
+            <Range
+              bind:value={$subtitle.fontScale}
+              min={50}
+              max={200}
+              step={5}
+              class="pt-2"
+              textClass="text-white/80"
+              sliderClass="range-primary"
+              onchange={() => applySubtitleSettings()}
+            />
+          </div>
+          <div>
+            {@render optionLabel($_('media.subtitle.vertical_position'))}
+            <Range
+              bind:value={$subtitle.verticalPosition}
+              min={0}
+              max={15}
+              class="pt-2"
+              textClass="text-white/80"
+              sliderClass="range-primary"
+              onchange={() => applySubtitleSettings()}
+            />
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     <!-- The danmaku settings tab. -->
     <div class="video-settings-content" hidden={tabId !== 'danmaku'}>
