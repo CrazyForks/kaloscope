@@ -150,7 +150,7 @@ class LibWatcher:
         """Start the watcher."""
         libs = await MediaLib.all()
         for lib in libs:
-            await self.add_observer(lib, delay_scan=True)
+            await self.add_observer(lib, startup=True)
         self._app.add_task(self._listener(), name=self._LISTENER)
 
     async def shutdown(self):
@@ -179,12 +179,12 @@ class LibWatcher:
                 logger.error("Failed to process the watcher action!", exc_info=True)
                 await asyncio.sleep(5)
 
-    async def add_observer(self, lib: MediaLib, *, delay_scan: bool = False):
+    async def add_observer(self, lib: MediaLib, *, startup: bool = False):
         """Add a directory observer to monitor the specified path.
 
         Args:
             lib: The media library that will be monitored.
-            delay_scan: Whether to delay the initial full scan.
+            startup: Whether the observer is being added during application startup.
         """
         if self._watcher_lock.acquire(block=False):
             try:
@@ -199,15 +199,12 @@ class LibWatcher:
                     self._observers[path] = (observer, events)
                     # create a task to consume events
                     self._app.add_task(self._event_consumer(events), name=encrypt(path))
-                    # scan the directory for existing files
-                    scan_task = (
-                        self._startup_scan(lib)
-                        if delay_scan
-                        else self.scan_directory(
-                            lib, backfill_nfo_events=False, validate_request=True
+                    # schedule the initial scan for existing files
+                    self._app.add_task(
+                        self._delay_scan(
+                            lib, delay=self._STARTUP_SCAN_DELAY if startup else 0
                         )
                     )
-                    self._app.add_task(scan_task)
                     self._observing_paths.append(path)
             finally:
                 self._watcher_lock.release()
@@ -270,13 +267,15 @@ class LibWatcher:
                 logger.error("Failed to consume the media event!", exc_info=True)
                 await asyncio.sleep(1)
 
-    async def _startup_scan(self, lib: MediaLib):
-        """Delay startup scans until after Sanic workers acknowledge startup.
+    async def _delay_scan(self, lib: MediaLib, *, delay: int = 0):
+        """Run the initial scan after an optional delay.
 
         Args:
             lib: The media library instance.
+            delay: Seconds to wait before scanning.
         """
-        await asyncio.sleep(self._STARTUP_SCAN_DELAY)
+        if delay > 0:
+            await asyncio.sleep(delay)
         await self.scan_directory(lib, backfill_nfo_events=False, validate_request=True)
 
     async def scan_directory(
