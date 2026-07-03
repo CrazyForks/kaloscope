@@ -727,14 +727,14 @@ idna = ">=2.0.0"
 
 [[package]]
 name = "filelock"
-version = "3.29.4"
+version = "3.29.5"
 description = "A platform independent file lock."
 optional = false
 python-versions = ">=3.10"
 groups = ["main", "dev"]
 files = [
-    {file = "filelock-3.29.4-py3-none-any.whl", hash = "sha256:dac1648087d5115554850d113e7dd8c83ab2d38e3435dde2d4f163847e57b767"},
-    {file = "filelock-3.29.4.tar.gz", hash = "sha256:10cdb3656fc44541cdf30652a93fb10ec6b05325620eb316bd26893e4201538a"},
+    {file = "filelock-3.29.5-py3-none-any.whl", hash = "sha256:8af830889ba3a0ffcefbd6c7d2af8a54012058103771f2e10848222f476a1693"},
+    {file = "filelock-3.29.5.tar.gz", hash = "sha256:6e6034c57a00a020e767f2614a5539863f056de7e7991d6d1473aef7ff73f156"},
 ]
 
 [[package]]
@@ -1583,38 +1583,38 @@ files = [
 
 [[package]]
 name = "opencc"
-version = "1.3.2"
+version = "1.4.0"
 description = "Conversion between Traditional and Simplified Chinese"
 optional = false
 python-versions = "*"
 groups = ["main"]
 files = [
-    {file = "opencc-1.3.2-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:75c68ead542fb5409a07346b04b99a9c79944931891b41018ddbef0e2807ac60"},
-    {file = "opencc-1.3.2-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:da1f90c4af63b7ded502eb98cba65d80cac2d687e1f0cecded6e25b80314926a"},
-    {file = "opencc-1.3.2-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:4a443454f2d7ac0587f0dbc2e457e36378b52d2ac270fa9f4246d00fc1227aa6"},
-    {file = "opencc-1.3.2-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:8e735f0dfc1347654f82a72e7310201b60b25f50fea3e75d5b3b9b49b6bc9245"},
-    {file = "opencc-1.3.2-cp310-cp310-win_amd64.whl", hash = "sha256:221b576a02388ab1bca0b44f71db7a59871e2af676623a846b26bfb0ddb87c36"},
-    {file = "opencc-1.3.2-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:9c97d76632ae3c1599dcf1c1910a4aae75c8c0f1a50146af5fbb6ef26d8e20b6"},
-    {file = "opencc-1.3.2-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:00a24ac6c0a4a5a94cfba1d708cbbbd769e463601ef96a9b398777f802d776e1"},
-    {file = "opencc-1.3.2-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:817c2669f4d5a534f69f390a96cf46d69236f502fff02ffc2e8ff2ed03b12e2a"},
-    {file = "opencc-1.3.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:cdf881ebd191320464b07b805f160c76184d410aadf09f64613d90aba13f6d4d"},
-    {file = "opencc-1.3.2-cp311-cp311-win_amd64.whl", hash = "sha256:12234b9b40b065b06f8351765c7afa29c1ed9f234b98001db03986d6b3db0a3f"},
-    {file = "opencc-1.3.2-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:b87457d1189533aa84ebe5c9e19b568795d7b3c25d325ac487960dcf886eba69"},
-    {file = "opencc-1.3.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:b454577925dee76eb0e1d9eb3c74403b9158271512e42e73052627405e8c3678"},
-    {file = "opencc-1.3.2-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:0432557734cb8ebfc50a6a36f64cf5a43d2ca698f016af6caf95143d30d2efe2"},
-    {file = "opencc-1.3.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:4fd4abe481129f386222215afb26aaf77eb5ffe03bb9906b8a44f11a7457aa7b"},
-    {file = "opencc-1.3.2-cp312-cp312-win_amd64.whl", hash = "sha256:069122e330b84d3b11aa5e35add75f0be0cd5104bad436326f5c84df8a6be959"},
-    {file = "opencc-1.3.2-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:d817b31a55020958c2fd7ad7b9a6eb11d5eb2c57b983b35000254b3e8504432a"},
-    {file = "opencc-1.3.2-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:bcde70b8e0b3968a57c4d21a3787b03eba426301a38ee914b051479224c865cd"},
-    {file = "opencc-1.3.2-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:0cf82f1af2fa5e5db96afb523ea016d90bb8edeafa34f2ded32b6d794632ff58"},
-    {file = "opencc-1.3.2-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:0aba96ac0d688672e87fe8896e42b1dc0e7cacf0b84e1b407adab1a7ed74833d"},
-    {file = "opencc-1.3.2-cp313-cp313-win_amd64.whl", hash = "sha256:99258bba81cf2487aa450e6d430fa290501c798558d7389cdb3d2280af387e18"},
-    {file = "opencc-1.3.2-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:3de3af6a47c87f4ddeb8b1b3db1de7a6325406a7b6a13796512bc3e51eccdac7"},
-    {file = "opencc-1.3.2-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:61840160635c065fbf9695e57b4dc3245915899f2623214b57649c3947108e27"},
-    {file = "opencc-1.3.2-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:9caf449e9881c227b84f8bb67edda428104ce247e8fb2b7bc0f758211cfa980e"},
-    {file = "opencc-1.3.2-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:e9365658b33e939210cff2c6d3d7d46e0730ac84f2beba29cd19c83b00b089aa"},
-    {file = "opencc-1.3.2-cp314-cp314-win_amd64.whl", hash = "sha256:2af35449ccc4658fa2e8b179553aae72108ab86ac5e4d678317adb2524a0128f"},
-    {file = "opencc-1.3.2.tar.gz", hash = "sha256:f6e41dfe1bbe2c3c4c3e42e441ff0b24c774681d375241b996ea62fe8f70038c"},
+    {file = "opencc-1.4.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:fac30a1ba3c2df8257220d69daa7b63dc4f5fff25172dd09f3c2527aec7fa452"},
+    {file = "opencc-1.4.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:513e7008cfe3255361d386d112513ce8769a476bf484d793336366a94116f7d2"},
+    {file = "opencc-1.4.0-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:2e069f4a6cdd9c4c359b9f1e159d8dfa67d2774f55e4d49218312fbcbfb1c756"},
+    {file = "opencc-1.4.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:d5fa239d0fe0c14a1fe1b92568682d22d6b6db330546ae6e826ade873334761a"},
+    {file = "opencc-1.4.0-cp310-cp310-win_amd64.whl", hash = "sha256:22edf7104d4a491d6b1309ba516272fa7683660e99c117a10488c6360a0df3fd"},
+    {file = "opencc-1.4.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:50066a6b7bfe5e7a42dd6aa3f873224ee6b490e02875d24e7bfa1e3e4b93e7bd"},
+    {file = "opencc-1.4.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:15325d2b00843bb67e6ba291dcada2b7f3539d203619807b761f94958e43e4e1"},
+    {file = "opencc-1.4.0-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:4607a4d39ddcde2f031b4713bd2f9e3a064b8c53fa05bb54584eff1ff85d024e"},
+    {file = "opencc-1.4.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:5207f12cae14111b977e6a25f26cc7b93149f2cbe93c730109b3232d4f771ab2"},
+    {file = "opencc-1.4.0-cp311-cp311-win_amd64.whl", hash = "sha256:edc04a9fc90e6140360dc67836c10309bef36ae167e96356bad6afe362a97986"},
+    {file = "opencc-1.4.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:aa74886178791555ca8c05b68f4957b4398945db9976f70ed090b0bcc0239e51"},
+    {file = "opencc-1.4.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:a3cfa42b829c648511b15a9a943047895148e1cb0b51975f2795eecddf52bc3a"},
+    {file = "opencc-1.4.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:a8f0fe04b57adbae80280963c5b2a0a85318d738bfcea1ded3ef1bac235fef43"},
+    {file = "opencc-1.4.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:bb996358e9d598b7e3ad38be50715a5c1e31e7ae8705c1b8a5ed8cf6c088aee7"},
+    {file = "opencc-1.4.0-cp312-cp312-win_amd64.whl", hash = "sha256:d14f447e27f817e3509849c09c4fe26babf60bafd29148a50b0c7f74f787cf89"},
+    {file = "opencc-1.4.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:02579132b1d0ffc01047de3b6165a15bef98af7302db1fd53b0bfbc6a995caaa"},
+    {file = "opencc-1.4.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:a2446c536788c08010152e8cd510c2302047b8efdd992c54f8dc93a01f7ac64d"},
+    {file = "opencc-1.4.0-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:cb15932cd7bd6246d327298c550cadaa82fc7d1a1d0c5b08d26c1f31cab311e1"},
+    {file = "opencc-1.4.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:6fe81f972060524c62ae020485dcc2f8777248baedf96163454291eb8d00455c"},
+    {file = "opencc-1.4.0-cp313-cp313-win_amd64.whl", hash = "sha256:69a8f384b42aedaae35ca22cb202763cb2b8347b4ee0060344e839f6c801e004"},
+    {file = "opencc-1.4.0-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:0e4201bd9a95dc1c7f88e946b2fe3b46537011bb3d75e3e9b52b98d65355af2c"},
+    {file = "opencc-1.4.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:bf278a1bf15b027e5e6d9e1d55154b72b8bd9ba3bef7df56a0ecbfd7e0c4b6d7"},
+    {file = "opencc-1.4.0-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:628838b1e875ef65141ff7ff70445b340f08e629f121592b948788f30431150c"},
+    {file = "opencc-1.4.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:114e451f923345cb4807d76b50d96d9f5af2faf99c371af4c05b122a979f0ea9"},
+    {file = "opencc-1.4.0-cp314-cp314-win_amd64.whl", hash = "sha256:67bf6d13bfe2f633be5b998ae17ed1bb1b2431759980667883b900a64d1a4ad8"},
+    {file = "opencc-1.4.0.tar.gz", hash = "sha256:55657ef86e0b2972bb5c0ff4ef4a9aa9c520e112cf63b3fc81665822f02b2b69"},
 ]
 
 [[package]]
@@ -2043,14 +2043,14 @@ dev = ["argcomplete", "attrs (>=19.2)", "hypothesis (>=3.56)", "mock", "requests
 
 [[package]]
 name = "python-discovery"
-version = "1.4.2"
+version = "1.4.3"
 description = "Python interpreter discovery"
 optional = false
 python-versions = ">=3.8"
 groups = ["dev"]
 files = [
-    {file = "python_discovery-1.4.2-py3-none-any.whl", hash = "sha256:475803f53b7b2ed6e490e27373f9d8340f7d2eebf9acdaf645d7d714c97bb500"},
-    {file = "python_discovery-1.4.2.tar.gz", hash = "sha256:8f3746c4b4968d22afbb97d36e1a0e5b66e6c0f297290f2e95f05b9b8bf18690"},
+    {file = "python_discovery-1.4.3-py3-none-any.whl", hash = "sha256:b6e1e4a7d9e3f6948c39746ffe8218225162d738ba39d05ab1d2f6c1cac4878c"},
+    {file = "python_discovery-1.4.3.tar.gz", hash = "sha256:ad57d7045a862460d4a235986c33f13ed707d3aeb9153fa47eb7dfd0d4673289"},
 ]
 
 [package.dependencies]
@@ -2438,14 +2438,14 @@ nb = ["ipykernel (>=6.29.5)", "ipywidgets (>=8.1.8)", "jupyter (>=1.1.1)", "jupy
 
 [[package]]
 name = "typing-extensions"
-version = "4.15.0"
+version = "4.16.0"
 description = "Backported and Experimental Type Hints for Python 3.9+"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "typing_extensions-4.15.0-py3-none-any.whl", hash = "sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548"},
-    {file = "typing_extensions-4.15.0.tar.gz", hash = "sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466"},
+    {file = "typing_extensions-4.16.0-py3-none-any.whl", hash = "sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"},
+    {file = "typing_extensions-4.16.0.tar.gz", hash = "sha256:dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5"},
 ]
 
 [[package]]
@@ -3051,4 +3051,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<4.0"
-content-hash = "d1fa1963a8ebb87aa33b520aa1cffe11e9141d1b8a2884def245b0a18bd2041f"
+content-hash = "0e8ce58cdb7f829f1c58a32300fe5cab3b3b6f615dfc3f7d151d32468f946cc3"
