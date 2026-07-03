@@ -199,7 +199,7 @@
       <input
         type="checkbox"
         class="toggle toggle-sm"
-        checked={rule.secure_dns}
+        checked={rule.secure_dns && rule.resolver_ids?.length > 0}
         onchange={() => toggle(rule, 'secure_dns')}
         disabled={rule.resolver_ids?.length === 0}
       />
@@ -208,7 +208,7 @@
       <input
         type="checkbox"
         class="toggle toggle-sm"
-        checked={rule.http_proxy}
+        checked={rule.http_proxy && rule.proxy_id !== null}
         onchange={() => toggle(rule, 'http_proxy')}
         disabled={rule.proxy_id === null}
       />
