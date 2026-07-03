@@ -203,7 +203,9 @@ class LibWatcher:
                     scan_task = (
                         self._startup_scan(lib)
                         if delay_scan
-                        else self.scan_directory(lib, nfo=False, valid=True)
+                        else self.scan_directory(
+                            lib, backfill_nfo_events=False, validate_request=True
+                        )
                     )
                     self._app.add_task(scan_task)
                     self._observing_paths.append(path)
@@ -275,17 +277,21 @@ class LibWatcher:
             lib: The media library instance.
         """
         await asyncio.sleep(self._STARTUP_SCAN_DELAY)
-        await self.scan_directory(lib, nfo=False, valid=True)
+        await self.scan_directory(lib, backfill_nfo_events=False, validate_request=True)
 
     async def scan_directory(
-        self, target: MediaLib | str, *, nfo: bool = True, valid: bool = False
+        self,
+        target: MediaLib | str,
+        *,
+        backfill_nfo_events: bool = True,
+        validate_request: bool = False,
     ):
         """Scan the directory for existing files and create events.
 
         Args:
             target: The media library instance or the directory path to scan.
-            nfo: Whether to create events for missing NFO files.
-            valid: Whether to validate the scanning request.
+            backfill_nfo_events: Whether to create events for missing NFO files.
+            validate_request: Whether to validate the scanning request.
         """
         lib = None
         if isinstance(target, MediaLib):
@@ -294,7 +300,7 @@ class LibWatcher:
         else:
             path = target
 
-        if valid:
+        if validate_request:
             # check if the path is already being scanned
             if self.is_scanning(path):
                 raise KaloscopeException(ErrorCode.SCAN_IN_PROGRESS)
@@ -308,16 +314,16 @@ class LibWatcher:
         try:
             if lib is None:
                 lib = await MediaLib.filter(dir=path).get()
-            await self._enqueue_events(lib, nfo=nfo)
+            await self._enqueue_events(lib, backfill_nfo_events=backfill_nfo_events)
         finally:
             self._scanning_paths.remove(path)
 
-    async def _enqueue_events(self, lib: MediaLib, *, nfo: bool = True):
+    async def _enqueue_events(self, lib: MediaLib, *, backfill_nfo_events: bool = True):
         """Scan the directory for existing files and enqueue events.
 
         Args:
             lib: The media library instance.
-            nfo: Whether to create events for missing NFO files.
+            backfill_nfo_events: Whether to create events for missing NFO files.
         """
         logger.info(f"Scanning directory: {Colors.GREEN}%s{Colors.END}", lib.dir)
         _, events = self._observers[lib.dir]
@@ -383,7 +389,7 @@ class LibWatcher:
                             nfo_path = Path(media_item.nfo_path)
                             if not nfo_path.exists():
                                 nfo_events.append(FileDeletedEvent(media_item.nfo_path))
-                        elif nfo:
+                        elif backfill_nfo_events:
                             # trigger the ingest workflows to generate the NFO file
                             await _create_media_event(sys_event)
 

@@ -105,7 +105,7 @@ async def scan_library(request: Request, id: int) -> HTTPResponse:
     """Scan the media library."""
     lib = await MediaLib.get(id=id)
     watcher: LibWatcher = request.app.ctx.lib_watcher
-    await watcher.scan_directory(lib, valid=True)
+    await watcher.scan_directory(lib, validate_request=True)
     return empty()
 
 
