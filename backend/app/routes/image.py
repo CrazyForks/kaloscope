@@ -66,7 +66,7 @@ async def proxy_remote_image(
     if not (http or https):
         return empty(status=404)
 
-    url, headers = remote_proxy_request(url, query.referer, request.headers)
+    url, headers = remote_proxy_request(url, query.referer, query.ua, request.headers)
     client: httpx.AsyncClient = request.app.ctx.httpx
 
     async def _stream(stream):

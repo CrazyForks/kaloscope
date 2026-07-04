@@ -298,7 +298,9 @@ async def proxy_remote_media(
     request: Request, query: RemoteProxy
 ) -> HTTPResponse | ResponseStream:
     """Proxy a remote media stream from the given URL."""
-    url, headers = remote_proxy_request(query.url, query.referer, request.headers)
+    url, headers = remote_proxy_request(
+        query.url, query.referer, query.ua, request.headers
+    )
     client: httpx.AsyncClient = request.app.ctx.httpx
 
     async def _stream(stream):

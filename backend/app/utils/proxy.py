@@ -34,16 +34,21 @@ class RemoteProxy(BaseModel):
     url: str = Field(min_length=1)
     store: bool = False
     referer: str | None = None
+    ua: str | None = None
 
 
 def remote_proxy_request(
-    url: str, referer: str | None, request_headers: Mapping[str, str]
+    url: str,
+    referer: str | None,
+    user_agent: str | None = None,
+    request_headers: Mapping[str, str] | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Build the upstream URL and headers for a remote proxy request.
 
     Args:
         url: The user-provided remote resource URL.
         referer: Optional referer override for the upstream request.
+        user_agent: Optional user agent override for the upstream request.
         request_headers: Incoming request headers to selectively forward.
 
     Returns:
@@ -71,11 +76,15 @@ def remote_proxy_request(
 
     # forward browser playback headers while dropping credentials and proxy-only headers
     dropped = SENSITIVE_REQUEST_HEADERS | {"host", "referer"}
+    if user_agent:
+        dropped |= {"user-agent"}
     headers = {
         str(key): str(value)
-        for key, value in request_headers.items()
+        for key, value in (request_headers or {}).items()
         if str(key).lower() not in dropped
     }
     headers["Host"] = parsed.netloc
     headers["Referer"] = referer or url
+    if user_agent:
+        headers["User-Agent"] = user_agent
     return url, headers
