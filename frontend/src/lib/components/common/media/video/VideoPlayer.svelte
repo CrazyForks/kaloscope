@@ -29,10 +29,6 @@
     startTime: number;
     /** The type of the video source, e.g., 'mp4', 'flv', 'hls', etc. */
     videoType: string;
-    /** A compatibility fallback URL for browsers that cannot play the primary source. */
-    fallbackUrl: string;
-    /** The type of the fallback video source. */
-    fallbackVideoType: string;
     /** The danmakus (video comments) to be displayed on the video. */
     danmakus: Danmaku[];
     /** The video chapters for TV shows or multi-part videos. */
@@ -296,13 +292,6 @@
     let videoType = options.videoType;
     let url = resolvePlaybackUrl(options.url, videoType);
     let definitions = extractDefinitions(options);
-
-    // use the fallback URL for dash streams on iOS devices
-    if (options.fallbackUrl && videoType?.toLowerCase() === 'dash' && (sniffer.isIos() || sniffer.isIpad())) {
-      url = options.fallbackUrl;
-      videoType = options.fallbackVideoType ?? 'mp4';
-      definitions = [];
-    }
 
     // reset the transcode auto-retry flag so a new video gets its own retry
     transcodeRetriedUrl = null;

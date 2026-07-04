@@ -632,8 +632,6 @@ export type Resource = Optional<{
   media_type: 'video' | 'audio' | 'image' | 'text';
   url: string;
   video_type: 'mp4' | 'flv' | 'hls' | 'dash';
-  fallback_url: string;
-  fallback_video_type: 'mp4' | 'flv' | 'hls';
   text: string | string[];
   images: string[];
   image_count: number;
