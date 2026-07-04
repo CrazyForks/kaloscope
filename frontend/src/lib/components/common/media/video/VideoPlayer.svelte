@@ -69,6 +69,32 @@
   }
 
   /**
+   * Resolves app-level video URL values into xgplayer URL values.
+   *
+   * @param url - The app-level video URL.
+   * @param videoType - The source video type.
+   * @returns A URL value xgplayer can consume.
+   */
+  function resolvePlaybackUrl(url: string, videoType?: string | null): string {
+    // dash sources are passed as inline MPD XML strings; normal URLs should stay untouched
+    if (videoType?.toLowerCase() === 'dash' && /^\s*(?:<\?xml[\s\S]*?)?<MPD[\s>]/i.test(url)) {
+      const origin = globalThis.location?.origin ?? '';
+      if (origin) {
+        // make app proxy paths absolute
+        url = url.replace(/(<BaseURL>)\/_api\//g, `$1${origin}/_api/`);
+      }
+      // encode as UTF-8 first so btoa can safely handle non-Latin XML content
+      const bytes = new TextEncoder().encode(url);
+      let binary = '';
+      for (const byte of bytes) {
+        binary += String.fromCharCode(byte);
+      }
+      return `data:application/dash+xml;base64,${btoa(binary)}`;
+    }
+    return url;
+  }
+
+  /**
    * Records the user's watch history when the player is destroyed.
    *
    * @param player - The player instance.
@@ -244,29 +270,6 @@
   };
 
   /**
-   * Resolves app-level video URL values into xgplayer URL values.
-   *
-   * @param url - The app-level video URL.
-   * @param videoType - The source video type.
-   * @returns A URL value xgplayer can consume.
-   */
-  function resolvePlaybackUrl(url: string, videoType?: string | null): string {
-    if (videoType?.toLowerCase() === 'dash' && /^\s*(?:<\?xml[\s\S]*?)?<MPD[\s>]/i.test(url)) {
-      const origin = globalThis.location?.origin ?? '';
-      if (origin) {
-        url = url.replace(/(<BaseURL>)\/_api\//g, `$1${origin}/_api/`);
-      }
-      const bytes = new TextEncoder().encode(url);
-      let binary = '';
-      for (const byte of bytes) {
-        binary += String.fromCharCode(byte);
-      }
-      return `data:application/dash+xml;base64,${btoa(binary)}`;
-    }
-    return url;
-  }
-
-  /**
    * The playback rates available for the player.
    *
    * https://h5player.bytedance.com/plugins/internalplugins/playbackrate.html#list
@@ -290,16 +293,16 @@
       return;
     }
 
-    let url = options.url;
     let videoType = options.videoType;
+    let url = resolvePlaybackUrl(options.url, videoType);
     let definitions = extractDefinitions(options);
-    if (options.fallbackUrl && options.videoType?.toLowerCase() === 'dash' && (sniffer.isIos() || sniffer.isIpad())) {
+
+    // use the fallback URL for dash streams on iOS devices
+    if (options.fallbackUrl && videoType?.toLowerCase() === 'dash' && (sniffer.isIos() || sniffer.isIpad())) {
       url = options.fallbackUrl;
       videoType = options.fallbackVideoType ?? 'mp4';
       definitions = [];
     }
-    url = resolvePlaybackUrl(url, videoType);
-    const chapters = extractChapters({ ...options, definitions });
 
     // reset the transcode auto-retry flag so a new video gets its own retry
     transcodeRetriedUrl = null;
@@ -355,7 +358,7 @@
       },
       chapters: {
         index: 99,
-        list: chapters,
+        list: extractChapters({ ...options, definitions }),
         chapterId: options.chapterId,
         chapterChange: options.chapterChange
       },
