@@ -64,8 +64,8 @@ def _parse_ass_dialogue(payload: str, fields: list[str]) -> _Cue | None:
     """Parse an ASS/SSA dialogue payload into a plain cue.
 
     Args:
-        payload: The dialogue payload after the ``Dialogue:`` marker.
-        fields: The normalized field names from the matching ``Format:`` line.
+        payload: The dialogue payload after the `Dialogue:` marker.
+        fields: The normalized field names from the matching `Format:` line.
 
     Returns:
         The parsed cue, or None if the dialogue cannot be converted.
