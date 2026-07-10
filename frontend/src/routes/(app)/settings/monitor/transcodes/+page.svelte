@@ -82,9 +82,7 @@
     confirm({
       icon: icons.delete,
       title:
-        ids.length > 1
-          ? $_('general.transcode.batch_delete_title', ids.length)
-          : $_('action.delete', $_('entity.transcode')),
+        ids.length > 1 ? $_('transcode.batch_delete_title', ids.length) : $_('action.delete', $_('entity.transcode')),
       onconfirm: () => deleteTasks(ids)
     });
   }
@@ -140,7 +138,7 @@
    * @param task - The transcode task to format.
    */
   function formatProgress(task: TranscodeTask): string {
-    const segments = $_('general.transcode.segments', task.encoded_segments);
+    const segments = $_('transcode.segments', task.encoded_segments);
     if (task.progress === null) {
       return segments;
     }
@@ -192,9 +190,9 @@
   {/snippet}
   {#snippet row(task)}
     {@const stateConfig = TranscodeState[task.state]}
-    {@const quality = task.quality ? $_(`general.transcode.quality.${task.quality}`) : null}
-    {@const resolution = task.resolution ? $_(`general.transcode.resolution.${task.resolution}`) : null}
-    {@const hwaccel = task.hwaccel ? $_(`general.transcode.hwaccel.${task.hwaccel}`) : 'CPU'}
+    {@const quality = task.quality ? $_(`transcode.quality.${task.quality}`) : null}
+    {@const resolution = task.resolution ? $_(`transcode.resolution.${task.resolution}`) : null}
+    {@const hwaccel = task.hwaccel ? $_(`transcode.hwaccel.${task.hwaccel}`) : 'CPU'}
     {@const deletable = deletableIds.has(task.id)}
     <Cell>
       <Checkbox key={task.id} disabled={!deletable} />

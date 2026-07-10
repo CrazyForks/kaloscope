@@ -8,7 +8,7 @@
 
   // hardware acceleration options supported by the backend
   const hwaccelOptions = [
-    { value: null, label: 'general.transcode.hwaccel.none' },
+    { value: null, label: 'transcode.hwaccel.none' },
     { value: 'qsv', label: 'Intel QuickSync (QSV)' },
     { value: 'vaapi', label: 'Video Acceleration API (VAAPI)' },
     { value: 'nvenc', label: 'Nvidia NVENC' },
@@ -17,9 +17,9 @@
 
   // quality options
   const qualityOptions = [
-    { value: 'low', label: 'general.transcode.quality.low' },
-    { value: 'medium', label: 'general.transcode.quality.medium' },
-    { value: 'high', label: 'general.transcode.quality.high' }
+    { value: 'low', label: 'transcode.quality.low' },
+    { value: 'medium', label: 'transcode.quality.medium' },
+    { value: 'high', label: 'transcode.quality.high' }
   ];
 
   // the loading state
@@ -68,10 +68,10 @@
 </script>
 
 <Container type="settings" loading={$loading}>
-  <Setting title={$_('general.ffmpeg.title')}>
+  <Setting title={$_('ffmpeg.title')}>
     <fieldset class="fieldset">
-      <Label tip={$_('general.ffmpeg.path.tip')}>
-        {$_('general.ffmpeg.path.title')}
+      <Label tip={$_('ffmpeg.path.tip')}>
+        {$_('ffmpeg.path.title')}
       </Label>
       <input
         type="text"
@@ -83,10 +83,10 @@
     </fieldset>
   </Setting>
 
-  <Setting title={$_('general.transcode.title')}>
+  <Setting title={$_('transcode.title')}>
     <fieldset class="fieldset grid-cols-2">
-      <Label class="my-2 justify-start" tipPlacement="right" tip={$_('general.transcode.auto.tip')}>
-        {$_('general.transcode.auto.title')}
+      <Label class="my-2 justify-start" tipPlacement="right" tip={$_('transcode.auto.tip')}>
+        {$_('transcode.auto.title')}
       </Label>
       <input
         type="checkbox"
@@ -96,8 +96,8 @@
       />
     </fieldset>
     <fieldset class="fieldset">
-      <Label tip={$_('general.transcode.quality.tip')}>
-        {$_('general.transcode.quality.title')}
+      <Label tip={$_('transcode.quality.tip')}>
+        {$_('transcode.quality.title')}
       </Label>
       <Select
         translate
@@ -108,8 +108,8 @@
       />
     </fieldset>
     <fieldset class="fieldset">
-      <Label tip={$_('general.transcode.hwaccel.tip')}>
-        {$_('general.transcode.hwaccel.title')}
+      <Label tip={$_('transcode.hwaccel.tip')}>
+        {$_('transcode.hwaccel.title')}
       </Label>
       <Select
         translate
@@ -120,8 +120,8 @@
       />
     </fieldset>
     <fieldset class="fieldset">
-      <Label tip={$_('general.transcode.vaapi_device.tip')}>
-        {$_('general.transcode.vaapi_device.title')}
+      <Label tip={$_('transcode.vaapi_device.tip')}>
+        {$_('transcode.vaapi_device.title')}
       </Label>
       <input
         type="text"

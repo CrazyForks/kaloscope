@@ -328,50 +328,6 @@
       "untrack": "Not Saving"
     }
   },
-  "general": {
-    "ffmpeg": {
-      "title": "FFmpeg",
-      "path": {
-        "title": "Custom Path",
-        "tip": "Path to the FFmpeg binary. Leave empty to use the system default."
-      }
-    },
-    "transcode": {
-      "title": "Transcoding",
-      "auto": {
-        "title": "Auto Transcode",
-        "tip": "Automatically switch to server transcoding when browser playback fails."
-      },
-      "hwaccel": {
-        "title": "Hardware Acceleration",
-        "tip": "Select the hardware acceleration method for video transcoding.",
-        "none": "None",
-        "qsv": "QSV",
-        "vaapi": "VAAPI",
-        "nvenc": "NVENC",
-        "videotoolbox": "VideoToolBox"
-      },
-      "resolution": {
-        "original": "Original",
-        "1080p": "1080p",
-        "720p": "720p",
-        "480p": "480p"
-      },
-      "quality": {
-        "title": "Transcode Quality",
-        "tip": "Higher quality produces better video but uses more storage and CPU/GPU resources.",
-        "low": "Low",
-        "medium": "Medium",
-        "high": "High"
-      },
-      "vaapi_device": {
-        "title": "VAAPI Device",
-        "tip": "Path to the VAAPI render device. Leave empty to use the system default."
-      },
-      "segments": "{0} segments",
-      "batch_delete_title": "Delete {0} Transcode Tasks"
-    }
-  },
   "filesystem": {
     "new_folder": "New Folder",
     "new_folder_message": "Enter a name for the new folder under the selected directory:",
@@ -588,6 +544,48 @@
       "forward": "Forward",
       "live_tip": "Live"
     }
+  },
+  "ffmpeg": {
+    "title": "FFmpeg",
+    "path": {
+      "title": "Custom Path",
+      "tip": "Path to the FFmpeg binary. Leave empty to use the system default."
+    }
+  },
+  "transcode": {
+    "title": "Transcoding",
+    "auto": {
+      "title": "Auto Transcode",
+      "tip": "Automatically switch to server transcoding when browser playback fails."
+    },
+    "quality": {
+      "title": "Transcode Quality",
+      "tip": "Higher quality produces better video but uses more storage and CPU/GPU resources.",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "resolution": {
+      "original": "Original",
+      "1080p": "1080p",
+      "720p": "720p",
+      "480p": "480p"
+    },
+    "hwaccel": {
+      "title": "Hardware Acceleration",
+      "tip": "Select the hardware acceleration method for video transcoding.",
+      "none": "None",
+      "qsv": "QSV",
+      "vaapi": "VAAPI",
+      "nvenc": "NVENC",
+      "videotoolbox": "VideoToolBox"
+    },
+    "vaapi_device": {
+      "title": "VAAPI Device",
+      "tip": "Path to the VAAPI render device. Leave empty to use the system default."
+    },
+    "segments": "{0} segments",
+    "batch_delete_title": "Delete {0} Transcode Tasks"
   },
   "flow": {
     "readonly": "Read-Only Mode",

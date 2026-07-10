@@ -328,50 +328,6 @@
       "untrack": "不保存"
     }
   },
-  "general": {
-    "ffmpeg": {
-      "title": "FFmpeg",
-      "path": {
-        "title": "自定义路径",
-        "tip": "FFmpeg 可执行文件路径，留空则使用系统默认值。"
-      }
-    },
-    "transcode": {
-      "title": "转码设置",
-      "auto": {
-        "title": "自动转码播放",
-        "tip": "浏览器播放失败时自动切换为服务端转码。"
-      },
-      "hwaccel": {
-        "title": "硬件加速",
-        "tip": "选择视频转码的硬件加速方式。",
-        "none": "无",
-        "qsv": "QSV",
-        "vaapi": "VAAPI",
-        "nvenc": "NVENC",
-        "videotoolbox": "VideoToolBox"
-      },
-      "resolution": {
-        "original": "原始分辨率",
-        "1080p": "1080p",
-        "720p": "720p",
-        "480p": "480p"
-      },
-      "quality": {
-        "title": "转码质量",
-        "tip": "更高质量产生更好的画质，但消耗更多存储空间和 CPU/GPU 资源。",
-        "low": "低",
-        "medium": "中",
-        "high": "高"
-      },
-      "vaapi_device": {
-        "title": "VAAPI 设备",
-        "tip": "VAAPI 渲染设备路径，留空则使用系统默认值。"
-      },
-      "segments": "{0} 个分片",
-      "batch_delete_title": "删除 {0} 个转码任务"
-    }
-  },
   "filesystem": {
     "new_folder": "新建文件夹",
     "new_folder_message": "请输入要在当前选中目录下创建的文件夹名称：",
@@ -588,6 +544,48 @@
       "forward": "快进中",
       "live_tip": "直播"
     }
+  },
+  "ffmpeg": {
+    "title": "FFmpeg",
+    "path": {
+      "title": "自定义路径",
+      "tip": "FFmpeg 可执行文件路径，留空则使用系统默认值。"
+    }
+  },
+  "transcode": {
+    "title": "转码设置",
+    "auto": {
+      "title": "自动转码播放",
+      "tip": "浏览器播放失败时自动切换为服务端转码。"
+    },
+    "quality": {
+      "title": "转码质量",
+      "tip": "更高质量产生更好的画质，但消耗更多存储空间和 CPU/GPU 资源。",
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "resolution": {
+      "original": "原始分辨率",
+      "1080p": "1080p",
+      "720p": "720p",
+      "480p": "480p"
+    },
+    "hwaccel": {
+      "title": "硬件加速",
+      "tip": "选择视频转码的硬件加速方式。",
+      "none": "无",
+      "qsv": "QSV",
+      "vaapi": "VAAPI",
+      "nvenc": "NVENC",
+      "videotoolbox": "VideoToolBox"
+    },
+    "vaapi_device": {
+      "title": "VAAPI 设备",
+      "tip": "VAAPI 渲染设备路径，留空则使用系统默认值。"
+    },
+    "segments": "{0} 个分片",
+    "batch_delete_title": "删除 {0} 个转码任务"
   },
   "flow": {
     "readonly": "只读模式",
