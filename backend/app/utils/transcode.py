@@ -448,11 +448,13 @@ async def list_tasks() -> list[dict[str, Any]]:
         tasks = [_task_snapshot(task) for task in store.values()]
     finally:
         lock.release()
+    tasks.sort(key=lambda task: task["started_at"], reverse=True)
 
     task_ids = {task["id"] for task in tasks}
-    for task in scan_outputs():
-        if task["id"] not in task_ids:
-            tasks.append(task)
+    scanned_tasks = [task for task in scan_outputs() if task["id"] not in task_ids]
+    scanned_tasks.sort(key=lambda task: task["finished_at"], reverse=True)
+    tasks.extend(scanned_tasks)
+
     for task in tasks:
         task["encoded_size_text"] = format_bytes(task["encoded_size"])
     return tasks

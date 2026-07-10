@@ -225,14 +225,13 @@
           {#if hwaccel}
             <Badge shadow={false}>{hwaccel}</Badge>
           {/if}
-          {#if !task.quality && !task.resolution}
-            <Badge shadow={false} dashed>{task.profile}</Badge>
-          {/if}
         </div>
         {#if task.state === 'running'}
           <progress class="progress progress-success" value={task.progress || undefined} max="100"></progress>
+        {:else if task.state === 'finished'}
+          <progress class="progress opacity-50 progress-success" value={task.progress || 100} max="100"></progress>
         {:else}
-          <progress class="progress opacity-50" value={task.progress ?? 0} max="100"></progress>
+          <progress class="progress opacity-50" value={task.progress || 0} max="100"></progress>
         {/if}
         <div class="flex flex-wrap justify-between gap-2 text-xs opacity-50">
           <span>{formatProgress(task)}</span>
