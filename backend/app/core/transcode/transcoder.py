@@ -1,8 +1,5 @@
-"""Media probing and HLS transcoding utilities."""
-
 import asyncio
 import contextlib
-import math
 import os
 import re
 import shutil
@@ -11,7 +8,7 @@ import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import aiofiles
 from filelock import FileLock, Timeout
@@ -21,6 +18,12 @@ from sanic.log import logger
 
 from app.core.config import KaloscopeConfig
 from app.core.constants import ENCODING
+from app.core.transcode.options import (
+    ENCODER_CONFIG,
+    QUALITY_CRF,
+    RESOLUTION_MAX_HEIGHT,
+    TranscodeOptions,
+)
 from app.utils.disk import format_bytes
 
 _SEGMENT_WAIT_TIMEOUT = 30.0
@@ -40,103 +43,6 @@ class TranscodeStats:
     size: int = 0
     progress: int | None = None
     updated_at: str | None = None
-
-
-@dataclass
-class EncoderConfig:
-    """Configuration for a specific hardware encoder."""
-
-    encoder: str = "libx264"
-    hwaccel: str | None = None
-    hwaccel_output_format: str | None = None
-
-
-# hardware acceleration types (mapped to encoder name and ffmpeg flags)
-HWAccelType = Literal["qsv", "vaapi", "nvenc", "videotoolbox"]
-_ENCODER_CONFIG: dict[str | None, EncoderConfig] = {
-    None: EncoderConfig(
-        encoder="libx264",
-        hwaccel=None,
-        hwaccel_output_format=None,
-    ),
-    "qsv": EncoderConfig(
-        encoder="h264_qsv",
-        hwaccel="qsv",
-        hwaccel_output_format="qsv",
-    ),
-    "vaapi": EncoderConfig(
-        encoder="h264_vaapi",
-        hwaccel="vaapi",
-        hwaccel_output_format=None,
-    ),
-    "nvenc": EncoderConfig(
-        encoder="h264_nvenc",
-        hwaccel="cuda",
-        hwaccel_output_format="cuda",
-    ),
-    "videotoolbox": EncoderConfig(
-        encoder="h264_videotoolbox",
-        hwaccel="videotoolbox",
-        hwaccel_output_format="videotoolbox",
-    ),
-}
-
-# transcode quality levels (mapped to CRF values and bitrate targets)
-QualityLevel = Literal["low", "medium", "high"]
-_QUALITY_CRF: dict[QualityLevel, int] = {
-    "low": 28,
-    "medium": 23,
-    "high": 18,
-}
-_HW_BITRATE: dict[QualityLevel, str] = {
-    "low": "1500k",
-    "medium": "3000k",
-    "high": "6000k",
-}
-
-# output resolution limits (mapped to max height in pixels)
-ResolutionLimit = Literal["original", "1080p", "720p", "480p"]
-_RESOLUTION_MAX_HEIGHT: dict[ResolutionLimit, int | None] = {
-    "original": None,
-    "1080p": 1080,
-    "720p": 720,
-    "480p": 480,
-}
-
-
-@dataclass
-class TranscodeOptions:
-    """Transcoding parameters for web playback."""
-
-    hwaccel: HWAccelType | None = None
-    quality: QualityLevel = "medium"
-    resolution: ResolutionLimit = "original"
-    framerate: float = 30.0
-
-    def __post_init__(self):
-        if self.hwaccel not in _ENCODER_CONFIG:
-            self.hwaccel = None
-
-    @property
-    def encoder_config(self) -> EncoderConfig:
-        return _ENCODER_CONFIG[self.hwaccel]
-
-    @property
-    def encoder(self) -> str:
-        return self.encoder_config.encoder
-
-    @property
-    def crf(self) -> int:
-        return _QUALITY_CRF[self.quality]
-
-    @property
-    def max_height(self) -> int | None:
-        return _RESOLUTION_MAX_HEIGHT[self.resolution]
-
-    @property
-    def profile(self) -> str:
-        """Transcode profile identifier (filesystem-safe directory name)."""
-        return f"{self.quality}_{self.resolution}_{str(self.hwaccel).lower()}"
 
 
 def _task_store():
@@ -184,11 +90,11 @@ def parse_profile(profile: str) -> dict[str, str | None]:
     resolution, sep2, hwaccel = rest.rpartition("_")
     if not sep1 or not sep2:
         return {"quality": None, "resolution": None, "hwaccel": None}
-    if quality not in _QUALITY_CRF or resolution not in _RESOLUTION_MAX_HEIGHT:
+    if quality not in QUALITY_CRF or resolution not in RESOLUTION_MAX_HEIGHT:
         return {"quality": None, "resolution": None, "hwaccel": None}
 
     hwaccel = hwaccel.lower()
-    valid_hwaccels = {*_ENCODER_CONFIG.keys(), "software", "none", "null"}
+    valid_hwaccels = {*ENCODER_CONFIG.keys(), "software", "none", "null"}
     if hwaccel not in valid_hwaccels:
         return {"quality": None, "resolution": None, "hwaccel": None}
 
@@ -853,40 +759,10 @@ async def _build_hls_cmd(
     needs_scale = options.max_height is not None
 
     # hardware acceleration
-    hw = options.encoder_config
-    if hw.hwaccel == "qsv":
-        qsv_dev = await _vaapi_device()
-        if not qsv_dev:
-            raise RuntimeError(
-                "QSV requires a DRM render device, e.g. /dev/dri/renderD128"
-            )
-        cmd.extend(
-            [
-                "-init_hw_device",
-                f"qsv=qs:hw,child_device={qsv_dev},child_device_type=vaapi",
-                "-filter_hw_device",
-                "qs",
-            ]
-        )
-        if not needs_scale:
-            cmd.extend(
-                [
-                    "-hwaccel",
-                    "qsv",
-                    "-hwaccel_device",
-                    "qs",
-                    "-hwaccel_output_format",
-                    "qsv",
-                ]
-            )
-    elif hw.hwaccel:
-        vaapi_dev = hw.hwaccel == "vaapi" and await _vaapi_device()
-        if vaapi_dev:
-            cmd.extend(["-vaapi_device", vaapi_dev])
-        else:
-            cmd.extend(["-hwaccel", hw.hwaccel])
-            if hw.hwaccel_output_format and not needs_scale:
-                cmd.extend(["-hwaccel_output_format", hw.hwaccel_output_format])
+    from app.core.transcode.hwaccels import get_hwaccel
+
+    hwaccel = get_hwaccel(options.hwaccel)
+    cmd.extend(await hwaccel.input_args(needs_scale))
 
     cmd.extend(["-i", input_path])
 
@@ -906,186 +782,19 @@ async def _build_hls_cmd(
             f"scale='max(trunc(iw*{target_height}/ih/16)*16,16)':'{target_height}'"
         )
 
-    # QSV: when frames stay on the GPU, use QSV VPP to normalize them to NV12.
-    # When CPU scaling is requested, keep frames in system memory and let the
-    # QSV encoder upload them after the software scale/format conversion.
-    if hw.hwaccel == "qsv":
-        vf_parts.append("format=nv12" if needs_scale else "vpp_qsv=format=nv12")
-
-    # VAAPI: ensure NV12 8-bit format and re-upload to GPU for the encoder.
-    # HEVC 10-bit decode produces P010 surfaces — format=nv12 converts in
-    # software, then hwupload uploads to the device created by -vaapi_device
-    # (or the implicit device from -hwaccel vaapi as fallback).
-    elif hw.hwaccel == "vaapi":
-        vf_parts.append("format=nv12")
-        vf_parts.append("hwupload")
+    vf_parts.extend(hwaccel.video_filters(needs_scale))
 
     # video encoder and parameters
     enc = options.encoder
     cmd.extend(["-c:v", enc])
-
-    if enc == "libx264":
-        bitrate = _HW_BITRATE.get(options.quality, "3000k")
-        bitrate_num = int(bitrate[:-1])
-        bufsize = str(bitrate_num * 2) + "k"
-        cmd.extend(
-            [
-                "-preset",
-                "veryfast",
-                "-crf",
-                str(options.crf),
-                "-profile:v",
-                "main",
-                "-level",
-                "4.0",
-                "-pix_fmt",
-                "yuv420p",
-                # VBV constraints cap peak bitrate during CRF encoding,
-                # preventing network-unfriendly bitrate spikes
-                "-maxrate",
-                bitrate,
-                "-bufsize",
-                bufsize,
-            ]
-        )
-
-    elif enc == "h264_qsv":
-        bitrate = _HW_BITRATE.get(options.quality, "3000k")
-        bitrate_num = int(bitrate[:-1])
-        # QSV rate control follows Jellyfin:
-        # - maxrate = bitrate + 1 triggers VBR for better bitrate allocation
-        # - mbbrc 1 enables MacroBlock-level rate control
-        # - bufsize = bitrate * 2 * factor, factor=2 (level ≥ 5.1);
-        #   Jellyfin uses factor=1 only for level < 5.1; without codec-level
-        #   detection we default to factor=2
-        # - rc_init_occupancy = bitrate * 1 * factor (2 s initial buffer fill)
-        cmd.extend(
-            [
-                "-preset",
-                "veryfast",
-                "-b:v",
-                bitrate,
-                "-maxrate",
-                str(bitrate_num + 1) + "k",
-                "-bufsize",
-                str(bitrate_num * 2 * 2) + "k",
-                "-mbbrc",
-                "1",
-                "-rc_init_occupancy",
-                str(bitrate_num * 2 * 1000),
-            ]
-        )
-
-    elif enc == "h264_nvenc":
-        bitrate = _HW_BITRATE.get(options.quality, "3000k")
-        nvenc_preset = (
-            "p4"
-            if options.quality == "medium"
-            else ("p7" if options.quality == "high" else "p1")
-        )
-        cmd.extend(
-            [
-                "-preset",
-                nvenc_preset,
-                "-b:v",
-                bitrate,
-                "-maxrate",
-                bitrate,
-                "-bufsize",
-                str(int(bitrate[:-1]) * 2) + "k",
-            ]
-        )
-
-    elif enc == "h264_vaapi":
-        # CQP is the safest RC mode — universally supported across Intel iHD
-        # and i965 drivers. VBR / CBR may be unavailable on some GPUs.
-        # Reuse CRF values as QP targets (lower = higher quality, ~0–51).
-        cmd.extend(
-            [
-                "-rc_mode",
-                "CQP",
-                "-qp",
-                str(options.crf),
-            ]
-        )
-
-    elif enc == "h264_videotoolbox":
-        bitrate = _HW_BITRATE.get(options.quality, "3000k")
-        vt_prio = "0" if options.quality in ("high", "medium") else "1"
-        cmd.extend(
-            [
-                "-b:v",
-                bitrate,
-                # qmin=-1 / qmax=-1 disable quantization constraints,
-                # letting the encoder use pure bitrate-based rate control
-                "-qmin",
-                "-1",
-                "-qmax",
-                "-1",
-                "-prio_speed",
-                vt_prio,
-            ]
-        )
-
-    else:
-        bitrate = _HW_BITRATE.get(options.quality, "3000k")
-        cmd.extend(
-            [
-                "-b:v",
-                bitrate,
-                "-maxrate",
-                bitrate,
-                "-bufsize",
-                str(int(bitrate[:-1]) * 2) + "k",
-            ]
-        )
+    cmd.extend(hwaccel.encoder_args(options))
 
     if vf_parts:
         cmd.extend(["-vf", ",".join(vf_parts)])
 
     # -------------------- Keyframe / GOP --------------------
 
-    _FORCE_KEYFRAMES = ("libx264", "h264_vaapi")
-    _GOP_ENCODERS = ("h264_qsv", "h264_nvenc")
-
-    if enc in _FORCE_KEYFRAMES:
-        cmd.extend(
-            [
-                "-force_key_frames:0",
-                f"expr:gte(t,n_forced*{seg_len})",
-            ]
-        )
-        if enc == "libx264":
-            # prevent libx264 from inserting scene-change keyframes that
-            # would break the uniform segment duration
-            cmd.extend(["-sc_threshold:v:0", "0"])
-
-    elif enc in _GOP_ENCODERS:
-        # GOP size = segment length × framerate, rounded up to ensure each
-        # segment contains at least one keyframe
-        gop = math.ceil(options.framerate * seg_len)
-        cmd.extend(
-            [
-                "-g:v:0",
-                str(gop),
-                "-keyint_min:v:0",
-                str(gop),
-            ]
-        )
-
-    else:
-        # unknown encoder: apply both strategies for safety
-        gop = math.ceil(options.framerate * seg_len)
-        cmd.extend(
-            [
-                "-force_key_frames:0",
-                f"expr:gte(t,n_forced*{seg_len})",
-                "-g:v:0",
-                str(gop),
-                "-keyint_min:v:0",
-                str(gop),
-            ]
-        )
+    cmd.extend(hwaccel.keyframe_args(options, seg_len))
 
     # -------------------- Audio --------------------
     cmd.extend(
