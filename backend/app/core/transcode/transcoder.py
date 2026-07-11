@@ -106,7 +106,7 @@ def parse_profile(profile: str) -> dict[str, str | None]:
 
 
 _EXTINF_RE = re.compile(r"^#EXTINF:([0-9]+(?:\.[0-9]+)?)", re.MULTILINE)
-"""Regular expression to extract segment and duration from HLS playlists."""
+"""Regular expression to extract segment durations from HLS playlists."""
 
 
 def output_stats(out_dir: Path | str, duration: float | None = None) -> TranscodeStats:
@@ -313,7 +313,7 @@ async def register_task(
 async def finish_task(
     task_id: str, returncode: int | None, error_msg: str | None = None
 ) -> None:
-    """Mark a registered ffmpeg task as finished.
+    """Update a registered ffmpeg task to its terminal state.
 
     Args:
         task_id: The registered task ID.
@@ -504,7 +504,12 @@ async def probe_duration(media_path: str) -> float | None:
         media_path: The media file path to probe.
 
     Returns:
-        Duration in seconds, or `None` if probing failed.
+        Duration in seconds, or `None` if ffprobe exits unsuccessfully or
+        returns a non-numeric duration.
+
+    Raises:
+        OSError: If the ffprobe process cannot be started.
+        UnicodeDecodeError: If ffprobe output is not valid UTF-8.
     """
     proc = await asyncio.create_subprocess_exec(
         await _ffprobe(),
@@ -531,14 +536,19 @@ async def probe_framerate(media_path: str) -> float | None:
     """Probe the average framerate of the media's first video stream via ffprobe.
 
     The framerate is reported by ffprobe as a rational string (e.g. `"30000/1001"`)
-    and is parsed into a float here.  This is used to calculate the GOP size for
-    hardware encoders so that segment-boundary keyframes are correctly aligned.
+    and is parsed into a float here. It is used to approximate a one-segment GOP
+    for hardware encoders when the input has a constant frame rate.
 
     Args:
         media_path: The media file path to probe.
 
     Returns:
-        Frames per second, or `None` if probing failed or returned an invalid value.
+        Frames per second, or `None` if ffprobe exits unsuccessfully or returns
+        an invalid or non-positive value.
+
+    Raises:
+        OSError: If the ffprobe process cannot be started.
+        UnicodeDecodeError: If ffprobe output is not valid UTF-8.
     """
     proc = await asyncio.create_subprocess_exec(
         await _ffprobe(),
@@ -606,8 +616,8 @@ async def ensure_transcode(
     try:
         _cleanup_stale_hls(out_dir)
 
-        # probe the real source framerate so GOP-based keyframe placement
-        # (used by hardware encoders) aligns with the HLS segment boundaries
+        # Probe the average source framerate so GOP-based hardware encoders can
+        # approximate one GOP per HLS segment for constant-frame-rate input.
         fps = await probe_framerate(media_path)
         if fps is not None:
             options.framerate = fps
@@ -714,8 +724,8 @@ async def _build_hls_cmd(
     Constructs a complete ffmpeg command that transcodes a source video into
     an HLS playlist with MPEG-TS segments.  The command configures hardware
     acceleration (if requested), video codec parameters (CRF for libx264,
-    bitrate-based for hardware encoders), audio encoding (AAC 128k stereo),
-    keyframe alignment for clean segment boundaries, and HLS output settings.
+    bitrate- or QP-based for hardware encoders), audio encoding (AAC 128k
+    stereo), keyframe placement near segment boundaries, and HLS output settings.
 
     The command structure, argument ordering, and per-encoder parameters are
     referenced from Jellyfin: https://github.com/jellyfin/jellyfin

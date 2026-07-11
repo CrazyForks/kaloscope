@@ -68,8 +68,7 @@ class QSV(HWAccelStrategy):
         ]
 
     def keyframe_args(self, options: TranscodeOptions, seg_len: int) -> list[str]:
-        # GOP size = segment length × framerate, rounded up to ensure each
-        # segment contains at least one keyframe
+        # Approximate one segment per GOP for constant-frame-rate input.
         gop = math.ceil(options.framerate * seg_len)
         return [
             "-g:v:0",

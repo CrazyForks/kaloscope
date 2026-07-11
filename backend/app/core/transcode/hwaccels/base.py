@@ -8,8 +8,8 @@ from app.core.transcode.options import EncoderConfig, TranscodeOptions
 async def resolve_vaapi_device() -> str | None:
     """Get the VAAPI render device path.
 
-    Checks the `vaapi.device` global config first, falls back to the
-    standard render node `/dev/dri/renderD128`.
+    Uses the `vaapi.device` global setting when it contains a path; otherwise,
+    checks the standard render node `/dev/dri/renderD128`.
 
     Returns:
         The render device path if it exists, or `None` if not.
@@ -89,11 +89,11 @@ class HWAccelStrategy(ABC):
         raise NotImplementedError
 
     def keyframe_args(self, options: TranscodeOptions, seg_len: int) -> list[str]:
-        """Build FFmpeg options that align keyframes with HLS segments.
+        """Build FFmpeg options that place keyframes near HLS segment boundaries.
 
         The default strategy combines timestamp-based forced keyframes with a
-        fixed GOP size. The GOP length is the segment duration multiplied by
-        the source frame rate and rounded up to a whole frame.
+        fixed GOP size. For constant-frame-rate input, the GOP length
+        approximates one segment duration after rounding up to a whole frame.
 
         Args:
             options: Transcode settings containing the source frame rate.
@@ -102,7 +102,7 @@ class HWAccelStrategy(ABC):
         Returns:
             FFmpeg command-line arguments for keyframe and GOP configuration.
         """
-        # unknown encoder: apply both strategies for safety
+        # Apply both timestamp and GOP constraints for broad encoder compatibility.
         gop = math.ceil(options.framerate * seg_len)
         return [
             "-force_key_frames:0",

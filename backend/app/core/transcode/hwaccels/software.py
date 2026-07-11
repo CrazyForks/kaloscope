@@ -36,8 +36,8 @@ class Software(HWAccelStrategy):
         return [
             "-force_key_frames:0",
             f"expr:gte(t,n_forced*{seg_len})",
-            # prevent libx264 from inserting scene-change keyframes that
-            # would break the uniform segment duration
+            # prevent extra scene-change keyframes and keep the GOP structure
+            # deterministic
             "-sc_threshold:v:0",
             "0",
         ]

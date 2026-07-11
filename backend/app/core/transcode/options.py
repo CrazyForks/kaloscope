@@ -4,7 +4,7 @@ from typing import Literal
 
 @dataclass
 class EncoderConfig:
-    """Configuration for a specific hardware encoder."""
+    """Configuration for a video encoder and its acceleration options."""
 
     encoder: str = "libx264"
     hwaccel: str | None = None
@@ -95,5 +95,5 @@ class TranscodeOptions:
 
     @property
     def profile(self) -> str:
-        """Transcode profile identifier (filesystem-safe directory name)."""
+        """Transcode profile identifier derived from the selected settings."""
         return f"{self.quality}_{self.resolution}_{str(self.hwaccel).lower()}"

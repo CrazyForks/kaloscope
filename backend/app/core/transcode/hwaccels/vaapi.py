@@ -12,15 +12,13 @@ class VAAPI(HWAccelStrategy):
         return await super().input_args(needs_scale)
 
     def video_filters(self, needs_scale: bool) -> list[str]:
-        # VAAPI: ensure NV12 8-bit format and re-upload to GPU for the encoder.
-        # HEVC 10-bit decode produces P010 surfaces — format=nv12 converts in
-        # software, then hwupload uploads to the device created by -vaapi_device
-        # (or the implicit device from -hwaccel vaapi as fallback).
+        # Normalize decoded frames to NV12 in system memory, then upload them to
+        # the device created by -vaapi_device (or the implicit VAAPI device).
         return ["format=nv12", "hwupload"]
 
     def encoder_args(self, options: TranscodeOptions) -> list[str]:
-        # CQP is the safest RC mode — universally supported across Intel iHD
-        # and i965 drivers. VBR / CBR may be unavailable on some GPUs.
+        # Prefer CQP because bitrate-controlled modes such as VBR and CBR may be
+        # unavailable with some VAAPI drivers.
         # Reuse CRF values as QP targets (lower = higher quality, ~0–51).
         return [
             "-rc_mode",
