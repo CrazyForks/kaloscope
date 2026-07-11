@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Literal
+from typing import ClassVar, Literal
 
 
 @dataclass
@@ -76,6 +76,8 @@ class TranscodeOptions:
         quality: The requested quality preset.
         resolution: The maximum output resolution.
     """
+
+    segment_length: ClassVar[int] = 6
 
     hwaccel: HWAccelType | None = None
     quality: QualityLevel = "medium"

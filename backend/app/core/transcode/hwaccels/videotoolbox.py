@@ -4,13 +4,35 @@ from app.core.transcode.hwaccels.base import HWAccelStrategy, TranscodeContext
 class VideoToolbox(HWAccelStrategy):
     """Apple VideoToolbox H.264 encoding strategy."""
 
+    def keep_hardware_frames(self, context: TranscodeContext) -> bool:
+        """Keep HDR frames on VideoToolbox even when scaling is required."""
+        return context.needs_tonemap or super().keep_hardware_frames(context)
+
     def video_filters(self, context: TranscodeContext) -> list[str]:
         """Normalize non-YUV420P VideoToolbox frames to NV12."""
+        if context.needs_tonemap:
+            options: list[str] = []
+            if context.needs_scale:
+                options.extend(
+                    [
+                        f"w='{context.scale_width}'",
+                        f"h='{context.scale_height}'",
+                    ]
+                )
+            options.extend(
+                [
+                    "color_matrix=bt709",
+                    "color_primaries=bt709",
+                    "color_transfer=bt709",
+                ]
+            )
+            return [f"scale_vt={':'.join(options)}"]
+
         pixel_format = context.source_pixel_format
         if not context.needs_scale and (
             pixel_format is None or pixel_format.lower() != "yuv420p"
         ):
-            return ["scale_vt=format=nv12"]
+            return ["scale_vt"]
         return []
 
     def encoder_args(self, context: TranscodeContext) -> list[str]:

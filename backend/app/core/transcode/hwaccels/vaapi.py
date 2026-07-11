@@ -2,11 +2,20 @@ from app.core.transcode.hwaccels.base import (
     HWAccelStrategy,
     TranscodeContext,
     resolve_vaapi_device,
+    software_tonemap_filters,
 )
 
 
 class VAAPI(HWAccelStrategy):
     """Linux VAAPI H.264 encoding strategy."""
+
+    def keep_hardware_frames(self, context: TranscodeContext) -> bool:
+        """Keep HDR10 on VAAPI and expose HLG to the CPU tone mapper."""
+        if context.is_hdr10:
+            return True
+        if context.is_hlg:
+            return False
+        return super().keep_hardware_frames(context)
 
     async def input_args(self, context: TranscodeContext) -> list[str]:
         """Configure VAAPI decoding and select its render device.
@@ -45,6 +54,16 @@ class VAAPI(HWAccelStrategy):
         Returns:
             Hardware or software NV12 conversion filters for VAAPI encoding.
         """
+        if context.is_hdr10:
+            filters: list[str] = []
+            if context.needs_scale:
+                filters.append(
+                    f"scale_vaapi=w='{context.scale_width}':h='{context.scale_height}'"
+                )
+            filters.append("tonemap_vaapi=format=nv12:p=bt709:t=bt709:m=bt709")
+            return filters
+        if context.is_hlg:
+            return [*software_tonemap_filters(context, "nv12"), "hwupload"]
         if context.needs_scale:
             return ["format=nv12", "hwupload"]
         return ["scale_vaapi=format=nv12"]
@@ -77,5 +96,5 @@ class VAAPI(HWAccelStrategy):
         """
         return [
             "-force_key_frames:0",
-            f"expr:gte(t,n_forced*{context.segment_length})",
+            f"expr:gte(t,n_forced*{context.options.segment_length})",
         ]

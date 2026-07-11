@@ -13,7 +13,7 @@ from app.core.transcode.hls import (
     output_dir,
     wait_segment,
 )
-from app.core.transcode.hwaccels.base import TranscodeContext
+from app.core.transcode.hwaccels.base import MediaProbe, TranscodeContext
 from app.core.transcode.options import TranscodeOptions
 from app.core.transcode.tasks import finish_task, register_task
 
@@ -54,18 +54,15 @@ async def _ffprobe() -> str:
     return "ffprobe"
 
 
-async def _probe_media(
-    media_path: str,
-) -> tuple[float | None, float | None, str | None, int | None]:
-    """Probe media duration, framerate, pixel format, and height via ffprobe.
+async def _probe_media(media_path: str) -> MediaProbe:
+    """Probe container and first-video-stream metadata via ffprobe.
 
     Args:
         media_path: The media file path to probe.
 
     Returns:
-        A `(duration, framerate, pixel_format, source_height)` tuple. Each
-        value is `None` when ffprobe exits unsuccessfully or the corresponding
-        field is invalid.
+        Named probe values. Each field is `None` when ffprobe exits
+        unsuccessfully or the corresponding value is invalid.
 
     Raises:
         OSError: If the ffprobe process cannot be started.
@@ -78,7 +75,10 @@ async def _probe_media(
         "-select_streams",
         "v:0",
         "-show_entries",
-        "format=duration:stream=avg_frame_rate,pix_fmt,height",
+        (
+            "format=duration:stream=avg_frame_rate,pix_fmt,height,"
+            "color_transfer,color_primaries,color_space"
+        ),
         "-of",
         "json",
         media_path,
@@ -97,15 +97,15 @@ async def _probe_media(
             with contextlib.suppress(ProcessLookupError):
                 proc.kill()
         await proc.communicate()
-        return None, None, None, None
+        return MediaProbe()
     if proc.returncode != 0:
-        return None, None, None, None
+        return MediaProbe()
     try:
         data = json.loads(stdout.decode())
     except (json.JSONDecodeError, TypeError):
-        return None, None, None, None
+        return MediaProbe()
     if not isinstance(data, dict):
-        return None, None, None, None
+        return MediaProbe()
 
     duration = None
     format_data = data.get("format")
@@ -118,6 +118,9 @@ async def _probe_media(
     framerate = None
     pixel_format = None
     source_height = None
+    color_transfer = None
+    color_primaries = None
+    color_space = None
     streams = data.get("streams")
     if isinstance(streams, list) and streams and isinstance(streams[0], dict):
         stream = streams[0]
@@ -129,6 +132,18 @@ async def _probe_media(
         if isinstance(raw_pixel_format, str) and raw_pixel_format:
             pixel_format = raw_pixel_format
 
+        raw_color_transfer = stream.get("color_transfer")
+        if isinstance(raw_color_transfer, str) and raw_color_transfer:
+            color_transfer = raw_color_transfer
+
+        raw_color_primaries = stream.get("color_primaries")
+        if isinstance(raw_color_primaries, str) and raw_color_primaries:
+            color_primaries = raw_color_primaries
+
+        raw_color_space = stream.get("color_space")
+        if isinstance(raw_color_space, str) and raw_color_space:
+            color_space = raw_color_space
+
         raw = stream.get("avg_frame_rate")
         if isinstance(raw, str):
             try:
@@ -138,7 +153,15 @@ async def _probe_media(
                     framerate = value
             except (ValueError, TypeError, ZeroDivisionError):
                 pass
-    return duration, framerate, pixel_format, source_height
+    return MediaProbe(
+        height=source_height,
+        duration=duration,
+        framerate=framerate,
+        pixel_format=pixel_format,
+        color_transfer=color_transfer,
+        color_primaries=color_primaries,
+        color_space=color_space,
+    )
 
 
 async def probe_duration(media_path: str) -> float | None:
@@ -155,8 +178,7 @@ async def probe_duration(media_path: str) -> float | None:
         OSError: If the ffprobe process cannot be started.
         UnicodeDecodeError: If ffprobe output is not valid UTF-8.
     """
-    duration, _, _, _ = await _probe_media(media_path)
-    return duration
+    return (await _probe_media(media_path)).duration
 
 
 async def probe_framerate(media_path: str) -> float | None:
@@ -177,8 +199,7 @@ async def probe_framerate(media_path: str) -> float | None:
         OSError: If the ffprobe process cannot be started.
         UnicodeDecodeError: If ffprobe output is not valid UTF-8.
     """
-    _, framerate, _, _ = await _probe_media(media_path)
-    return framerate
+    return (await _probe_media(media_path)).framerate
 
 
 async def ensure_transcode(
@@ -227,13 +248,8 @@ async def ensure_transcode(
     try:
         cleanup_stale_hls(out_dir)
 
-        duration, fps, pixel_format, source_height = await _probe_media(media_path)
-        context = TranscodeContext(
-            options=options,
-            source_framerate=fps if fps is not None else 30.0,
-            source_pixel_format=pixel_format,
-            source_height=source_height,
-        )
+        metadata = await _probe_media(media_path)
+        context = TranscodeContext(options=options, metadata=metadata)
 
         cmd = await _build_hls_cmd(media_path, out_dir, context)
         logger.info("Starting ffmpeg HLS: %s", " ".join(cmd))
@@ -245,7 +261,12 @@ async def ensure_transcode(
         )
 
         task_id = await register_task(
-            media_path, media_hash, context.options, out_dir, proc, duration
+            media_path,
+            media_hash,
+            context.options,
+            out_dir,
+            proc,
+            metadata.duration,
         )
 
         _start_monitor(proc, lock, task_id)
@@ -306,12 +327,12 @@ async def _build_hls_cmd(
     cmd.extend(["-map", "0:v:0?", "-map", "0:a:0?"])
 
     vf_parts: list[str] = []
-    if context.needs_scale:
+    if context.needs_scale and not context.needs_tonemap:
         # preserve aspect ratio with a 16-pixel-aligned width and even height
-        target_height = f"trunc(min({options.max_height},ih)/2)*2"
-        vf_parts.append(
-            f"scale='max(trunc(iw*{target_height}/ih/16)*16,16)':'{target_height}'"
-        )
+        target_width = context.scale_width
+        target_height = context.scale_height
+        assert target_width is not None and target_height is not None
+        vf_parts.append(f"scale='{target_width}':'{target_height}'")
 
     vf_parts.extend(hwaccel.video_filters(context))
 
@@ -321,6 +342,18 @@ async def _build_hls_cmd(
 
     if vf_parts:
         cmd.extend(["-vf", ",".join(vf_parts)])
+
+    if context.needs_tonemap:
+        cmd.extend(
+            [
+                "-bsf:v",
+                (
+                    "h264_metadata=colour_primaries=1:"
+                    "transfer_characteristics=1:matrix_coefficients=1:"
+                    "video_full_range_flag=0"
+                ),
+            ]
+        )
 
     cmd.extend(hwaccel.keyframe_args(context))
 
@@ -348,7 +381,7 @@ async def _build_hls_cmd(
             "-f",
             "hls",
             "-hls_time",
-            str(context.segment_length),
+            str(context.options.segment_length),
             "-hls_list_size",
             "0",
             "-hls_playlist_type",

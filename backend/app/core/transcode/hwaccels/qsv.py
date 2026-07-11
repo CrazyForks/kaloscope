@@ -33,7 +33,7 @@ class QSV(HWAccelStrategy):
             "-filter_hw_device",
             "qs",
         ]
-        if not context.needs_scale:
+        if context.needs_tonemap or not context.needs_scale:
             cmd.extend(
                 [
                     "-hwaccel",
@@ -55,6 +55,14 @@ class QSV(HWAccelStrategy):
         Returns:
             A software format filter or QSV VPP filter.
         """
+        if context.needs_tonemap:
+            value = (
+                "vpp_qsv=tonemap=1:format=nv12:out_color_matrix=bt709:"
+                "out_color_primaries=bt709:out_color_transfer=bt709"
+            )
+            if context.needs_scale:
+                value += f":w='{context.scale_width}':h='{context.scale_height}'"
+            return [value]
         return ["format=nv12" if context.needs_scale else "vpp_qsv=format=nv12"]
 
     def encoder_args(self, context: TranscodeContext) -> list[str]:
@@ -95,7 +103,7 @@ class QSV(HWAccelStrategy):
         Returns:
             FFmpeg options for fixed GOP and minimum keyframe intervals.
         """
-        gop = math.ceil(context.source_framerate * context.segment_length)
+        gop = math.ceil(context.source_framerate * context.options.segment_length)
         return [
             "-g:v:0",
             str(gop),

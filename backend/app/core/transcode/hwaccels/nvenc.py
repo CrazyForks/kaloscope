@@ -1,13 +1,26 @@
 import math
 
-from app.core.transcode.hwaccels.base import HWAccelStrategy, TranscodeContext
+from app.core.transcode.hwaccels.base import (
+    HWAccelStrategy,
+    TranscodeContext,
+    software_tonemap_filters,
+)
 
 
 class NVENC(HWAccelStrategy):
     """NVIDIA NVENC H.264 encoding strategy."""
 
+    def keep_hardware_frames(self, context: TranscodeContext) -> bool:
+        """Return system frames when HDR requires the standard CPU filter."""
+        return not context.needs_tonemap and super().keep_hardware_frames(context)
+
     def video_filters(self, context: TranscodeContext) -> list[str]:
         """Normalize original-resolution CUDA frames to 8-bit YUV."""
+        if context.needs_tonemap:
+            return [
+                *software_tonemap_filters(context, "yuv420p"),
+                "hwupload_cuda",
+            ]
         if not context.needs_scale:
             return ["scale_cuda=format=yuv420p"]
         return []
@@ -48,7 +61,7 @@ class NVENC(HWAccelStrategy):
         Returns:
             FFmpeg options for fixed GOP and minimum keyframe intervals.
         """
-        gop = math.ceil(context.source_framerate * context.segment_length)
+        gop = math.ceil(context.source_framerate * context.options.segment_length)
         return [
             "-g:v:0",
             str(gop),

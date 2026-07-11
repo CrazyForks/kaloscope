@@ -3,6 +3,7 @@
 import asyncio
 import importlib
 import threading
+from dataclasses import fields
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -15,7 +16,7 @@ import app.core.transcode.hwaccels.qsv as qsv_module
 import app.core.transcode.hwaccels.vaapi as vaapi_module
 from app.core.transcode import hls, tasks, transcoder
 from app.core.transcode.hwaccels import get_hwaccel
-from app.core.transcode.hwaccels.base import TranscodeContext
+from app.core.transcode.hwaccels.base import MediaProbe, TranscodeContext
 from app.core.transcode.options import TranscodeOptions
 
 
@@ -270,7 +271,9 @@ def test_probe_media(monkeypatch):
         communicate=AsyncMock(
             return_value=(
                 b'{"streams":[{"avg_frame_rate":"30000/1001",'
-                b'"pix_fmt":"yuv420p10le","height":1080}],'
+                b'"pix_fmt":"yuv420p10le","height":1080,'
+                b'"color_transfer":"smpte2084","color_primaries":"bt2020",'
+                b'"color_space":"bt2020nc"}],'
                 b'"format":{"duration":"60.5"}}',
                 b"",
             )
@@ -283,33 +286,39 @@ def test_probe_media(monkeypatch):
 
     result = asyncio.run(transcoder._probe_media("input.mkv"))
 
-    assert len(result) == 4
-    duration, framerate, pixel_format, source_height = result
-    assert duration == 60.5
-    assert framerate == pytest.approx(30000 / 1001)
-    assert pixel_format == "yuv420p10le"
-    assert source_height == 1080
+    assert result == MediaProbe(
+        duration=60.5,
+        framerate=pytest.approx(30000 / 1001),
+        pixel_format="yuv420p10le",
+        height=1080,
+        color_transfer="smpte2084",
+        color_primaries="bt2020",
+        color_space="bt2020nc",
+    )
     create.assert_awaited_once()
     await_args = create.await_args
     assert await_args is not None
     args = await_args.args
-    assert "format=duration:stream=avg_frame_rate,pix_fmt,height" in args
+    assert (
+        "format=duration:stream=avg_frame_rate,pix_fmt,height,"
+        "color_transfer,color_primaries,color_space"
+    ) in args
     assert "json" in args
 
 
 @pytest.mark.parametrize(
     ("returncode", "stdout", "expected"),
     [
-        (1, b"", (None, None, None, None)),
+        (1, b"", MediaProbe()),
         (
             0,
             b'{"streams":[{"avg_frame_rate":"bad"}],"format":{"duration":"60"}}',
-            (60.0, None, None, None),
+            MediaProbe(duration=60.0),
         ),
         (
             0,
             b'{"streams":[{"avg_frame_rate":"24/1"}],"format":{"duration":"bad"}}',
-            (None, 24.0, None, None),
+            MediaProbe(framerate=24.0),
         ),
     ],
 )
@@ -343,12 +352,7 @@ def test_probe_timeout(monkeypatch):
         AsyncMock(return_value=proc),
     )
 
-    assert asyncio.run(transcoder._probe_media("input.mkv")) == (
-        None,
-        None,
-        None,
-        None,
-    )
+    assert asyncio.run(transcoder._probe_media("input.mkv")) == MediaProbe()
     proc.kill.assert_called_once_with()
     assert proc.communicate.await_count == 2
 
@@ -359,15 +363,42 @@ def test_transcode_context():
         quality="high",
         resolution="720p",
     )
-    context = TranscodeContext(options=options, source_framerate=23.5)
+    metadata = MediaProbe(framerate=23.5, pixel_format="yuv420p10le", height=1080)
+    context = TranscodeContext(options=options, metadata=metadata)
 
     assert context.options is options
+    assert context.metadata is metadata
     assert context.source_framerate == 23.5
-    assert context.source_pixel_format is None
-    assert context.source_height is None
-    assert context.segment_length == 6
+    assert context.source_pixel_format == "yuv420p10le"
+    assert context.source_height == 1080
+    assert options.segment_length == 6
+    assert "segment_length" not in {field.name for field in fields(TranscodeOptions)}
     assert context.needs_scale is True
+    assert context.scale_height == "trunc(min(720,ih)/2)*2"
+    assert context.scale_width == ("max(trunc(iw*trunc(min(720,ih)/2)*2/ih/16)*16,16)")
     assert context.encoder_config is options.encoder_config
+
+
+@pytest.mark.parametrize(
+    ("transfer", "is_hdr10", "is_hlg", "needs_tonemap"),
+    [
+        ("smpte2084", True, False, True),
+        ("SMPTE2084", True, False, True),
+        ("arib-std-b67", False, True, True),
+        ("ARIB-STD-B67", False, True, True),
+        ("bt709", False, False, False),
+        (None, False, False, False),
+    ],
+)
+def test_context_detects_hdr(transfer, is_hdr10, is_hlg, needs_tonemap):
+    context = TranscodeContext(
+        options=TranscodeOptions(),
+        metadata=MediaProbe(color_transfer=transfer),
+    )
+
+    assert context.is_hdr10 is is_hdr10
+    assert context.is_hlg is is_hlg
+    assert context.needs_tonemap is needs_tonemap
 
 
 @pytest.mark.parametrize(
@@ -382,10 +413,80 @@ def test_transcode_context():
 def test_context_needs_scale_uses_source_height(resolution, source_height, expected):
     context = TranscodeContext(
         options=TranscodeOptions(resolution=resolution),
-        source_height=source_height,
+        metadata=MediaProbe(height=source_height),
     )
 
     assert context.needs_scale is expected
+
+
+def _hdr_context(hwaccel=None, resolution="original", transfer="smpte2084"):
+    return TranscodeContext(
+        options=TranscodeOptions(hwaccel=hwaccel, resolution=resolution),
+        metadata=MediaProbe(
+            framerate=24.0,
+            pixel_format="yuv420p10le",
+            height=2160,
+            color_transfer=transfer,
+            color_primaries="bt2020",
+            color_space="bt2020nc",
+        ),
+    )
+
+
+@pytest.mark.parametrize("transfer", ["smpte2084", "arib-std-b67"])
+def test_software_hdr_filters(transfer):
+    context = _hdr_context(transfer=transfer)
+
+    assert get_hwaccel(None).video_filters(context) == [
+        "zscale=transfer=linear:npl=100",
+        "format=gbrpf32le",
+        "tonemap=hable:desat=0",
+        "zscale=primaries=bt709:transfer=bt709:matrix=bt709:range=tv",
+        "format=yuv420p",
+    ]
+
+
+def test_software_scaled_hdr_filters():
+    context = _hdr_context(resolution="720p")
+
+    assert get_hwaccel(None).video_filters(context)[0] == (
+        "zscale=transfer=linear:npl=100:"
+        f"w='{context.scale_width}':h='{context.scale_height}'"
+    )
+
+
+def test_nvenc_hdr_uses_software_tonemap():
+    context = _hdr_context(hwaccel="nvenc")
+    strategy = get_hwaccel("nvenc")
+
+    assert asyncio.run(strategy.input_args(context)) == ["-hwaccel", "cuda"]
+    assert strategy.video_filters(context) == [
+        "zscale=transfer=linear:npl=100",
+        "format=gbrpf32le",
+        "tonemap=hable:desat=0",
+        "zscale=primaries=bt709:transfer=bt709:matrix=bt709:range=tv",
+        "format=yuv420p",
+        "hwupload_cuda",
+    ]
+
+
+def test_hdr_cmd_sets_bt709_bitstream_metadata(monkeypatch, tmp_path):
+    monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
+    context = _hdr_context(resolution="720p")
+
+    cmd = asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
+
+    vf = cmd[cmd.index("-vf") + 1]
+    assert not vf.startswith("scale='")
+    assert "tonemap=hable:desat=0" in vf
+    assert "-color_primaries" not in cmd
+    assert "-color_trc" not in cmd
+    assert "-colorspace" not in cmd
+    assert "-color_range" not in cmd
+    assert cmd[cmd.index("-bsf:v") + 1] == (
+        "h264_metadata=colour_primaries=1:transfer_characteristics=1:"
+        "matrix_coefficients=1:video_full_range_flag=0"
+    )
 
 
 def test_software_cmd(monkeypatch, tmp_path):
@@ -407,8 +508,7 @@ def test_nvenc_args():
     options = TranscodeOptions(hwaccel="nvenc", quality="high")
     context = TranscodeContext(
         options=options,
-        source_framerate=23.5,
-        source_pixel_format="yuv420p",
+        metadata=MediaProbe(framerate=23.5, pixel_format="yuv420p"),
     )
 
     assert asyncio.run(strategy.input_args(context)) == [
@@ -424,12 +524,12 @@ def test_nvenc_args():
     assert strategy.video_filters(context) == ["scale_cuda=format=yuv420p"]
     ten_bit_context = TranscodeContext(
         options=options,
-        source_pixel_format="yuv420p10le",
+        metadata=MediaProbe(pixel_format="yuv420p10le"),
     )
     assert strategy.video_filters(ten_bit_context) == ["scale_cuda=format=yuv420p"]
     scaled_ten_bit_context = TranscodeContext(
         options=scaled_context.options,
-        source_pixel_format="yuv420p10le",
+        metadata=MediaProbe(pixel_format="yuv420p10le"),
     )
     assert strategy.video_filters(scaled_ten_bit_context) == []
     assert strategy.encoder_args(context) == [
@@ -455,7 +555,7 @@ def test_qsv_args(monkeypatch):
     strategy = get_hwaccel("qsv")
     context = TranscodeContext(
         options=TranscodeOptions(hwaccel="qsv"),
-        source_framerate=25.0,
+        metadata=MediaProbe(framerate=25.0),
     )
     scaled_context = TranscodeContext(
         options=TranscodeOptions(hwaccel="qsv", resolution="720p")
@@ -499,6 +599,35 @@ def test_qsv_args(monkeypatch):
         "150",
         "-keyint_min:v:0",
         "150",
+    ]
+
+
+@pytest.mark.parametrize("transfer", ["smpte2084", "arib-std-b67"])
+def test_qsv_hdr_filters(monkeypatch, transfer):
+    context = _hdr_context(hwaccel="qsv", resolution="720p", transfer=transfer)
+    strategy = get_hwaccel("qsv")
+    monkeypatch.setattr(
+        qsv_module,
+        "resolve_vaapi_device",
+        AsyncMock(return_value="/dev/dri/renderD128"),
+    )
+
+    args = asyncio.run(strategy.input_args(context))
+
+    assert args[-6:] == [
+        "-hwaccel",
+        "qsv",
+        "-hwaccel_device",
+        "qs",
+        "-hwaccel_output_format",
+        "qsv",
+    ]
+    assert strategy.video_filters(context) == [
+        (
+            "vpp_qsv=tonemap=1:format=nv12:out_color_matrix=bt709:"
+            "out_color_primaries=bt709:out_color_transfer=bt709:"
+            f"w='{context.scale_width}':h='{context.scale_height}'"
+        )
     ]
 
 
@@ -551,6 +680,46 @@ def test_vaapi_args(monkeypatch):
     ]
 
 
+def test_vaapi_hdr10_filters(monkeypatch):
+    context = _hdr_context(hwaccel="vaapi", resolution="720p")
+    strategy = get_hwaccel("vaapi")
+    monkeypatch.setattr(
+        vaapi_module,
+        "resolve_vaapi_device",
+        AsyncMock(return_value="/dev/dri/renderD128"),
+    )
+
+    args = asyncio.run(strategy.input_args(context))
+
+    assert args[:4] == [
+        "-hwaccel",
+        "vaapi",
+        "-hwaccel_output_format",
+        "vaapi",
+    ]
+    assert strategy.video_filters(context) == [
+        f"scale_vaapi=w='{context.scale_width}':h='{context.scale_height}'",
+        "tonemap_vaapi=format=nv12:p=bt709:t=bt709:m=bt709",
+    ]
+
+
+def test_vaapi_hlg_filters(monkeypatch):
+    context = _hdr_context(hwaccel="vaapi", transfer="arib-std-b67")
+    strategy = get_hwaccel("vaapi")
+    monkeypatch.setattr(
+        vaapi_module,
+        "resolve_vaapi_device",
+        AsyncMock(return_value="/dev/dri/renderD128"),
+    )
+
+    args = asyncio.run(strategy.input_args(context))
+    filters = strategy.video_filters(context)
+
+    assert "-hwaccel_output_format" not in args
+    assert "tonemap=hable:desat=0" in filters
+    assert filters[-2:] == ["format=nv12", "hwupload"]
+
+
 def test_vaapi_device(monkeypatch):
     monkeypatch.setattr(
         vaapi_module, "resolve_vaapi_device", AsyncMock(return_value=None)
@@ -564,7 +733,10 @@ def test_vaapi_device(monkeypatch):
 def test_videotoolbox_args():
     strategy = get_hwaccel("videotoolbox")
     options = TranscodeOptions(hwaccel="videotoolbox", quality="low")
-    context = TranscodeContext(options=options, source_pixel_format="yuv420p")
+    context = TranscodeContext(
+        options=options,
+        metadata=MediaProbe(pixel_format="yuv420p"),
+    )
 
     assert asyncio.run(strategy.input_args(context)) == [
         "-hwaccel",
@@ -581,20 +753,20 @@ def test_videotoolbox_args():
     ]
     assert strategy.video_filters(context) == []
     unknown_format_context = TranscodeContext(options=options)
-    assert strategy.video_filters(unknown_format_context) == ["scale_vt=format=nv12"]
+    assert strategy.video_filters(unknown_format_context) == ["scale_vt"]
     nonstandard_8_bit_context = TranscodeContext(
         options=options,
-        source_pixel_format="yuvj420p",
+        metadata=MediaProbe(pixel_format="yuvj420p"),
     )
-    assert strategy.video_filters(nonstandard_8_bit_context) == ["scale_vt=format=nv12"]
+    assert strategy.video_filters(nonstandard_8_bit_context) == ["scale_vt"]
     ten_bit_context = TranscodeContext(
         options=options,
-        source_pixel_format="yuv420p10le",
+        metadata=MediaProbe(pixel_format="yuv420p10le"),
     )
-    assert strategy.video_filters(ten_bit_context) == ["scale_vt=format=nv12"]
+    assert strategy.video_filters(ten_bit_context) == ["scale_vt"]
     scaled_ten_bit_context = TranscodeContext(
         options=scaled_context.options,
-        source_pixel_format="yuv420p10le",
+        metadata=MediaProbe(pixel_format="yuv420p10le"),
     )
     assert strategy.video_filters(scaled_ten_bit_context) == []
     assert strategy.encoder_args(context) == [
@@ -614,6 +786,42 @@ def test_videotoolbox_args():
         "180",
         "-keyint_min:v:0",
         "180",
+    ]
+
+
+def test_videotoolbox_sdr_normalization_uses_standard_scale_vt():
+    strategy = get_hwaccel("videotoolbox")
+    options = TranscodeOptions(hwaccel="videotoolbox")
+    unknown = TranscodeContext(options=options)
+    ten_bit = TranscodeContext(
+        options=options,
+        metadata=MediaProbe(pixel_format="yuv420p10le"),
+    )
+
+    assert strategy.video_filters(unknown) == ["scale_vt"]
+    assert strategy.video_filters(ten_bit) == ["scale_vt"]
+
+
+@pytest.mark.parametrize("transfer", ["smpte2084", "arib-std-b67"])
+def test_videotoolbox_hdr_filters(transfer):
+    context = _hdr_context(
+        hwaccel="videotoolbox",
+        resolution="720p",
+        transfer=transfer,
+    )
+    strategy = get_hwaccel("videotoolbox")
+
+    assert asyncio.run(strategy.input_args(context)) == [
+        "-hwaccel",
+        "videotoolbox",
+        "-hwaccel_output_format",
+        "videotoolbox_vld",
+    ]
+    assert strategy.video_filters(context) == [
+        (
+            f"scale_vt=w='{context.scale_width}':h='{context.scale_height}':"
+            "color_matrix=bt709:color_primaries=bt709:color_transfer=bt709"
+        )
     ]
 
 
@@ -684,7 +892,7 @@ def test_setup_failure_stops_process(monkeypatch, tmp_path):
     monkeypatch.setattr(
         transcoder,
         "_probe_media",
-        AsyncMock(return_value=(60.0, None, None, None)),
+        AsyncMock(return_value=MediaProbe(duration=60.0)),
     )
     monkeypatch.setattr(
         transcoder, "_build_hls_cmd", AsyncMock(return_value=["ffmpeg"])
@@ -713,7 +921,16 @@ def test_setup_failure_stops_process(monkeypatch, tmp_path):
 def test_ensure_builds_context(monkeypatch, tmp_path, framerate, expected_framerate):
     lock = object()
     proc = SimpleNamespace(pid=123, returncode=None, stderr=None)
-    probe = AsyncMock(return_value=(60.0, framerate, "yuv420p10le", 1080))
+    metadata = MediaProbe(
+        duration=60.0,
+        framerate=framerate,
+        pixel_format="yuv420p10le",
+        height=1080,
+        color_transfer="smpte2084",
+        color_primaries="bt2020",
+        color_space="bt2020nc",
+    )
+    probe = AsyncMock(return_value=metadata)
     build = AsyncMock(return_value=["ffmpeg"])
     register = AsyncMock(return_value="hash:profile")
     options = TranscodeOptions()
@@ -753,6 +970,8 @@ def test_ensure_builds_context(monkeypatch, tmp_path, framerate, expected_framer
     assert context.source_framerate == expected_framerate
     assert context.source_pixel_format == "yuv420p10le"
     assert context.source_height == 1080
+    assert context.metadata is metadata
+    assert context.needs_tonemap is True
     register.assert_awaited_once_with(
         "input.mkv", "hash", options, tmp_path, proc, 60.0
     )
@@ -880,7 +1099,7 @@ def test_timeout_keeps_lock(monkeypatch, tmp_path):
     monkeypatch.setattr(
         transcoder,
         "_probe_media",
-        AsyncMock(return_value=(60.0, None, None, None)),
+        AsyncMock(return_value=MediaProbe(duration=60.0)),
     )
     monkeypatch.setattr(
         transcoder, "_build_hls_cmd", AsyncMock(return_value=["ffmpeg"])

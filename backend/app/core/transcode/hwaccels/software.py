@@ -1,8 +1,18 @@
-from app.core.transcode.hwaccels.base import HWAccelStrategy, TranscodeContext
+from app.core.transcode.hwaccels.base import (
+    HWAccelStrategy,
+    TranscodeContext,
+    software_tonemap_filters,
+)
 
 
 class Software(HWAccelStrategy):
     """Software H.264 strategy based on libx264."""
+
+    def video_filters(self, context: TranscodeContext) -> list[str]:
+        """Tone map HDR input to 8-bit BT.709 in system memory."""
+        if context.needs_tonemap:
+            return software_tonemap_filters(context, "yuv420p")
+        return []
 
     def encoder_args(self, context: TranscodeContext) -> list[str]:
         """Build libx264 CRF options with a VBV bitrate cap.
@@ -44,7 +54,7 @@ class Software(HWAccelStrategy):
         """
         return [
             "-force_key_frames:0",
-            f"expr:gte(t,n_forced*{context.segment_length})",
+            f"expr:gte(t,n_forced*{context.options.segment_length})",
             # disable scene-change keyframes for deterministic GOPs
             "-sc_threshold:v:0",
             "0",
