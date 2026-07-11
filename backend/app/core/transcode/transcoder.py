@@ -14,6 +14,8 @@ from app.core.transcode.hls import (
 from app.core.transcode.options import TranscodeOptions
 from app.core.transcode.tasks import finish_task, register_task
 
+_PROCESS_TERMINATE_TIMEOUT = 5.0
+
 
 async def _ffmpeg() -> str:
     """Get the ffmpeg executable path from global config or default to "ffmpeg".
@@ -167,6 +169,7 @@ async def ensure_transcode(
 
     # start the ffmpeg process if we acquired the lock
     lock_handed_off = False
+    proc: asyncio.subprocess.Process | None = None
     try:
         _cleanup_stale_hls(out_dir)
 
@@ -205,6 +208,8 @@ async def ensure_transcode(
 
     except Exception:
         if not lock_handed_off:
+            if proc is not None:
+                await _terminate_ffmpeg(proc)
             _release_lock(lock)
         raise
 
@@ -240,6 +245,33 @@ def _release_lock(lock: FileLock):
     """
     with contextlib.suppress(Exception):
         lock.release()
+
+
+async def _terminate_ffmpeg(proc: asyncio.subprocess.Process) -> None:
+    """Stop an unmonitored ffmpeg process without masking setup errors.
+
+    Args:
+        proc: The ffmpeg subprocess that failed before monitor handoff.
+    """
+    try:
+        if proc.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                proc.terminate()
+        try:
+            await asyncio.wait_for(
+                proc.communicate(), timeout=_PROCESS_TERMINATE_TIMEOUT
+            )
+        except TimeoutError:
+            if proc.returncode is None:
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
+            await proc.communicate()
+    except Exception:
+        logger.warning(
+            "Failed to stop unmonitored ffmpeg process %s",
+            getattr(proc, "pid", None),
+            exc_info=True,
+        )
 
 
 async def _build_hls_cmd(

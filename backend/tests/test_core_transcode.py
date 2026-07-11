@@ -140,6 +140,65 @@ def test_rechecks_completion(monkeypatch, tmp_path):
     release.assert_called_once_with(lock)
 
 
+def test_setup_failure_stops_process(monkeypatch, tmp_path):
+    events = []
+
+    async def communicate():
+        events.append("wait")
+        return b"", b""
+
+    lock = object()
+    proc = SimpleNamespace(
+        pid=123,
+        returncode=None,
+        stderr=None,
+        terminate=Mock(side_effect=lambda: events.append("terminate")),
+        kill=Mock(),
+        communicate=AsyncMock(side_effect=communicate),
+    )
+    release = Mock(side_effect=lambda _lock: events.append("release"))
+
+    monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
+    monkeypatch.setattr(transcoder, "_is_complete", Mock(return_value=False))
+    monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
+    monkeypatch.setattr(transcoder, "_cleanup_stale_hls", Mock())
+    monkeypatch.setattr(transcoder, "probe_framerate", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        transcoder, "_build_hls_cmd", AsyncMock(return_value=["ffmpeg"])
+    )
+    monkeypatch.setattr(
+        transcoder.asyncio, "create_subprocess_exec", AsyncMock(return_value=proc)
+    )
+    monkeypatch.setattr(transcoder, "probe_duration", AsyncMock(return_value=60.0))
+    monkeypatch.setattr(
+        transcoder, "register_task", AsyncMock(side_effect=RuntimeError("store failed"))
+    )
+    monkeypatch.setattr(transcoder, "_release_lock", release)
+
+    with pytest.raises(RuntimeError, match="store failed"):
+        asyncio.run(
+            transcoder.ensure_transcode("input.mkv", "hash", TranscodeOptions())
+        )
+
+    assert events == ["terminate", "wait", "release"]
+    proc.kill.assert_not_called()
+
+
+def test_cleanup_kills_on_timeout():
+    proc = SimpleNamespace(
+        returncode=None,
+        terminate=Mock(),
+        kill=Mock(),
+        communicate=AsyncMock(side_effect=[TimeoutError, (b"", b"")]),
+    )
+
+    asyncio.run(transcoder._terminate_ffmpeg(proc))
+
+    proc.terminate.assert_called_once_with()
+    proc.kill.assert_called_once_with()
+    assert proc.communicate.await_count == 2
+
+
 def test_timeout_keeps_lock(monkeypatch, tmp_path):
     lock = object()
     proc = SimpleNamespace(pid=123, returncode=None, stderr=None)
