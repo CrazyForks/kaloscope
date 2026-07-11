@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from app.core.transcode import hls, transcoder
+from app.core.transcode import hls, tasks, transcoder
 from app.core.transcode.options import TranscodeOptions
 
 
@@ -26,6 +26,20 @@ def test_hls_exports():
     )
 
     assert all(getattr(package, name) is getattr(hls, name) for name in names)
+
+
+def test_task_exports():
+    package = importlib.import_module("app.core.transcode")
+    tasks = importlib.import_module("app.core.transcode.tasks")
+    names = (
+        "delete_tasks",
+        "finish_task",
+        "list_tasks",
+        "register_task",
+        "stop_tasks",
+    )
+
+    assert all(getattr(package, name) is getattr(tasks, name) for name in names)
 
 
 class _Lock:
@@ -163,15 +177,15 @@ def test_list_releases_lock(monkeypatch):
     lock = _Lock()
     store = {"task": {"id": "task"}}
 
-    monkeypatch.setattr(transcoder, "_task_store", lambda: (store, lock))
-    monkeypatch.setattr(transcoder, "scan_outputs", lambda: [])
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, lock))
+    monkeypatch.setattr(tasks, "scan_outputs", lambda: [])
 
     def snapshot(_task):
         assert lock.locked is False
         return {"id": "task", "started_at": "2026-01-01", "encoded_size": 0}
 
-    monkeypatch.setattr(transcoder, "_task_snapshot", snapshot)
+    monkeypatch.setattr(tasks, "_task_snapshot", snapshot)
 
-    tasks = asyncio.run(transcoder.list_tasks())
+    result = asyncio.run(tasks.list_tasks())
 
-    assert [task["id"] for task in tasks] == ["task"]
+    assert [task["id"] for task in result] == ["task"]
