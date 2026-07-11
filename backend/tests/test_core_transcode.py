@@ -199,6 +199,68 @@ def test_cleanup_kills_on_timeout():
     assert proc.communicate.await_count == 2
 
 
+def test_shutdown_stops_monitors(monkeypatch):
+    finish = AsyncMock()
+    release = Mock()
+
+    monkeypatch.setattr(transcoder, "finish_task", finish)
+    monkeypatch.setattr(transcoder, "_release_lock", release)
+
+    async def run():
+        started = asyncio.Event()
+        blocker = asyncio.Event()
+
+        async def read():
+            started.set()
+            await blocker.wait()
+
+        proc = SimpleNamespace(
+            pid=123,
+            returncode=None,
+            stderr=SimpleNamespace(read=AsyncMock(side_effect=read)),
+            terminate=Mock(),
+            kill=Mock(),
+            communicate=AsyncMock(return_value=(b"", b"")),
+        )
+        lock = object()
+        task = transcoder._start_monitor(proc, lock, "task")
+        assert task in transcoder._MONITOR_TASKS
+
+        await started.wait()
+        await transcoder.shutdown_monitors()
+        return task, proc, lock
+
+    task, proc, lock = asyncio.run(run())
+
+    assert task.cancelled()
+    assert not transcoder._MONITOR_TASKS
+    proc.terminate.assert_called_once_with()
+    finish.assert_awaited_once_with("task", 255)
+    release.assert_called_once_with(lock)
+
+
+def test_monitor_errors_logged(monkeypatch):
+    error = Mock()
+
+    async def fail(*_args):
+        raise RuntimeError("monitor failed")
+
+    monkeypatch.setattr(transcoder, "_monitor_ffmpeg", fail)
+    monkeypatch.setattr(transcoder.logger, "error", error)
+
+    async def run():
+        task = transcoder._start_monitor(object(), object(), "task")
+        assert task in transcoder._MONITOR_TASKS
+        await asyncio.gather(task, return_exceptions=True)
+        await asyncio.sleep(0)
+        return task
+
+    task = asyncio.run(run())
+
+    assert task not in transcoder._MONITOR_TASKS
+    error.assert_called_once()
+
+
 def test_timeout_keeps_lock(monkeypatch, tmp_path):
     lock = object()
     proc = SimpleNamespace(pid=123, returncode=None, stderr=None)
@@ -221,11 +283,7 @@ def test_timeout_keeps_lock(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(transcoder, "_wait_segment", AsyncMock(return_value=False))
     monkeypatch.setattr(transcoder, "_release_lock", release)
-
-    def close_monitor(coro):
-        coro.close()
-
-    monkeypatch.setattr(transcoder.asyncio, "ensure_future", close_monitor)
+    monkeypatch.setattr(transcoder, "_start_monitor", Mock())
 
     with pytest.raises(RuntimeError, match="not ready"):
         asyncio.run(

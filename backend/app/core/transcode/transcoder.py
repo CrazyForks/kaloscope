@@ -15,6 +15,7 @@ from app.core.transcode.options import TranscodeOptions
 from app.core.transcode.tasks import finish_task, register_task
 
 _PROCESS_TERMINATE_TIMEOUT = 5.0
+_MONITOR_TASKS: set[asyncio.Task[None]] = set()
 
 
 async def _ffmpeg() -> str:
@@ -195,7 +196,7 @@ async def ensure_transcode(
         )
 
         # monitor completion in the background
-        asyncio.ensure_future(_monitor_ffmpeg(proc, lock, task_id))
+        _start_monitor(proc, lock, task_id)
         lock_handed_off = True
 
         # wait for at least one segment so the player can start immediately
@@ -272,6 +273,50 @@ async def _terminate_ffmpeg(proc: asyncio.subprocess.Process) -> None:
             getattr(proc, "pid", None),
             exc_info=True,
         )
+
+
+def _start_monitor(
+    proc: asyncio.subprocess.Process, lock: FileLock, task_id: str | None = None
+) -> asyncio.Task[None]:
+    """Start and retain an ffmpeg monitor task until it finishes.
+
+    Args:
+        proc: The ffmpeg subprocess to monitor.
+        lock: The `FileLock` held for the output directory.
+        task_id: The registered transcode task ID, if available.
+
+    Returns:
+        The scheduled monitor task.
+    """
+    name = f"transcode-monitor:{task_id or proc.pid}"
+    task = asyncio.create_task(_monitor_ffmpeg(proc, lock, task_id), name=name)
+    _MONITOR_TASKS.add(task)
+    task.add_done_callback(_monitor_done)
+    return task
+
+
+def _monitor_done(task: asyncio.Task[None]) -> None:
+    """Remove a completed monitor and consume any background exception."""
+    _MONITOR_TASKS.discard(task)
+    if task.cancelled():
+        return
+    try:
+        task.result()
+    except Exception:
+        logger.error(
+            "Transcode monitor task failed: %s", task.get_name(), exc_info=True
+        )
+
+
+async def shutdown_monitors() -> None:
+    """Cancel and wait for all ffmpeg monitor tasks in this worker."""
+    monitors = tuple(_MONITOR_TASKS)
+    if not monitors:
+        return
+    for task in monitors:
+        task.cancel()
+    await asyncio.gather(*monitors, return_exceptions=True)
+    _MONITOR_TASKS.difference_update(monitors)
 
 
 async def _build_hls_cmd(
@@ -406,15 +451,15 @@ async def _monitor_ffmpeg(
         lock: The `FileLock` instance.
         task_id: The registered task ID, if task tracking is enabled.
     """
-    stderr_data = b""
     try:
-        if proc.stderr is not None:
-            stderr_data = await proc.stderr.read()
-    except Exception:
-        pass
-    await proc.wait()
+        stderr_data = b""
+        try:
+            if proc.stderr is not None:
+                stderr_data = await proc.stderr.read()
+        except Exception:
+            pass
+        await proc.wait()
 
-    try:
         error_tail = None
         if proc.returncode not in (0, 255):
             if stderr_data:
@@ -429,6 +474,18 @@ async def _monitor_ffmpeg(
 
         if task_id:
             await finish_task(task_id, proc.returncode, error_tail)
+    except asyncio.CancelledError:
+        await _terminate_ffmpeg(proc)
+        if task_id:
+            try:
+                await finish_task(task_id, 255)
+            except Exception:
+                logger.error(
+                    "Failed to stop cancelled transcode task: %s",
+                    task_id,
+                    exc_info=True,
+                )
+        raise
     finally:
         _release_lock(lock)
     logger.debug("ffmpeg HLS finished for '%s'", Path(lock.lock_file).parent)

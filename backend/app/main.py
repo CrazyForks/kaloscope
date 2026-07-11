@@ -23,6 +23,7 @@ from app.core.media.watcher import LibWatcher
 from app.core.middleware import SessionHolder, on_request, on_response
 from app.core.monkeypatch import apply_monkey_patches
 from app.core.network import NetworkTransport
+from app.core.transcode.transcoder import shutdown_monitors
 from app.utils.importer import register_blueprints
 from app.utils.json import dumps, loads
 
@@ -72,6 +73,7 @@ async def before_server_start(app: Sanic):
 @app.before_server_stop
 async def before_server_stop(app: Sanic):
     """Handle the worker process shutdown event."""
+    await shutdown_monitors()
     await save_sessions(app)
     await close_dl_syncer(app)
     await close_lib_watcher(app)
