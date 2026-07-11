@@ -146,6 +146,19 @@ async def list_tasks() -> list[dict[str, Any]]:
         stored_tasks = [dict(task) for task in store.values()]
     finally:
         lock.release()
+
+    return await asyncio.to_thread(_build_task_list, stored_tasks)
+
+
+def _build_task_list(stored_tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build API task snapshots from shared records and filesystem outputs.
+
+    Args:
+        stored_tasks: Copies of the runtime task records from the shared store.
+
+    Returns:
+        Runtime task snapshots followed by unregistered filesystem outputs.
+    """
     tasks = [_task_snapshot(task) for task in stored_tasks]
     tasks.sort(key=lambda task: task["started_at"], reverse=True)
 

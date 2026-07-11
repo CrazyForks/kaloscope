@@ -2,6 +2,7 @@
 
 import asyncio
 import importlib
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -327,6 +328,30 @@ def test_list_releases_lock(monkeypatch):
     result = asyncio.run(tasks.list_tasks())
 
     assert [task["id"] for task in result] == ["task"]
+
+
+def test_list_offloads_scan(monkeypatch):
+    main_thread = threading.get_ident()
+    scan_threads = []
+    store = {"task": {"id": "task"}}
+
+    def snapshot(_task):
+        scan_threads.append(threading.get_ident())
+        return {"id": "task", "started_at": "2026-01-01", "encoded_size": 0}
+
+    def scan_outputs():
+        scan_threads.append(threading.get_ident())
+        return []
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+    monkeypatch.setattr(tasks, "_task_snapshot", snapshot)
+    monkeypatch.setattr(tasks, "scan_outputs", scan_outputs)
+
+    result = asyncio.run(tasks.list_tasks())
+
+    assert [task["id"] for task in result] == ["task"]
+    assert scan_threads
+    assert all(thread != main_thread for thread in scan_threads)
 
 
 def test_finish_releases_lock(monkeypatch, tmp_path):
