@@ -119,6 +119,27 @@ def test_options_reject_invalid(kwargs):
         TranscodeOptions(**kwargs)
 
 
+def test_rechecks_completion(monkeypatch, tmp_path):
+    lock = object()
+    complete = Mock(side_effect=[False, True])
+    cleanup = Mock(side_effect=AssertionError("cleanup called"))
+    release = Mock()
+    options = TranscodeOptions()
+
+    monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
+    monkeypatch.setattr(transcoder, "_is_complete", complete)
+    monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
+    monkeypatch.setattr(transcoder, "_cleanup_stale_hls", cleanup)
+    monkeypatch.setattr(transcoder, "_release_lock", release)
+
+    result = asyncio.run(transcoder.ensure_transcode("input.mkv", "hash", options))
+
+    assert result == ("hash", options.profile)
+    assert complete.call_count == 2
+    cleanup.assert_not_called()
+    release.assert_called_once_with(lock)
+
+
 def test_timeout_keeps_lock(monkeypatch, tmp_path):
     lock = object()
     proc = SimpleNamespace(pid=123, returncode=None, stderr=None)

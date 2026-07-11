@@ -158,6 +158,13 @@ async def ensure_transcode(
             raise RuntimeError("HLS first segment was not ready in time")
         return media_hash, profile
 
+    # another process may have completed after the initial check but before
+    # this process acquired the lock
+    if _is_complete(m3u8_path):
+        logger.debug("HLS completed while acquiring the lock: %s", out_dir)
+        _release_lock(lock)
+        return media_hash, profile
+
     # start the ffmpeg process if we acquired the lock
     lock_handed_off = False
     try:
