@@ -125,9 +125,6 @@ def test_timeout_keeps_lock(monkeypatch, tmp_path):
     release.assert_not_called()
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason="monitor cleanup fix is pending"
-)
 def test_monitor_releases_lock(monkeypatch, tmp_path):
     proc = SimpleNamespace(stderr=None, returncode=0, wait=AsyncMock())
     lock = SimpleNamespace(lock_file=str(tmp_path / ".lock"))

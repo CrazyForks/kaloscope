@@ -920,21 +920,23 @@ async def _monitor_ffmpeg(
         pass
     await proc.wait()
 
-    error_tail = None
-    if proc.returncode not in (0, 255):
-        if stderr_data:
-            with contextlib.suppress(Exception):
-                error_tail = stderr_data.decode(errors="replace")[-500:]
-        logger.error(
-            "ffmpeg HLS exited with code %d for '%s': %s",
-            proc.returncode,
-            Path(lock.lock_file).parent,
-            error_tail or "",
-        )
+    try:
+        error_tail = None
+        if proc.returncode not in (0, 255):
+            if stderr_data:
+                with contextlib.suppress(Exception):
+                    error_tail = stderr_data.decode(errors="replace")[-500:]
+            logger.error(
+                "ffmpeg HLS exited with code %d for '%s': %s",
+                proc.returncode,
+                Path(lock.lock_file).parent,
+                error_tail or "",
+            )
 
-    if task_id:
-        await finish_task(task_id, proc.returncode, error_tail)
-    _release_lock(lock)
+        if task_id:
+            await finish_task(task_id, proc.returncode, error_tail)
+    finally:
+        _release_lock(lock)
     logger.debug("ffmpeg HLS finished for '%s'", Path(lock.lock_file).parent)
 
 
