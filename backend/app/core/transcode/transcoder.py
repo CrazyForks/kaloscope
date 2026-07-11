@@ -613,6 +613,7 @@ async def ensure_transcode(
         return media_hash, profile
 
     # start the ffmpeg process if we acquired the lock
+    lock_handed_off = False
     try:
         _cleanup_stale_hls(out_dir)
 
@@ -639,6 +640,7 @@ async def ensure_transcode(
 
         # monitor completion in the background
         asyncio.ensure_future(_monitor_ffmpeg(proc, lock, task_id))
+        lock_handed_off = True
 
         # wait for at least one segment so the player can start immediately
         if not await _wait_segment(m3u8_path, proc=proc):
@@ -649,7 +651,8 @@ async def ensure_transcode(
             raise RuntimeError("HLS first segment was not ready in time")
 
     except Exception:
-        _release_lock(lock)
+        if not lock_handed_off:
+            _release_lock(lock)
         raise
 
     return media_hash, profile

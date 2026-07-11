@@ -87,9 +87,6 @@ def test_options_reject_invalid(kwargs):
         TranscodeOptions(**kwargs)
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason="lock ownership fix is pending"
-)
 def test_timeout_keeps_lock(monkeypatch, tmp_path):
     lock = object()
     proc = SimpleNamespace(pid=123, returncode=None, stderr=None)
