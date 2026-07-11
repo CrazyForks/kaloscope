@@ -3,6 +3,7 @@
 import asyncio
 import importlib
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, Mock
@@ -185,6 +186,34 @@ def test_delete_output(tmp_path):
     assert hls.delete_output("hash", "profile", root=root) is True
     assert not out_dir.exists()
     assert not out_dir.parent.exists()
+
+
+def test_lock_name(tmp_path):
+    out_dir = tmp_path / "transcoded" / "hash" / "medium_720p_none"
+    lock = hls.acquire_output_lock(out_dir)
+    assert lock is not None
+
+    try:
+        assert Path(lock.lock_file).name == "hash_medium_720p_none.lock"
+    finally:
+        lock.release()
+
+
+def test_delete_locked(tmp_path):
+    root = tmp_path / "transcoded"
+    out_dir = root / "hash" / "profile"
+    out_dir.mkdir(parents=True)
+    playlist = out_dir / "index.m3u8"
+    playlist.write_text("#EXTM3U\n")
+    lock = transcoder._acquire_lock(out_dir)
+    assert lock is not None
+
+    try:
+        assert hls.delete_output("hash", "profile", root=root) is False
+    finally:
+        transcoder._release_lock(lock)
+
+    assert playlist.is_file()
 
 
 def test_delete_escape(tmp_path):
@@ -838,6 +867,32 @@ def test_delete_releases_lock(monkeypatch, tmp_path):
 
     assert result == ["hash:profile"]
     assert not store
+
+
+def test_delete_keeps_locked(monkeypatch, tmp_path):
+    out_dir = tmp_path / "hash" / "profile"
+    out_dir.mkdir(parents=True)
+    playlist = out_dir / "index.m3u8"
+    playlist.write_text("#EXTM3U\n")
+    store = {
+        "hash:profile": {
+            **_runtime_task(out_dir, tasks.TaskState.FINISHED),
+            "out_dir": str(out_dir),
+        }
+    }
+    lock = transcoder._acquire_lock(out_dir)
+    assert lock is not None
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+
+    try:
+        result = asyncio.run(tasks.delete_tasks(["hash:profile"]))
+    finally:
+        transcoder._release_lock(lock)
+
+    assert result == []
+    assert "hash:profile" in store
+    assert playlist.is_file()
 
 
 def test_delete_keeps_replacement(monkeypatch, tmp_path):

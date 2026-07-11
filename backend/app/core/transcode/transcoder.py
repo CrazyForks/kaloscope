@@ -4,10 +4,11 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-from filelock import FileLock, Timeout
+from filelock import FileLock
 from sanic.log import logger
 
 from app.core.transcode.hls import (
+    acquire_output_lock,
     cleanup_stale_hls,
     is_complete,
     output_dir,
@@ -344,7 +345,7 @@ async def _build_hls_cmd(
 def _acquire_lock(out_dir: Path) -> FileLock | None:
     """Try to acquire an exclusive transcode lock for the given output directory.
 
-    Uses a non-blocking `FileLock` on a `.lock` file within the output directory.
+    Uses the shared non-blocking output lock also used by deletion operations.
 
     Args:
         out_dir: The output directory to lock.
@@ -353,13 +354,15 @@ def _acquire_lock(out_dir: Path) -> FileLock | None:
         The acquired `FileLock` instance if successful,
         or `None` if another process holds the lock.
     """
-    out_dir.mkdir(parents=True, exist_ok=True)
-    lock = FileLock(out_dir / ".lock", blocking=False)
-    try:
-        lock.acquire()
-        return lock
-    except Timeout:
+    lock = acquire_output_lock(out_dir)
+    if lock is None:
         return None
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return lock
+    except OSError:
+        _release_lock(lock)
+        raise
 
 
 def _release_lock(lock: FileLock):
@@ -434,9 +437,9 @@ async def _monitor_ffmpeg(
                 with contextlib.suppress(Exception):
                     error_tail = stderr_data.decode(errors="replace")[-500:]
             logger.error(
-                "ffmpeg HLS exited with code %d for '%s': %s",
+                "ffmpeg HLS exited with code %d for task '%s': %s",
                 proc.returncode,
-                Path(lock.lock_file).parent,
+                task_id or proc.pid,
                 error_tail or "",
             )
 
@@ -456,7 +459,7 @@ async def _monitor_ffmpeg(
         raise
     finally:
         _release_lock(lock)
-    logger.debug("ffmpeg HLS finished for '%s'", Path(lock.lock_file).parent)
+    logger.debug("ffmpeg HLS finished for task '%s'", task_id or proc.pid)
 
 
 def _start_monitor(

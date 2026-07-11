@@ -397,6 +397,8 @@ async def delete_tasks(ids: list[str]) -> list[str]:
     deleted: list[str] = []
     for task_id, task, media_hash, profile, root in candidates:
         deleted_output = delete_output(media_hash, profile, root=root)
+        if task is not None and not deleted_output and Path(task["out_dir"]).is_dir():
+            continue
         removed_record = False
         if task is not None:
             lock.acquire()

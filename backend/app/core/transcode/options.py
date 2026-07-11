@@ -8,9 +8,8 @@ class EncoderConfig:
 
     Attributes:
         encoder: The FFmpeg video encoder name.
-        hwaccel: The FFmpeg hardware decoder name, if enabled.
-        hwaccel_output_format: The hardware frame format requested from the
-            decoder, if required by the strategy.
+        hwaccel: The FFmpeg hardware decoder name.
+        hwaccel_output_format: The hardware frame format requested from the decoder.
     """
 
     encoder: str = "libx264"

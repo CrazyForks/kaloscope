@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict, cast
 
 import aiofiles
+from filelock import FileLock, Timeout
 from sanic.log import logger
 
 from app.core.config import KaloscopeConfig
@@ -135,6 +136,30 @@ def output_dir(media_hash: str, profile: str) -> Path:
         The output directory path.
     """
     return Path(KaloscopeConfig.get_workspace("transcoded")) / media_hash / profile
+
+
+def acquire_output_lock(out_dir: Path | str) -> FileLock | None:
+    """Try to lock a transcode output directory without blocking.
+
+    The lock file is stored outside the output directory so the directory can
+    be removed safely while the lock remains held.
+
+    Args:
+        out_dir: The transcode output directory to lock.
+
+    Returns:
+        The acquired lock, or `None` when another process holds it.
+    """
+    out_dir = Path(out_dir)
+    lock_dir = out_dir.parents[1] / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    lock_name = f"{out_dir.parent.name}_{out_dir.name}.lock"
+    lock = FileLock(lock_dir / lock_name, blocking=False)
+    try:
+        lock.acquire()
+        return lock
+    except Timeout:
+        return None
 
 
 def output_stats(out_dir: Path | str, duration: float | None = None) -> TranscodeStats:
@@ -269,10 +294,19 @@ def delete_output(
     if not out_resolved.is_relative_to(root_resolved) or not out_dir.is_dir():
         return False
 
-    shutil.rmtree(out_dir)
-    with contextlib.suppress(OSError):
-        out_dir.parent.rmdir()
-    return True
+    lock = acquire_output_lock(out_dir)
+    if lock is None:
+        return False
+    try:
+        if not out_dir.is_dir():
+            return False
+        shutil.rmtree(out_dir)
+        with contextlib.suppress(OSError):
+            out_dir.parent.rmdir()
+        return True
+    finally:
+        with contextlib.suppress(Exception):
+            lock.release()
 
 
 def remove_endlist(out_dir: Path | str | None) -> None:
