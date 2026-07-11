@@ -364,7 +364,6 @@ def test_transcode_context():
     assert context.options is options
     assert context.source_framerate == 23.5
     assert context.source_pixel_format is None
-    assert context.source_is_10_bit is False
     assert context.source_height is None
     assert context.segment_length == 6
     assert context.needs_scale is True
@@ -406,7 +405,11 @@ def test_software_cmd(monkeypatch, tmp_path):
 def test_nvenc_args():
     strategy = get_hwaccel("nvenc")
     options = TranscodeOptions(hwaccel="nvenc", quality="high")
-    context = TranscodeContext(options=options, source_framerate=23.5)
+    context = TranscodeContext(
+        options=options,
+        source_framerate=23.5,
+        source_pixel_format="yuv420p",
+    )
 
     assert asyncio.run(strategy.input_args(context)) == [
         "-hwaccel",
@@ -418,7 +421,7 @@ def test_nvenc_args():
         options=TranscodeOptions(hwaccel="nvenc", resolution="720p")
     )
     assert asyncio.run(strategy.input_args(scaled_context)) == ["-hwaccel", "cuda"]
-    assert strategy.video_filters(context) == []
+    assert strategy.video_filters(context) == ["scale_cuda=format=yuv420p"]
     ten_bit_context = TranscodeContext(
         options=options,
         source_pixel_format="yuv420p10le",
@@ -561,7 +564,7 @@ def test_vaapi_device(monkeypatch):
 def test_videotoolbox_args():
     strategy = get_hwaccel("videotoolbox")
     options = TranscodeOptions(hwaccel="videotoolbox", quality="low")
-    context = TranscodeContext(options=options)
+    context = TranscodeContext(options=options, source_pixel_format="yuv420p")
 
     assert asyncio.run(strategy.input_args(context)) == [
         "-hwaccel",
@@ -577,6 +580,13 @@ def test_videotoolbox_args():
         "videotoolbox",
     ]
     assert strategy.video_filters(context) == []
+    unknown_format_context = TranscodeContext(options=options)
+    assert strategy.video_filters(unknown_format_context) == ["scale_vt=format=nv12"]
+    nonstandard_8_bit_context = TranscodeContext(
+        options=options,
+        source_pixel_format="yuvj420p",
+    )
+    assert strategy.video_filters(nonstandard_8_bit_context) == ["scale_vt=format=nv12"]
     ten_bit_context = TranscodeContext(
         options=options,
         source_pixel_format="yuv420p10le",
@@ -742,7 +752,6 @@ def test_ensure_builds_context(monkeypatch, tmp_path, framerate, expected_framer
     assert context.options is options
     assert context.source_framerate == expected_framerate
     assert context.source_pixel_format == "yuv420p10le"
-    assert context.source_is_10_bit is True
     assert context.source_height == 1080
     register.assert_awaited_once_with(
         "input.mkv", "hash", options, tmp_path, proc, 60.0

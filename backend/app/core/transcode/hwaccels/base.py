@@ -25,14 +25,6 @@ class TranscodeContext:
         return self.source_height is None or self.source_height > max_height
 
     @property
-    def source_is_10_bit(self) -> bool:
-        """Return whether the probed source pixel format is 10-bit."""
-        pixel_format = self.source_pixel_format
-        return pixel_format is not None and pixel_format.lower().endswith(
-            ("10", "10le", "10be")
-        )
-
-    @property
     def encoder_config(self) -> EncoderConfig:
         return self.options.encoder_config
 

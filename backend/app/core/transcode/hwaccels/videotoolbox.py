@@ -5,8 +5,11 @@ class VideoToolbox(HWAccelStrategy):
     """Apple VideoToolbox H.264 encoding strategy."""
 
     def video_filters(self, context: TranscodeContext) -> list[str]:
-        """Convert original-resolution 10-bit hardware frames to NV12."""
-        if not context.needs_scale and context.source_is_10_bit:
+        """Normalize non-YUV420P VideoToolbox frames to NV12."""
+        pixel_format = context.source_pixel_format
+        if not context.needs_scale and (
+            pixel_format is None or pixel_format.lower() != "yuv420p"
+        ):
             return ["scale_vt=format=nv12"]
         return []
 
