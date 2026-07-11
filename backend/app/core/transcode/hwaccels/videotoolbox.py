@@ -1,5 +1,4 @@
 from app.core.transcode.hwaccels.base import HWAccelStrategy, TranscodeContext
-from app.core.transcode.options import HW_BITRATE
 
 
 class VideoToolbox(HWAccelStrategy):
@@ -15,7 +14,7 @@ class VideoToolbox(HWAccelStrategy):
             FFmpeg options for bitrate-controlled VideoToolbox encoding.
         """
         quality = context.options.quality
-        bitrate = HW_BITRATE.get(quality, "3000k")
+        bitrate = context.options.bitrate
         vt_prio = "0" if quality in ("high", "medium") else "1"
         return [
             "-b:v",

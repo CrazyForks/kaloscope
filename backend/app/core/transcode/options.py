@@ -107,6 +107,10 @@ class TranscodeOptions:
         return QUALITY_CRF[self.quality]
 
     @property
+    def bitrate(self) -> str:
+        return HW_BITRATE[self.quality]
+
+    @property
     def max_height(self) -> int | None:
         return RESOLUTION_MAX_HEIGHT[self.resolution]
 

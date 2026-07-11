@@ -5,7 +5,6 @@ from app.core.transcode.hwaccels.base import (
     TranscodeContext,
     resolve_vaapi_device,
 )
-from app.core.transcode.options import HW_BITRATE
 
 
 class QSV(HWAccelStrategy):
@@ -70,7 +69,7 @@ class QSV(HWAccelStrategy):
         Returns:
             FFmpeg QSV rate-control and buffer options.
         """
-        bitrate = HW_BITRATE.get(context.options.quality, "3000k")
+        bitrate = context.options.bitrate
         bitrate_num = int(bitrate[:-1])
         return [
             "-preset",

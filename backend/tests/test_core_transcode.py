@@ -539,6 +539,14 @@ def test_videotoolbox_args():
 
 
 @pytest.mark.parametrize(
+    ("quality", "bitrate"),
+    [("low", "1500k"), ("medium", "3000k"), ("high", "6000k")],
+)
+def test_options_bitrate(quality, bitrate):
+    assert TranscodeOptions(quality=quality).bitrate == bitrate
+
+
+@pytest.mark.parametrize(
     "kwargs",
     [
         {"quality": "/tmp/outside"},

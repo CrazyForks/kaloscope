@@ -1,5 +1,4 @@
 from app.core.transcode.hwaccels.base import HWAccelStrategy, TranscodeContext
-from app.core.transcode.options import HW_BITRATE
 
 
 class Software(HWAccelStrategy):
@@ -15,7 +14,7 @@ class Software(HWAccelStrategy):
             FFmpeg options for predictable-bandwidth software encoding.
         """
         options = context.options
-        bitrate = HW_BITRATE.get(options.quality, "3000k")
+        bitrate = options.bitrate
         bitrate_num = int(bitrate[:-1])
         bufsize = str(bitrate_num * 2) + "k"
         return [

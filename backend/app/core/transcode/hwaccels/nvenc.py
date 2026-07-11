@@ -1,7 +1,6 @@
 import math
 
 from app.core.transcode.hwaccels.base import HWAccelStrategy, TranscodeContext
-from app.core.transcode.options import HW_BITRATE
 
 
 class NVENC(HWAccelStrategy):
@@ -17,7 +16,7 @@ class NVENC(HWAccelStrategy):
             FFmpeg options for the selected quality preset and bitrate.
         """
         options = context.options
-        bitrate = HW_BITRATE.get(options.quality, "3000k")
+        bitrate = options.bitrate
         nvenc_preset = (
             "p4"
             if options.quality == "medium"
