@@ -1,7 +1,6 @@
 import asyncio
 import contextlib
 import json
-from dataclasses import replace
 from pathlib import Path
 
 from filelock import FileLock
@@ -14,6 +13,7 @@ from app.core.transcode.hls import (
     output_dir,
     wait_segment,
 )
+from app.core.transcode.hwaccels.base import TranscodeContext
 from app.core.transcode.options import TranscodeOptions
 from app.core.transcode.tasks import finish_task, register_task
 
@@ -213,13 +213,13 @@ async def ensure_transcode(
     try:
         cleanup_stale_hls(out_dir)
 
-        # reuse one probe for duration tracking and GOP sizing
         duration, fps = await _probe_media(media_path)
-        effective_options = (
-            replace(options, framerate=fps) if fps is not None else options
+        context = TranscodeContext(
+            options=options,
+            source_framerate=fps if fps is not None else 30.0,
         )
 
-        cmd = await _build_hls_cmd(media_path, out_dir, effective_options)
+        cmd = await _build_hls_cmd(media_path, out_dir, context)
         logger.info("Starting ffmpeg HLS: %s", " ".join(cmd))
 
         proc = await asyncio.create_subprocess_exec(
@@ -229,7 +229,7 @@ async def ensure_transcode(
         )
 
         task_id = await register_task(
-            media_path, media_hash, effective_options, out_dir, proc, duration
+            media_path, media_hash, context.options, out_dir, proc, duration
         )
 
         _start_monitor(proc, lock, task_id)
@@ -253,7 +253,7 @@ async def ensure_transcode(
 
 
 async def _build_hls_cmd(
-    input_path: str, out_dir: Path, options: TranscodeOptions
+    input_path: str, out_dir: Path, context: TranscodeContext
 ) -> list[str]:
     """Build the ffmpeg command line for HLS transcoding.
 
@@ -266,23 +266,21 @@ async def _build_hls_cmd(
     Args:
         input_path: The source media file path.
         out_dir: The output directory for M3U8 playlist and TS segments.
-        options: The transcode parameters (encoder, quality, resolution).
+        context: The runtime transcode context.
 
     Returns:
         A list of command-line arguments ready for `asyncio.create_subprocess_exec`.
     """
     cmd = [await _ffmpeg(), "-hide_banner", "-loglevel", "error"]
 
-    seg_len = 6
-
     # software scale cannot consume GPU-resident frames
     # omit hwaccel_output_format so decoding stays in system memory
-    needs_scale = options.max_height is not None
+    options = context.options
 
     from app.core.transcode.hwaccels import get_hwaccel
 
     hwaccel = get_hwaccel(options.hwaccel)
-    cmd.extend(await hwaccel.input_args(needs_scale))
+    cmd.extend(await hwaccel.input_args(context))
 
     cmd.extend(["-i", input_path])
 
@@ -292,23 +290,23 @@ async def _build_hls_cmd(
     cmd.extend(["-map", "0:v:0?", "-map", "0:a:0?"])
 
     vf_parts: list[str] = []
-    if needs_scale:
+    if context.needs_scale:
         # preserve aspect ratio with a 16-pixel-aligned width and even height
         target_height = f"trunc(min({options.max_height},ih)/2)*2"
         vf_parts.append(
             f"scale='max(trunc(iw*{target_height}/ih/16)*16,16)':'{target_height}'"
         )
 
-    vf_parts.extend(hwaccel.video_filters(needs_scale))
+    vf_parts.extend(hwaccel.video_filters(context))
 
-    enc = options.encoder
+    enc = context.encoder_config.encoder
     cmd.extend(["-c:v", enc])
-    cmd.extend(hwaccel.encoder_args(options))
+    cmd.extend(hwaccel.encoder_args(context))
 
     if vf_parts:
         cmd.extend(["-vf", ",".join(vf_parts)])
 
-    cmd.extend(hwaccel.keyframe_args(options, seg_len))
+    cmd.extend(hwaccel.keyframe_args(context))
 
     cmd.extend(
         [
@@ -334,7 +332,7 @@ async def _build_hls_cmd(
             "-f",
             "hls",
             "-hls_time",
-            str(seg_len),
+            str(context.segment_length),
             "-hls_list_size",
             "0",
             "-hls_playlist_type",

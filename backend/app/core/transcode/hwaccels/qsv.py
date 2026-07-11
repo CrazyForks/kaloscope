@@ -1,23 +1,21 @@
 import math
 
-from app.core.transcode.hwaccels.base import HWAccelStrategy, resolve_vaapi_device
-from app.core.transcode.options import (
-    ENCODER_CONFIG,
-    HW_BITRATE,
-    TranscodeOptions,
+from app.core.transcode.hwaccels.base import (
+    HWAccelStrategy,
+    TranscodeContext,
+    resolve_vaapi_device,
 )
+from app.core.transcode.options import HW_BITRATE
 
 
 class QSV(HWAccelStrategy):
     """Intel Quick Sync Video H.264 encoding strategy."""
 
-    config = ENCODER_CONFIG["qsv"]
-
-    async def input_args(self, needs_scale: bool) -> list[str]:
+    async def input_args(self, context: TranscodeContext) -> list[str]:
         """Initialize QSV through a VAAPI-backed DRM render device.
 
         Args:
-            needs_scale: Whether the transcode uses a software scaling filter.
+            context: The runtime transcode context.
 
         Returns:
             FFmpeg device initialization and hardware decoding options.
@@ -36,7 +34,7 @@ class QSV(HWAccelStrategy):
             "-filter_hw_device",
             "qs",
         ]
-        if not needs_scale:
+        if not context.needs_scale:
             cmd.extend(
                 [
                     "-hwaccel",
@@ -49,30 +47,30 @@ class QSV(HWAccelStrategy):
             )
         return cmd
 
-    def video_filters(self, needs_scale: bool) -> list[str]:
+    def video_filters(self, context: TranscodeContext) -> list[str]:
         """Choose NV12 conversion for the current frame-memory location.
 
         Args:
-            needs_scale: Whether software scaling leaves frames in system memory.
+            context: The runtime transcode context.
 
         Returns:
             A software format filter or QSV VPP filter.
         """
-        return ["format=nv12" if needs_scale else "vpp_qsv=format=nv12"]
+        return ["format=nv12" if context.needs_scale else "vpp_qsv=format=nv12"]
 
-    def encoder_args(self, options: TranscodeOptions) -> list[str]:
+    def encoder_args(self, context: TranscodeContext) -> list[str]:
         """Build QSV VBR options with conservative buffer sizing.
 
         Uses the level 5.1-or-newer buffer factor because codec-level detection
         is not available here.
 
         Args:
-            options: The requested transcode settings.
+            context: The runtime transcode context.
 
         Returns:
             FFmpeg QSV rate-control and buffer options.
         """
-        bitrate = HW_BITRATE.get(options.quality, "3000k")
+        bitrate = HW_BITRATE.get(context.options.quality, "3000k")
         bitrate_num = int(bitrate[:-1])
         return [
             "-preset",
@@ -89,17 +87,16 @@ class QSV(HWAccelStrategy):
             str(bitrate_num * 2 * 1000),
         ]
 
-    def keyframe_args(self, options: TranscodeOptions, seg_len: int) -> list[str]:
+    def keyframe_args(self, context: TranscodeContext) -> list[str]:
         """Build a fixed GOP approximating one HLS segment.
 
         Args:
-            options: Transcode settings containing the source frame rate.
-            seg_len: The target HLS segment duration in seconds.
+            context: The runtime transcode context.
 
         Returns:
             FFmpeg options for fixed GOP and minimum keyframe intervals.
         """
-        gop = math.ceil(options.framerate * seg_len)
+        gop = math.ceil(context.source_framerate * context.segment_length)
         return [
             "-g:v:0",
             str(gop),

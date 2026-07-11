@@ -1,27 +1,22 @@
 import math
 
-from app.core.transcode.hwaccels.base import HWAccelStrategy
-from app.core.transcode.options import (
-    ENCODER_CONFIG,
-    HW_BITRATE,
-    TranscodeOptions,
-)
+from app.core.transcode.hwaccels.base import HWAccelStrategy, TranscodeContext
+from app.core.transcode.options import HW_BITRATE
 
 
 class NVENC(HWAccelStrategy):
     """NVIDIA NVENC H.264 encoding strategy."""
 
-    config = ENCODER_CONFIG["nvenc"]
-
-    def encoder_args(self, options: TranscodeOptions) -> list[str]:
+    def encoder_args(self, context: TranscodeContext) -> list[str]:
         """Build NVENC preset and constrained bitrate options.
 
         Args:
-            options: The requested transcode settings.
+            context: The runtime transcode context.
 
         Returns:
             FFmpeg options for the selected quality preset and bitrate.
         """
+        options = context.options
         bitrate = HW_BITRATE.get(options.quality, "3000k")
         nvenc_preset = (
             "p4"
@@ -39,17 +34,16 @@ class NVENC(HWAccelStrategy):
             str(int(bitrate[:-1]) * 2) + "k",
         ]
 
-    def keyframe_args(self, options: TranscodeOptions, seg_len: int) -> list[str]:
+    def keyframe_args(self, context: TranscodeContext) -> list[str]:
         """Build a fixed GOP approximating one HLS segment.
 
         Args:
-            options: Transcode settings containing the source frame rate.
-            seg_len: The target HLS segment duration in seconds.
+            context: The runtime transcode context.
 
         Returns:
             FFmpeg options for fixed GOP and minimum keyframe intervals.
         """
-        gop = math.ceil(options.framerate * seg_len)
+        gop = math.ceil(context.source_framerate * context.segment_length)
         return [
             "-g:v:0",
             str(gop),

@@ -1,25 +1,20 @@
-from app.core.transcode.hwaccels.base import HWAccelStrategy
-from app.core.transcode.options import (
-    ENCODER_CONFIG,
-    HW_BITRATE,
-    TranscodeOptions,
-)
+from app.core.transcode.hwaccels.base import HWAccelStrategy, TranscodeContext
+from app.core.transcode.options import HW_BITRATE
 
 
 class Software(HWAccelStrategy):
     """Software H.264 strategy based on libx264."""
 
-    config = ENCODER_CONFIG[None]
-
-    def encoder_args(self, options: TranscodeOptions) -> list[str]:
+    def encoder_args(self, context: TranscodeContext) -> list[str]:
         """Build libx264 CRF options with a VBV bitrate cap.
 
         Args:
-            options: The requested transcode settings.
+            context: The runtime transcode context.
 
         Returns:
             FFmpeg options for predictable-bandwidth software encoding.
         """
+        options = context.options
         bitrate = HW_BITRATE.get(options.quality, "3000k")
         bitrate_num = int(bitrate[:-1])
         bufsize = str(bitrate_num * 2) + "k"
@@ -39,19 +34,18 @@ class Software(HWAccelStrategy):
             bufsize,
         ]
 
-    def keyframe_args(self, options: TranscodeOptions, seg_len: int) -> list[str]:
+    def keyframe_args(self, context: TranscodeContext) -> list[str]:
         """Build segment-timed keyframes without scene-change insertion.
 
         Args:
-            options: The requested transcode settings.
-            seg_len: The target HLS segment duration in seconds.
+            context: The runtime transcode context.
 
         Returns:
             FFmpeg options for deterministic segment-aligned keyframes.
         """
         return [
             "-force_key_frames:0",
-            f"expr:gte(t,n_forced*{seg_len})",
+            f"expr:gte(t,n_forced*{context.segment_length})",
             # disable scene-change keyframes for deterministic GOPs
             "-sc_threshold:v:0",
             "0",

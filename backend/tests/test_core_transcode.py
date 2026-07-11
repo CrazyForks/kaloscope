@@ -15,6 +15,7 @@ import app.core.transcode.hwaccels.qsv as qsv_module
 import app.core.transcode.hwaccels.vaapi as vaapi_module
 from app.core.transcode import hls, tasks, transcoder
 from app.core.transcode.hwaccels import get_hwaccel
+from app.core.transcode.hwaccels.base import TranscodeContext
 from app.core.transcode.options import TranscodeOptions
 
 
@@ -342,12 +343,26 @@ def test_probe_timeout(monkeypatch):
     assert proc.communicate.await_count == 2
 
 
+def test_transcode_context():
+    options = TranscodeOptions(
+        hwaccel="nvenc",
+        quality="high",
+        resolution="720p",
+    )
+    context = TranscodeContext(options=options, source_framerate=23.5)
+
+    assert context.options is options
+    assert context.source_framerate == 23.5
+    assert context.segment_length == 6
+    assert context.needs_scale is True
+    assert context.encoder_config is options.encoder_config
+
+
 def test_software_cmd(monkeypatch, tmp_path):
     monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
+    context = TranscodeContext(options=TranscodeOptions())
 
-    cmd = asyncio.run(
-        transcoder._build_hls_cmd("input.mkv", tmp_path, TranscodeOptions())
-    )
+    cmd = asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
 
     assert cmd[cmd.index("-c:v") + 1] == "libx264"
     assert cmd[cmd.index("-crf") + 1] == "23"
@@ -359,16 +374,21 @@ def test_software_cmd(monkeypatch, tmp_path):
 
 def test_nvenc_args():
     strategy = get_hwaccel("nvenc")
-    options = TranscodeOptions(hwaccel="nvenc", quality="high", framerate=23.5)
+    options = TranscodeOptions(hwaccel="nvenc", quality="high")
+    context = TranscodeContext(options=options, source_framerate=23.5)
 
-    assert asyncio.run(strategy.input_args(False)) == [
+    assert asyncio.run(strategy.input_args(context)) == [
         "-hwaccel",
         "cuda",
         "-hwaccel_output_format",
         "cuda",
     ]
-    assert asyncio.run(strategy.input_args(True)) == ["-hwaccel", "cuda"]
-    assert strategy.encoder_args(options) == [
+    scaled_context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="nvenc", resolution="720p")
+    )
+    assert asyncio.run(strategy.input_args(scaled_context)) == ["-hwaccel", "cuda"]
+    assert strategy.video_filters(context) == []
+    assert strategy.encoder_args(context) == [
         "-preset",
         "p7",
         "-b:v",
@@ -378,7 +398,7 @@ def test_nvenc_args():
         "-bufsize",
         "12000k",
     ]
-    assert strategy.keyframe_args(options, 6) == [
+    assert strategy.keyframe_args(context) == [
         "-g:v:0",
         "141",
         "-keyint_min:v:0",
@@ -389,13 +409,19 @@ def test_nvenc_args():
 def test_qsv_args(monkeypatch):
     device = "/dev/dri/renderD128"
     strategy = get_hwaccel("qsv")
-    options = TranscodeOptions(hwaccel="qsv", framerate=25.0)
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="qsv"),
+        source_framerate=25.0,
+    )
+    scaled_context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="qsv", resolution="720p")
+    )
 
     monkeypatch.setattr(
         qsv_module, "resolve_vaapi_device", AsyncMock(return_value=device)
     )
 
-    assert asyncio.run(strategy.input_args(False)) == [
+    assert asyncio.run(strategy.input_args(context)) == [
         "-init_hw_device",
         f"qsv=qs:hw,child_device={device},child_device_type=vaapi",
         "-filter_hw_device",
@@ -407,10 +433,10 @@ def test_qsv_args(monkeypatch):
         "-hwaccel_output_format",
         "qsv",
     ]
-    assert "-hwaccel" not in asyncio.run(strategy.input_args(True))
-    assert strategy.video_filters(False) == ["vpp_qsv=format=nv12"]
-    assert strategy.video_filters(True) == ["format=nv12"]
-    assert strategy.encoder_args(options) == [
+    assert "-hwaccel" not in asyncio.run(strategy.input_args(scaled_context))
+    assert strategy.video_filters(context) == ["vpp_qsv=format=nv12"]
+    assert strategy.video_filters(scaled_context) == ["format=nv12"]
+    assert strategy.encoder_args(context) == [
         "-preset",
         "veryfast",
         "-b:v",
@@ -424,7 +450,7 @@ def test_qsv_args(monkeypatch):
         "-rc_init_occupancy",
         "6000000",
     ]
-    assert strategy.keyframe_args(options, 6) == [
+    assert strategy.keyframe_args(context) == [
         "-g:v:0",
         "150",
         "-keyint_min:v:0",
@@ -436,15 +462,17 @@ def test_qsv_device(monkeypatch):
     monkeypatch.setattr(
         qsv_module, "resolve_vaapi_device", AsyncMock(return_value=None)
     )
+    context = TranscodeContext(options=TranscodeOptions(hwaccel="qsv"))
 
     with pytest.raises(RuntimeError, match="DRM render device"):
-        asyncio.run(get_hwaccel("qsv").input_args(False))
+        asyncio.run(get_hwaccel("qsv").input_args(context))
 
 
 def test_vaapi_args(monkeypatch):
     device = "/dev/dri/renderD128"
     strategy = get_hwaccel("vaapi")
     options = TranscodeOptions(hwaccel="vaapi", quality="high")
+    context = TranscodeContext(options=options)
 
     monkeypatch.setattr(
         vaapi_module,
@@ -452,10 +480,10 @@ def test_vaapi_args(monkeypatch):
         AsyncMock(return_value=device),
     )
 
-    assert asyncio.run(strategy.input_args(False)) == ["-vaapi_device", device]
-    assert strategy.video_filters(False) == ["format=nv12", "hwupload"]
-    assert strategy.encoder_args(options) == ["-rc_mode", "CQP", "-qp", "18"]
-    assert strategy.keyframe_args(options, 6) == [
+    assert asyncio.run(strategy.input_args(context)) == ["-vaapi_device", device]
+    assert strategy.video_filters(context) == ["format=nv12", "hwupload"]
+    assert strategy.encoder_args(context) == ["-rc_mode", "CQP", "-qp", "18"]
+    assert strategy.keyframe_args(context) == [
         "-force_key_frames:0",
         "expr:gte(t,n_forced*6)",
     ]
@@ -465,23 +493,32 @@ def test_vaapi_device(monkeypatch):
     monkeypatch.setattr(
         vaapi_module, "resolve_vaapi_device", AsyncMock(return_value=None)
     )
+    context = TranscodeContext(options=TranscodeOptions(hwaccel="vaapi"))
 
     with pytest.raises(RuntimeError, match="DRM render device"):
-        asyncio.run(get_hwaccel("vaapi").input_args(False))
+        asyncio.run(get_hwaccel("vaapi").input_args(context))
 
 
 def test_videotoolbox_args():
     strategy = get_hwaccel("videotoolbox")
     options = TranscodeOptions(hwaccel="videotoolbox", quality="low")
+    context = TranscodeContext(options=options)
 
-    assert asyncio.run(strategy.input_args(False)) == [
+    assert asyncio.run(strategy.input_args(context)) == [
         "-hwaccel",
         "videotoolbox",
         "-hwaccel_output_format",
         "videotoolbox_vld",
     ]
-    assert asyncio.run(strategy.input_args(True)) == ["-hwaccel", "videotoolbox"]
-    assert strategy.encoder_args(options) == [
+    scaled_context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="videotoolbox", resolution="720p")
+    )
+    assert asyncio.run(strategy.input_args(scaled_context)) == [
+        "-hwaccel",
+        "videotoolbox",
+    ]
+    assert strategy.video_filters(context) == []
+    assert strategy.encoder_args(context) == [
         "-b:v",
         "1500k",
         "-qmin",
@@ -491,7 +528,7 @@ def test_videotoolbox_args():
         "-prio_speed",
         "1",
     ]
-    assert strategy.keyframe_args(options, 6) == [
+    assert strategy.keyframe_args(context) == [
         "-force_key_frames:0",
         "expr:gte(t,n_forced*6)",
         "-g:v:0",
@@ -580,10 +617,14 @@ def test_setup_failure_stops_process(monkeypatch, tmp_path):
     proc.kill.assert_not_called()
 
 
-def test_ensure_copies_options(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    ("framerate", "expected_framerate"),
+    [(24.0, 24.0), (None, 30.0)],
+)
+def test_ensure_builds_context(monkeypatch, tmp_path, framerate, expected_framerate):
     lock = object()
     proc = SimpleNamespace(pid=123, returncode=None, stderr=None)
-    probe = AsyncMock(return_value=(60.0, 24.0))
+    probe = AsyncMock(return_value=(60.0, framerate))
     build = AsyncMock(return_value=["ffmpeg"])
     register = AsyncMock(return_value="hash:profile")
     options = TranscodeOptions()
@@ -614,15 +655,15 @@ def test_ensure_copies_options(monkeypatch, tmp_path):
     result = asyncio.run(transcoder.ensure_transcode("input.mkv", "hash", options))
 
     assert result == ("hash", options.profile)
-    assert options.framerate == 30.0
     probe.assert_awaited_once_with("input.mkv")
     await_args = build.await_args
     assert await_args is not None
-    effective_options = await_args.args[2]
-    assert effective_options is not options
-    assert effective_options.framerate == 24.0
+    context = await_args.args[2]
+    assert isinstance(context, TranscodeContext)
+    assert context.options is options
+    assert context.source_framerate == expected_framerate
     register.assert_awaited_once_with(
-        "input.mkv", "hash", effective_options, tmp_path, proc, 60.0
+        "input.mkv", "hash", options, tmp_path, proc, 60.0
     )
 
 

@@ -75,13 +75,11 @@ class TranscodeOptions:
         hwaccel: The selected hardware acceleration strategy.
         quality: The requested quality preset.
         resolution: The maximum output resolution.
-        framerate: The source frame rate, or fallback, used to calculate GOP sizes.
     """
 
     hwaccel: HWAccelType | None = None
     quality: QualityLevel = "medium"
     resolution: ResolutionLimit = "original"
-    framerate: float = 30.0
 
     def __post_init__(self):
         """Validate that every selected option has a known configuration.

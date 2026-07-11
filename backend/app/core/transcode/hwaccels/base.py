@@ -1,8 +1,27 @@
 import math
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from app.core.transcode.options import EncoderConfig, TranscodeOptions
+
+
+@dataclass
+class TranscodeContext:
+    """Runtime context used to build a transcode command."""
+
+    options: TranscodeOptions
+    source_framerate: float = 30.0
+    segment_length: ClassVar[int] = 6
+
+    @property
+    def needs_scale(self) -> bool:
+        return self.options.max_height is not None
+
+    @property
+    def encoder_config(self) -> EncoderConfig:
+        return self.options.encoder_config
 
 
 async def resolve_vaapi_device() -> str | None:
@@ -26,15 +45,9 @@ async def resolve_vaapi_device() -> str | None:
 
 
 class HWAccelStrategy(ABC):
-    """Base interface for FFmpeg hardware acceleration strategies.
+    """Base interface for FFmpeg hardware acceleration strategies."""
 
-    Attributes:
-        config: The encoder and decoder configuration used by the strategy.
-    """
-
-    config: EncoderConfig
-
-    async def input_args(self, needs_scale: bool) -> list[str]:
+    async def input_args(self, context: TranscodeContext) -> list[str]:
         """Build FFmpeg input options for hardware-accelerated decoding.
 
         The returned arguments are inserted before the input file. When CPU
@@ -44,21 +57,20 @@ class HWAccelStrategy(ABC):
         hardware device before building the command.
 
         Args:
-            needs_scale: Whether the transcode uses a software scaling filter.
+            context: The runtime transcode context.
 
         Returns:
             FFmpeg command-line arguments to place before the input file.
         """
         cmd: list[str] = []
-        if self.config.hwaccel:
-            cmd.extend(["-hwaccel", self.config.hwaccel])
-            if self.config.hwaccel_output_format and not needs_scale:
-                cmd.extend(
-                    ["-hwaccel_output_format", self.config.hwaccel_output_format]
-                )
+        config = context.encoder_config
+        if config.hwaccel:
+            cmd.extend(["-hwaccel", config.hwaccel])
+            if config.hwaccel_output_format and not context.needs_scale:
+                cmd.extend(["-hwaccel_output_format", config.hwaccel_output_format])
         return cmd
 
-    def video_filters(self, needs_scale: bool) -> list[str]:
+    def video_filters(self, context: TranscodeContext) -> list[str]:
         """Build strategy-specific FFmpeg video filter expressions.
 
         The expressions are appended after any software scaling filter and are
@@ -66,7 +78,7 @@ class HWAccelStrategy(ABC):
         option. The default strategy requires no additional filters.
 
         Args:
-            needs_scale: Whether the transcode uses a software scaling filter.
+            context: The runtime transcode context.
 
         Returns:
             Video filter expressions in the order FFmpeg should apply them.
@@ -74,7 +86,7 @@ class HWAccelStrategy(ABC):
         return []
 
     @abstractmethod
-    def encoder_args(self, options: TranscodeOptions) -> list[str]:
+    def encoder_args(self, context: TranscodeContext) -> list[str]:
         """Build FFmpeg options for the strategy's video encoder.
 
         The returned arguments are inserted immediately after the video codec
@@ -83,7 +95,7 @@ class HWAccelStrategy(ABC):
         output parameters.
 
         Args:
-            options: Requested quality, resolution, frame rate, and accelerator.
+            context: The runtime transcode context.
 
         Returns:
             FFmpeg command-line arguments for configuring the video encoder.
@@ -93,7 +105,7 @@ class HWAccelStrategy(ABC):
         """
         raise NotImplementedError
 
-    def keyframe_args(self, options: TranscodeOptions, seg_len: int) -> list[str]:
+    def keyframe_args(self, context: TranscodeContext) -> list[str]:
         """Build FFmpeg options that place keyframes near HLS segment boundaries.
 
         The default strategy combines timestamp-based forced keyframes with a
@@ -101,16 +113,15 @@ class HWAccelStrategy(ABC):
         approximates one segment duration after rounding up to a whole frame.
 
         Args:
-            options: Transcode settings containing the source frame rate.
-            seg_len: Target HLS segment duration in seconds.
+            context: The runtime transcode context.
 
         Returns:
             FFmpeg command-line arguments for keyframe and GOP configuration.
         """
-        gop = math.ceil(options.framerate * seg_len)
+        gop = math.ceil(context.source_framerate * context.segment_length)
         return [
             "-force_key_frames:0",
-            f"expr:gte(t,n_forced*{seg_len})",
+            f"expr:gte(t,n_forced*{context.segment_length})",
             "-g:v:0",
             str(gop),
             "-keyint_min:v:0",
