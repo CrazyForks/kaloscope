@@ -468,7 +468,7 @@ def test_videotoolbox_args():
         "-hwaccel",
         "videotoolbox",
         "-hwaccel_output_format",
-        "videotoolbox",
+        "videotoolbox_vld",
     ]
     assert asyncio.run(strategy.input_args(True)) == ["-hwaccel", "videotoolbox"]
     assert strategy.encoder_args(options) == [

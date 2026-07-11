@@ -42,7 +42,7 @@ ENCODER_CONFIG: dict[str | None, EncoderConfig] = {
     "videotoolbox": EncoderConfig(
         encoder="h264_videotoolbox",
         hwaccel="videotoolbox",
-        hwaccel_output_format="videotoolbox",
+        hwaccel_output_format="videotoolbox_vld",
     ),
 }
 
