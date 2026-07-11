@@ -16,4 +16,12 @@ _HWACCELS: dict[HWAccelType | None, HWAccelStrategy] = {
 
 
 def get_hwaccel(hwaccel: HWAccelType | None) -> HWAccelStrategy:
+    """Return the strategy registered for a hardware acceleration option.
+
+    Args:
+        hwaccel: The requested accelerator, or `None` for software encoding.
+
+    Returns:
+        The shared strategy instance for the requested accelerator.
+    """
     return _HWACCELS[hwaccel]

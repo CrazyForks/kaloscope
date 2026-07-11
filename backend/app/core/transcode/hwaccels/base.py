@@ -26,6 +26,12 @@ async def resolve_vaapi_device() -> str | None:
 
 
 class HWAccelStrategy(ABC):
+    """Base interface for FFmpeg hardware acceleration strategies.
+
+    Attributes:
+        config: The encoder and decoder configuration used by the strategy.
+    """
+
     config: EncoderConfig
 
     async def input_args(self, needs_scale: bool) -> list[str]:
@@ -83,8 +89,7 @@ class HWAccelStrategy(ABC):
             FFmpeg command-line arguments for configuring the video encoder.
 
         Raises:
-            NotImplementedError: If a concrete strategy does not implement the
-                method.
+            NotImplementedError: If a concrete strategy does not implement the method.
         """
         raise NotImplementedError
 
@@ -102,7 +107,6 @@ class HWAccelStrategy(ABC):
         Returns:
             FFmpeg command-line arguments for keyframe and GOP configuration.
         """
-        # Apply both timestamp and GOP constraints for broad encoder compatibility.
         gop = math.ceil(options.framerate * seg_len)
         return [
             "-force_key_frames:0",

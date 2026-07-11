@@ -216,14 +216,14 @@ def test_wait_segment(tmp_path):
     playlist = tmp_path / "index.m3u8"
     playlist.write_text("#EXTM3U\n#EXTINF:6.0,\nsegment_000000.ts\n")
 
-    assert asyncio.run(hls._wait_segment(playlist, timeout=0.01, interval=0)) is True
+    assert asyncio.run(hls.wait_segment(playlist, timeout=0.01, interval=0)) is True
 
 
 def test_wait_exited(tmp_path):
     proc = SimpleNamespace(returncode=1)
 
     result = asyncio.run(
-        hls._wait_segment(
+        hls.wait_segment(
             tmp_path / "index.m3u8",
             proc=cast(asyncio.subprocess.Process, proc),
             timeout=1,

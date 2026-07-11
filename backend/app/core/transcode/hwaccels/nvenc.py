@@ -9,9 +9,19 @@ from app.core.transcode.options import (
 
 
 class NVENC(HWAccelStrategy):
+    """NVIDIA NVENC H.264 encoding strategy."""
+
     config = ENCODER_CONFIG["nvenc"]
 
     def encoder_args(self, options: TranscodeOptions) -> list[str]:
+        """Build NVENC preset and constrained bitrate options.
+
+        Args:
+            options: The requested transcode settings.
+
+        Returns:
+            FFmpeg options for the selected quality preset and bitrate.
+        """
         bitrate = HW_BITRATE.get(options.quality, "3000k")
         nvenc_preset = (
             "p4"
@@ -30,7 +40,15 @@ class NVENC(HWAccelStrategy):
         ]
 
     def keyframe_args(self, options: TranscodeOptions, seg_len: int) -> list[str]:
-        # Approximate one segment per GOP for constant-frame-rate input.
+        """Build a fixed GOP approximating one HLS segment.
+
+        Args:
+            options: Transcode settings containing the source frame rate.
+            seg_len: The target HLS segment duration in seconds.
+
+        Returns:
+            FFmpeg options for fixed GOP and minimum keyframe intervals.
+        """
         gop = math.ceil(options.framerate * seg_len)
         return [
             "-g:v:0",

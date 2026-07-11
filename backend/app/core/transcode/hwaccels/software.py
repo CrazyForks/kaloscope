@@ -7,9 +7,19 @@ from app.core.transcode.options import (
 
 
 class Software(HWAccelStrategy):
+    """Software H.264 strategy based on libx264."""
+
     config = ENCODER_CONFIG[None]
 
     def encoder_args(self, options: TranscodeOptions) -> list[str]:
+        """Build libx264 CRF options with a VBV bitrate cap.
+
+        Args:
+            options: The requested transcode settings.
+
+        Returns:
+            FFmpeg options for predictable-bandwidth software encoding.
+        """
         bitrate = HW_BITRATE.get(options.quality, "3000k")
         bitrate_num = int(bitrate[:-1])
         bufsize = str(bitrate_num * 2) + "k"
@@ -24,8 +34,7 @@ class Software(HWAccelStrategy):
             "4.0",
             "-pix_fmt",
             "yuv420p",
-            # VBV constraints cap peak bitrate during CRF encoding,
-            # preventing network-unfriendly bitrate spikes
+            # cap CRF bitrate spikes to keep streaming bandwidth predictable
             "-maxrate",
             bitrate,
             "-bufsize",
@@ -33,11 +42,19 @@ class Software(HWAccelStrategy):
         ]
 
     def keyframe_args(self, options: TranscodeOptions, seg_len: int) -> list[str]:
+        """Build segment-timed keyframes without scene-change insertion.
+
+        Args:
+            options: The requested transcode settings.
+            seg_len: The target HLS segment duration in seconds.
+
+        Returns:
+            FFmpeg options for deterministic segment-aligned keyframes.
+        """
         return [
             "-force_key_frames:0",
             f"expr:gte(t,n_forced*{seg_len})",
-            # prevent extra scene-change keyframes and keep the GOP structure
-            # deterministic
+            # disable scene-change keyframes for deterministic GOPs
             "-sc_threshold:v:0",
             "0",
         ]

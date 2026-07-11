@@ -4,14 +4,20 @@ from typing import Literal
 
 @dataclass
 class EncoderConfig:
-    """Configuration for a video encoder and its acceleration options."""
+    """FFmpeg codec and decoding options for an acceleration strategy.
+
+    Attributes:
+        encoder: The FFmpeg video encoder name.
+        hwaccel: The FFmpeg hardware decoder name, if enabled.
+        hwaccel_output_format: The hardware frame format requested from the
+            decoder, if required by the strategy.
+    """
 
     encoder: str = "libx264"
     hwaccel: str | None = None
     hwaccel_output_format: str | None = None
 
 
-# hardware acceleration types (mapped to encoder name and ffmpeg flags)
 HWAccelType = Literal["qsv", "vaapi", "nvenc", "videotoolbox"]
 ENCODER_CONFIG: dict[str | None, EncoderConfig] = {
     None: EncoderConfig(
@@ -41,7 +47,6 @@ ENCODER_CONFIG: dict[str | None, EncoderConfig] = {
     ),
 }
 
-# transcode quality levels (mapped to CRF values and bitrate targets)
 QualityLevel = Literal["low", "medium", "high"]
 QUALITY_CRF: dict[QualityLevel, int] = {
     "low": 28,
@@ -54,7 +59,6 @@ HW_BITRATE: dict[QualityLevel, str] = {
     "high": "6000k",
 }
 
-# output resolution limits (mapped to max height in pixels)
 ResolutionLimit = Literal["original", "1080p", "720p", "480p"]
 RESOLUTION_MAX_HEIGHT: dict[ResolutionLimit, int | None] = {
     "original": None,
@@ -66,7 +70,14 @@ RESOLUTION_MAX_HEIGHT: dict[ResolutionLimit, int | None] = {
 
 @dataclass
 class TranscodeOptions:
-    """Transcoding parameters for web playback."""
+    """Validated transcoding parameters for web playback.
+
+    Attributes:
+        hwaccel: The selected hardware acceleration strategy.
+        quality: The requested quality preset.
+        resolution: The maximum output resolution.
+        framerate: The source frame rate, or fallback, used to calculate GOP sizes.
+    """
 
     hwaccel: HWAccelType | None = None
     quality: QualityLevel = "medium"
@@ -74,6 +85,11 @@ class TranscodeOptions:
     framerate: float = 30.0
 
     def __post_init__(self):
+        """Validate that every selected option has a known configuration.
+
+        Raises:
+            ValueError: If quality, resolution, or hardware acceleration is unsupported.
+        """
         if self.quality not in QUALITY_CRF:
             raise ValueError(f"Invalid transcode quality: {self.quality!r}")
         if self.resolution not in RESOLUTION_MAX_HEIGHT:

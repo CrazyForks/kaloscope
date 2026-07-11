@@ -8,10 +8,10 @@ from filelock import FileLock, Timeout
 from sanic.log import logger
 
 from app.core.transcode.hls import (
-    _cleanup_stale_hls,
-    _is_complete,
-    _wait_segment,
+    cleanup_stale_hls,
+    is_complete,
     output_dir,
+    wait_segment,
 )
 from app.core.transcode.options import TranscodeOptions
 from app.core.transcode.tasks import finish_task, register_task
@@ -35,7 +35,7 @@ async def _ffmpeg() -> str:
 
 
 async def _ffprobe() -> str:
-    """Get the ffprobe executable path from global config or default to "ffprobe".
+    """Resolve ffprobe next to a configured ffmpeg or use "ffprobe".
 
     Returns:
         The ffprobe executable name or path.
@@ -171,34 +171,31 @@ async def ensure_transcode(
     out_dir = output_dir(media_hash, profile)
     m3u8_path = out_dir / "index.m3u8"
 
-    # return immediately if the M3U8 already exists and is complete
-    if _is_complete(m3u8_path):
+    if is_complete(m3u8_path):
         logger.debug("HLS already complete: %s", out_dir)
         return media_hash, profile
 
-    # if another ffmpeg is running for this directory, just wait
+    # another worker owns the output lock while transcoding this profile
     lock = _acquire_lock(out_dir)
     if lock is None:
         logger.debug("HLS transcode already in progress: %s", out_dir)
-        if not await _wait_segment(m3u8_path):
+        if not await wait_segment(m3u8_path):
             raise RuntimeError("HLS first segment was not ready in time")
         return media_hash, profile
 
     # another process may have completed after the initial check but before
     # this process acquired the lock
-    if _is_complete(m3u8_path):
+    if is_complete(m3u8_path):
         logger.debug("HLS completed while acquiring the lock: %s", out_dir)
         _release_lock(lock)
         return media_hash, profile
 
-    # start the ffmpeg process if we acquired the lock
     lock_handed_off = False
     proc: asyncio.subprocess.Process | None = None
     try:
-        _cleanup_stale_hls(out_dir)
+        cleanup_stale_hls(out_dir)
 
-        # Probe once before starting ffmpeg. GOP-based hardware encoders use
-        # the framerate to approximate one GOP per HLS segment.
+        # reuse one probe for duration tracking and GOP sizing
         duration, fps = await _probe_media(media_path)
         effective_options = (
             replace(options, framerate=fps) if fps is not None else options
@@ -213,17 +210,14 @@ async def ensure_transcode(
             stderr=asyncio.subprocess.PIPE,
         )
 
-        # register the task in the memory store
         task_id = await register_task(
             media_path, media_hash, effective_options, out_dir, proc, duration
         )
 
-        # monitor completion in the background
         _start_monitor(proc, lock, task_id)
         lock_handed_off = True
 
-        # wait for at least one segment so the player can start immediately
-        if not await _wait_segment(m3u8_path, proc=proc):
+        if not await wait_segment(m3u8_path, proc=proc):
             if proc.returncode is not None:
                 raise RuntimeError(
                     "ffmpeg exited before generating the first HLS segment"
@@ -245,11 +239,8 @@ async def _build_hls_cmd(
 ) -> list[str]:
     """Build the ffmpeg command line for HLS transcoding.
 
-    Constructs a complete ffmpeg command that transcodes a source video into
-    an HLS playlist with MPEG-TS segments.  The command configures hardware
-    acceleration (if requested), video codec parameters (CRF for libx264,
-    bitrate- or QP-based for hardware encoders), audio encoding (AAC 128k
-    stereo), keyframe placement near segment boundaries, and HLS output settings.
+    Combines strategy-specific decoding, encoding, filtering, and keyframe
+    arguments with shared audio, timestamp, and HLS output settings.
 
     The command structure, argument ordering, and per-encoder parameters are
     referenced from Jellyfin: https://github.com/jellyfin/jellyfin
@@ -264,15 +255,12 @@ async def _build_hls_cmd(
     """
     cmd = [await _ffmpeg(), "-hide_banner", "-loglevel", "error"]
 
-    # HLS segment length in seconds
     seg_len = 6
 
-    # when scaling is requested we use a CPU `scale` filter, which cannot
-    # operate on GPU-resident frames; in that case skip hwaccel_output_format
-    # so decoded frames stay in system memory (the encoder re-uploads them)
+    # software scale cannot consume GPU-resident frames
+    # omit hwaccel_output_format so decoding stays in system memory
     needs_scale = options.max_height is not None
 
-    # hardware acceleration
     from app.core.transcode.hwaccels import get_hwaccel
 
     hwaccel = get_hwaccel(options.hwaccel)
@@ -280,17 +268,14 @@ async def _build_hls_cmd(
 
     cmd.extend(["-i", input_path])
 
-    # strip metadata and chapters from output (not needed for web playback)
+    # strip metadata and chapters that web playback does not use
     cmd.extend(["-map_metadata", "-1", "-map_chapters", "-1"])
 
-    # stream mapping placed before codec arguments
     cmd.extend(["-map", "0:v:0?", "-map", "0:a:0?"])
 
-    # video filter chain
     vf_parts: list[str] = []
     if needs_scale:
-        # scale filter to limit the output height while preserving aspect ratio,
-        # and ensure the dimensions are compatible with H.264 encoders
+        # preserve aspect ratio with a 16-pixel-aligned width and even height
         target_height = f"trunc(min({options.max_height},ih)/2)*2"
         vf_parts.append(
             f"scale='max(trunc(iw*{target_height}/ih/16)*16,16)':'{target_height}'"
@@ -298,7 +283,6 @@ async def _build_hls_cmd(
 
     vf_parts.extend(hwaccel.video_filters(needs_scale))
 
-    # video encoder and parameters
     enc = options.encoder
     cmd.extend(["-c:v", enc])
     cmd.extend(hwaccel.encoder_args(options))
@@ -306,11 +290,8 @@ async def _build_hls_cmd(
     if vf_parts:
         cmd.extend(["-vf", ",".join(vf_parts)])
 
-    # -------------------- Keyframe / GOP --------------------
-
     cmd.extend(hwaccel.keyframe_args(options, seg_len))
 
-    # -------------------- Audio --------------------
     cmd.extend(
         [
             "-c:a",
@@ -326,10 +307,8 @@ async def _build_hls_cmd(
         ]
     )
 
-    # preserve original timestamps and disable negative timestamp avoidance
     cmd.extend(["-copyts", "-avoid_negative_ts", "disabled"])
 
-    # -------------------- HLS output --------------------
     m3u8_path = str(out_dir / "index.m3u8")
     segment_pattern = str(out_dir / "segment_%06d.ts")
     cmd.extend(
@@ -396,6 +375,10 @@ def _release_lock(lock: FileLock):
 async def _terminate_ffmpeg(proc: asyncio.subprocess.Process) -> None:
     """Stop an unmonitored ffmpeg process without masking setup errors.
 
+    Sends a graceful termination request first, then kills the process if it
+    does not exit before the configured timeout. Cleanup failures are logged
+    instead of replacing the original setup exception.
+
     Args:
         proc: The ffmpeg subprocess that failed before monitor handoff.
     """
@@ -423,7 +406,11 @@ async def _terminate_ffmpeg(proc: asyncio.subprocess.Process) -> None:
 async def _monitor_ffmpeg(
     proc: asyncio.subprocess.Process, lock: FileLock, task_id: str | None = None
 ):
-    """Wait for ffmpeg to finish, log errors, and release the lock.
+    """Monitor ffmpeg completion, update task state, and release the lock.
+
+    Reads stderr and retains a bounded tail for failed tasks. Cancellation
+    stops the subprocess, records the task as stopped, and then propagates
+    cancellation.
 
     Args:
         proc: The ffmpeg subprocess to monitor.
@@ -436,10 +423,12 @@ async def _monitor_ffmpeg(
             if proc.stderr is not None:
                 stderr_data = await proc.stderr.read()
         except Exception:
+            # still reap and classify the process when stderr capture fails
             pass
         await proc.wait()
 
         error_tail = None
+        # treat exit 255 as an application-requested stop
         if proc.returncode not in (0, 255):
             if stderr_data:
                 with contextlib.suppress(Exception):

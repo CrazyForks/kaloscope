@@ -11,11 +11,11 @@ from sanic import Sanic
 from sanic.exceptions import SanicException
 
 from app.core.transcode.hls import (
-    _is_complete,
-    _remove_endlist,
     delete_output,
     estimate_progress,
+    is_complete,
     output_stats,
+    remove_endlist,
     scan_outputs,
 )
 from app.core.transcode.options import (
@@ -99,7 +99,15 @@ def _task_store():
 
 
 def _same_task(current: RuntimeTask, expected: RuntimeTask) -> bool:
-    """Check whether two task snapshots describe the same process run."""
+    """Check whether two task records describe the same process run.
+
+    Args:
+        current: The record currently stored for a task ID.
+        expected: The earlier record associated with the operation.
+
+    Returns:
+        `True` when both records identify the same ffmpeg process run.
+    """
     keys = ("started_at", "pid", "out_dir")
     return all(current.get(key) == expected.get(key) for key in keys)
 
@@ -172,8 +180,9 @@ async def finish_task(
     finally:
         lock.release()
 
+    # avoid holding the cross-worker lock during playlist I/O
     if returncode != 0:
-        _remove_endlist(task.get("out_dir"))
+        remove_endlist(task.get("out_dir"))
 
     lock.acquire()
     try:
@@ -181,6 +190,7 @@ async def finish_task(
         if current is None:
             return
         current = cast(RuntimeTask, dict(current))
+        # ignore stale completion after a newer process reuses the task ID
         if not _same_task(current, task):
             return
         current["finished_at"] = datetime.now(UTC).isoformat()
@@ -209,6 +219,7 @@ async def list_tasks() -> list[TaskSnapshot]:
     finally:
         lock.release()
 
+    # scan output files after releasing the cross-worker lock
     return await asyncio.to_thread(_build_task_list, stored_tasks)
 
 
@@ -282,12 +293,13 @@ async def stop_tasks(ids: list[str]) -> list[str]:
         ids: The task IDs to stop.
 
     Returns:
-        The IDs of running tasks handled by the request.
+        The IDs of running tasks claimed by the request.
     """
     claimed: list[tuple[str, RuntimeTask, RuntimeTask]] = []
     tasks, lock = _task_store()
     lock.acquire()
     try:
+        # claim tasks before signaling so concurrent stop requests skip them
         for task_id in ids:
             task = tasks.get(task_id)
             if task is None:
@@ -310,19 +322,21 @@ async def stop_tasks(ids: list[str]) -> list[str]:
                 sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
                 os.kill(pid, sigkill)
         except ProcessLookupError:
+            # the process may finish between the claim and the signal
             terminal = cast(RuntimeTask, dict(stopping))
             terminal["finished_at"] = datetime.now(UTC).isoformat()
             out_dir = terminal.get("out_dir")
-            if out_dir and _is_complete(Path(out_dir) / "index.m3u8"):
+            if out_dir and is_complete(Path(out_dir) / "index.m3u8"):
                 terminal["state"] = TaskState.FINISHED
             else:
                 terminal["state"] = TaskState.STOPPED
-                _remove_endlist(out_dir)
+                remove_endlist(out_dir)
             lock.acquire()
             try:
                 current = tasks.get(task_id)
                 if current is not None:
                     current = cast(RuntimeTask, dict(current))
+                    # preserve a newer process that reused the same task ID
                     if current["state"] == TaskState.STOPPING and _same_task(
                         current, original
                     ):
@@ -330,6 +344,7 @@ async def stop_tasks(ids: list[str]) -> list[str]:
             finally:
                 lock.release()
         except Exception:
+            # restore the original state when signaling fails
             lock.acquire()
             try:
                 current = tasks.get(task_id)
@@ -355,6 +370,7 @@ async def delete_tasks(ids: list[str]) -> list[str]:
     Returns:
         The task IDs removed from the task store or output workspace.
     """
+    # collect candidates before filesystem I/O outside the shared lock
     candidates: list[tuple[str, RuntimeTask | None, str, str, Path | None]] = []
     tasks, lock = _task_store()
     lock.acquire()
@@ -384,6 +400,7 @@ async def delete_tasks(ids: list[str]) -> list[str]:
             lock.acquire()
             try:
                 current = tasks.get(task_id)
+                # preserve a record changed by another worker during deletion
                 if current is not None and dict(current) == task:
                     tasks.pop(task_id, None)
                     removed_record = True

@@ -9,9 +9,22 @@ from app.core.transcode.options import (
 
 
 class QSV(HWAccelStrategy):
+    """Intel Quick Sync Video H.264 encoding strategy."""
+
     config = ENCODER_CONFIG["qsv"]
 
     async def input_args(self, needs_scale: bool) -> list[str]:
+        """Initialize QSV through a VAAPI-backed DRM render device.
+
+        Args:
+            needs_scale: Whether the transcode uses a software scaling filter.
+
+        Returns:
+            FFmpeg device initialization and hardware decoding options.
+
+        Raises:
+            RuntimeError: If no usable DRM render device is available.
+        """
         qsv_dev = await resolve_vaapi_device()
         if not qsv_dev:
             raise RuntimeError(
@@ -37,21 +50,30 @@ class QSV(HWAccelStrategy):
         return cmd
 
     def video_filters(self, needs_scale: bool) -> list[str]:
-        # QSV: when frames stay on the GPU, use QSV VPP to normalize them to NV12.
-        # When CPU scaling is requested, keep frames in system memory and let the
-        # QSV encoder upload them after the software scale/format conversion.
+        """Choose NV12 conversion for the current frame-memory location.
+
+        Args:
+            needs_scale: Whether software scaling leaves frames in system memory.
+
+        Returns:
+            A software format filter or QSV VPP filter.
+        """
         return ["format=nv12" if needs_scale else "vpp_qsv=format=nv12"]
 
     def encoder_args(self, options: TranscodeOptions) -> list[str]:
+        """Build QSV VBR options with conservative buffer sizing.
+
+        Uses the level 5.1-or-newer buffer factor because codec-level detection
+        is not available here.
+
+        Args:
+            options: The requested transcode settings.
+
+        Returns:
+            FFmpeg QSV rate-control and buffer options.
+        """
         bitrate = HW_BITRATE.get(options.quality, "3000k")
         bitrate_num = int(bitrate[:-1])
-        # QSV rate control follows Jellyfin:
-        # - maxrate = bitrate + 1 triggers VBR for better bitrate allocation
-        # - mbbrc 1 enables MacroBlock-level rate control
-        # - bufsize = bitrate * 2 * factor, factor=2 (level ≥ 5.1);
-        #   Jellyfin uses factor=1 only for level < 5.1; without codec-level
-        #   detection we default to factor=2
-        # - rc_init_occupancy = bitrate * 1 * factor (2 s initial buffer fill)
         return [
             "-preset",
             "veryfast",
@@ -68,7 +90,15 @@ class QSV(HWAccelStrategy):
         ]
 
     def keyframe_args(self, options: TranscodeOptions, seg_len: int) -> list[str]:
-        # Approximate one segment per GOP for constant-frame-rate input.
+        """Build a fixed GOP approximating one HLS segment.
+
+        Args:
+            options: Transcode settings containing the source frame rate.
+            seg_len: The target HLS segment duration in seconds.
+
+        Returns:
+            FFmpeg options for fixed GOP and minimum keyframe intervals.
+        """
         gop = math.ceil(options.framerate * seg_len)
         return [
             "-g:v:0",

@@ -30,10 +30,8 @@ _SEGMENT_WAIT_TIMEOUT = 30.0
 _SEGMENT_WAIT_INTERVAL = 0.25
 
 _EXTINF_RE = re.compile(r"^#EXTINF:([0-9]+(?:\.[0-9]+)?)", re.MULTILINE)
-"""Regular expression to extract segment durations from HLS playlists."""
 
 _SEGMENT_LINE_RE = re.compile(r"^(?!\s*#)(.+\.ts)\s*$", re.MULTILINE)
-"""Regex to detect if an M3U8 playlist contains at least one segment line."""
 
 _MINIMAL_M3U8 = (
     "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n"
@@ -41,7 +39,13 @@ _MINIMAL_M3U8 = (
 
 
 class ProfileTags(TypedDict):
-    """Validated tags parsed from a transcode profile name."""
+    """Validated tags parsed from a transcode profile name.
+
+    Attributes:
+        quality: The parsed quality level, if recognized.
+        resolution: The parsed resolution limit, if recognized.
+        hwaccel: The parsed accelerator, or `None` for software and invalid profiles.
+    """
 
     quality: QualityLevel | None
     resolution: ResolutionLimit | None
@@ -50,7 +54,16 @@ class ProfileTags(TypedDict):
 
 @dataclass
 class TranscodeStats:
-    """Derived statistics for a transcoded HLS output directory."""
+    """Derived statistics for a transcoded HLS output directory.
+
+    Attributes:
+        finished: Whether the playlist contains an end marker.
+        duration: The combined duration of playlist segments in seconds.
+        segments: The number of segments referenced by the playlist.
+        size: The total size of files in the output directory in bytes.
+        progress: The estimated completion percentage, if available.
+        updated_at: The playlist modification time as an ISO 8601 timestamp.
+    """
 
     finished: bool = False
     duration: float = 0.0
@@ -252,6 +265,7 @@ def delete_output(
         out_resolved = out_dir.resolve()
     except OSError:
         return False
+    # reject profile paths that escape the transcode root
     if not out_resolved.is_relative_to(root_resolved) or not out_dir.is_dir():
         return False
 
@@ -261,7 +275,7 @@ def delete_output(
     return True
 
 
-def _remove_endlist(out_dir: Path | str | None) -> None:
+def remove_endlist(out_dir: Path | str | None) -> None:
     """Remove a completion marker from an interrupted HLS playlist.
 
     Args:
@@ -286,7 +300,7 @@ def _remove_endlist(out_dir: Path | str | None) -> None:
         logger.warning("Failed to remove HLS ENDLIST marker: %s", m3u8_path)
 
 
-def _cleanup_stale_hls(out_dir: Path):
+def cleanup_stale_hls(out_dir: Path):
     """Remove stale HLS files before rebuilding an incomplete transcode.
 
     Args:
@@ -303,15 +317,14 @@ def _cleanup_stale_hls(out_dir: Path):
             path.unlink()
 
 
-def _is_complete(m3u8_path: Path) -> bool:
+def is_complete(m3u8_path: Path) -> bool:
     """Check whether the M3U8 playlist file exists and contains the endlist tag.
 
     Args:
         m3u8_path: The M3U8 file path.
 
     Returns:
-        `True` if the file exists and contains `#EXT-X-ENDLIST`,
-        `False` otherwise.
+        `True` if the file exists and contains `#EXT-X-ENDLIST`, `False` otherwise.
     """
     if not m3u8_path.is_file():
         return False
@@ -321,7 +334,7 @@ def _is_complete(m3u8_path: Path) -> bool:
         return False
 
 
-async def _wait_segment(
+async def wait_segment(
     m3u8_path: Path,
     proc: asyncio.subprocess.Process | None = None,
     timeout: float = _SEGMENT_WAIT_TIMEOUT,
