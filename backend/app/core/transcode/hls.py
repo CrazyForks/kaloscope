@@ -148,11 +148,14 @@ def output_stats(out_dir: Path | str, duration: float | None = None) -> Transcod
     return stats
 
 
-def scan_outputs(root: Path | str | None = None) -> list[dict[str, Any]]:
+def scan_outputs(
+    root: Path | str | None = None, *, exclude_ids: set[str] | None = None
+) -> list[dict[str, Any]]:
     """Scan the transcoded workspace for finished and interrupted HLS outputs.
 
     Args:
         root: The transcode root directory, or `None` to use the workspace.
+        exclude_ids: Task IDs to skip before reading their output files.
 
     Returns:
         Task snapshots derived from HLS output directories.
@@ -170,6 +173,9 @@ def scan_outputs(root: Path | str | None = None) -> list[dict[str, Any]]:
         media_hash = hash_dir.name
         for profile_dir in sorted(path for path in hash_dir.iterdir() if path.is_dir()):
             profile = profile_dir.name
+            task_id = f"{media_hash}:{profile}"
+            if exclude_ids is not None and task_id in exclude_ids:
+                continue
             stats = output_stats(profile_dir)
             if not stats.finished and stats.segments == 0:
                 continue
@@ -177,7 +183,7 @@ def scan_outputs(root: Path | str | None = None) -> list[dict[str, Any]]:
             state = "finished" if stats.finished else "stopped"
             tasks.append(
                 {
-                    "id": f"{media_hash}:{profile}",
+                    "id": task_id,
                     "name": f"{media_hash}/{profile}",
                     "path": None,
                     "hash": media_hash,

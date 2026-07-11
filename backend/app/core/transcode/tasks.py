@@ -163,7 +163,7 @@ def _build_task_list(stored_tasks: list[dict[str, Any]]) -> list[dict[str, Any]]
     tasks.sort(key=lambda task: task["started_at"], reverse=True)
 
     task_ids = {task["id"] for task in tasks}
-    scanned_tasks = [task for task in scan_outputs() if task["id"] not in task_ids]
+    scanned_tasks = scan_outputs(exclude_ids=task_ids)
     scanned_tasks.sort(key=lambda task: task["finished_at"], reverse=True)
     tasks.extend(scanned_tasks)
 

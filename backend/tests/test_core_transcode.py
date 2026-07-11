@@ -98,6 +98,18 @@ def test_output_stats(tmp_path):
     assert stats.progress == 100
 
 
+def test_scan_skips_excluded(monkeypatch, tmp_path):
+    (tmp_path / "hash" / "profile").mkdir(parents=True)
+    output_stats = Mock(side_effect=AssertionError("output scanned"))
+
+    monkeypatch.setattr(hls, "output_stats", output_stats)
+
+    result = hls.scan_outputs(tmp_path, exclude_ids={"hash:profile"})
+
+    assert result == []
+    output_stats.assert_not_called()
+
+
 def test_software_cmd(monkeypatch, tmp_path):
     monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
 
@@ -317,7 +329,7 @@ def test_list_releases_lock(monkeypatch):
     store = {"task": {"id": "task"}}
 
     monkeypatch.setattr(tasks, "_task_store", lambda: (store, lock))
-    monkeypatch.setattr(tasks, "scan_outputs", lambda: [])
+    monkeypatch.setattr(tasks, "scan_outputs", lambda *, exclude_ids=None: [])
 
     def snapshot(_task):
         assert lock.locked is False
@@ -339,7 +351,7 @@ def test_list_offloads_scan(monkeypatch):
         scan_threads.append(threading.get_ident())
         return {"id": "task", "started_at": "2026-01-01", "encoded_size": 0}
 
-    def scan_outputs():
+    def scan_outputs(*, exclude_ids=None):
         scan_threads.append(threading.get_ident())
         return []
 
@@ -352,6 +364,25 @@ def test_list_offloads_scan(monkeypatch):
     assert [task["id"] for task in result] == ["task"]
     assert scan_threads
     assert all(thread != main_thread for thread in scan_threads)
+
+
+def test_list_excludes_registered(monkeypatch):
+    store = {"task": {"id": "task"}}
+
+    def snapshot(_task):
+        return {"id": "task", "started_at": "2026-01-01", "encoded_size": 0}
+
+    def scan_outputs(*, exclude_ids=None):
+        assert exclude_ids == {"task"}
+        return []
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+    monkeypatch.setattr(tasks, "_task_snapshot", snapshot)
+    monkeypatch.setattr(tasks, "scan_outputs", scan_outputs)
+
+    result = asyncio.run(tasks.list_tasks())
+
+    assert [task["id"] for task in result] == ["task"]
 
 
 def test_finish_releases_lock(monkeypatch, tmp_path):
