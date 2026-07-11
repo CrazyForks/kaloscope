@@ -141,9 +141,6 @@ def test_monitor_releases_lock(monkeypatch, tmp_path):
     release.assert_called_once_with(lock)
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason="task snapshot lock fix is pending"
-)
 def test_list_releases_lock(monkeypatch):
     lock = _Lock()
     store = {"task": {"id": "task"}}

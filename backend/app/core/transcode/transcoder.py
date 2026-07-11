@@ -351,9 +351,10 @@ async def list_tasks() -> list[dict[str, Any]]:
     store, lock = _task_store()
     lock.acquire()
     try:
-        tasks = [_task_snapshot(task) for task in store.values()]
+        stored_tasks = [dict(task) for task in store.values()]
     finally:
         lock.release()
+    tasks = [_task_snapshot(task) for task in stored_tasks]
     tasks.sort(key=lambda task: task["started_at"], reverse=True)
 
     task_ids = {task["id"] for task in tasks}
