@@ -13,11 +13,20 @@ class TranscodeContext:
 
     options: TranscodeOptions
     source_framerate: float = 30.0
+    source_pixel_format: str | None = None
     segment_length: ClassVar[int] = 6
 
     @property
     def needs_scale(self) -> bool:
         return self.options.max_height is not None
+
+    @property
+    def source_is_10_bit(self) -> bool:
+        """Return whether the probed source pixel format is 10-bit."""
+        pixel_format = self.source_pixel_format
+        return pixel_format is not None and pixel_format.lower().endswith(
+            ("10", "10le", "10be")
+        )
 
     @property
     def encoder_config(self) -> EncoderConfig:

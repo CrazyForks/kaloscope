@@ -54,15 +54,18 @@ async def _ffprobe() -> str:
     return "ffprobe"
 
 
-async def _probe_media(media_path: str) -> tuple[float | None, float | None]:
-    """Probe media duration and first-video-stream framerate via ffprobe.
+async def _probe_media(
+    media_path: str,
+) -> tuple[float | None, float | None, str | None]:
+    """Probe media duration, framerate, and pixel format via ffprobe.
 
     Args:
         media_path: The media file path to probe.
 
     Returns:
-        A `(duration, framerate)` tuple. Each value is `None` when ffprobe
-        exits unsuccessfully or the corresponding field is invalid.
+        A `(duration, framerate, pixel_format)` tuple. Each value is `None`
+        when ffprobe exits unsuccessfully or the corresponding field is
+        invalid.
 
     Raises:
         OSError: If the ffprobe process cannot be started.
@@ -75,7 +78,7 @@ async def _probe_media(media_path: str) -> tuple[float | None, float | None]:
         "-select_streams",
         "v:0",
         "-show_entries",
-        "format=duration:stream=avg_frame_rate",
+        "format=duration:stream=avg_frame_rate,pix_fmt",
         "-of",
         "json",
         media_path,
@@ -94,15 +97,15 @@ async def _probe_media(media_path: str) -> tuple[float | None, float | None]:
             with contextlib.suppress(ProcessLookupError):
                 proc.kill()
         await proc.communicate()
-        return None, None
+        return None, None, None
     if proc.returncode != 0:
-        return None, None
+        return None, None, None
     try:
         data = json.loads(stdout.decode())
     except (json.JSONDecodeError, TypeError):
-        return None, None
+        return None, None, None
     if not isinstance(data, dict):
-        return None, None
+        return None, None, None
 
     duration = None
     format_data = data.get("format")
@@ -113,9 +116,15 @@ async def _probe_media(media_path: str) -> tuple[float | None, float | None]:
                 duration = float(raw_duration)
 
     framerate = None
+    pixel_format = None
     streams = data.get("streams")
     if isinstance(streams, list) and streams and isinstance(streams[0], dict):
-        raw = streams[0].get("avg_frame_rate")
+        stream = streams[0]
+        raw_pixel_format = stream.get("pix_fmt")
+        if isinstance(raw_pixel_format, str) and raw_pixel_format:
+            pixel_format = raw_pixel_format
+
+        raw = stream.get("avg_frame_rate")
         if isinstance(raw, str):
             try:
                 num, _, den = raw.partition("/")
@@ -124,7 +133,7 @@ async def _probe_media(media_path: str) -> tuple[float | None, float | None]:
                     framerate = value
             except (ValueError, TypeError, ZeroDivisionError):
                 pass
-    return duration, framerate
+    return duration, framerate, pixel_format
 
 
 async def probe_duration(media_path: str) -> float | None:
@@ -141,7 +150,7 @@ async def probe_duration(media_path: str) -> float | None:
         OSError: If the ffprobe process cannot be started.
         UnicodeDecodeError: If ffprobe output is not valid UTF-8.
     """
-    duration, _ = await _probe_media(media_path)
+    duration, _, _ = await _probe_media(media_path)
     return duration
 
 
@@ -163,7 +172,7 @@ async def probe_framerate(media_path: str) -> float | None:
         OSError: If the ffprobe process cannot be started.
         UnicodeDecodeError: If ffprobe output is not valid UTF-8.
     """
-    _, framerate = await _probe_media(media_path)
+    _, framerate, _ = await _probe_media(media_path)
     return framerate
 
 
@@ -213,10 +222,11 @@ async def ensure_transcode(
     try:
         cleanup_stale_hls(out_dir)
 
-        duration, fps = await _probe_media(media_path)
+        duration, fps, pixel_format = await _probe_media(media_path)
         context = TranscodeContext(
             options=options,
             source_framerate=fps if fps is not None else 30.0,
+            source_pixel_format=pixel_format,
         )
 
         cmd = await _build_hls_cmd(media_path, out_dir, context)

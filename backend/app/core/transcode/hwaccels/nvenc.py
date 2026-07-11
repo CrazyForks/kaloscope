@@ -6,6 +6,12 @@ from app.core.transcode.hwaccels.base import HWAccelStrategy, TranscodeContext
 class NVENC(HWAccelStrategy):
     """NVIDIA NVENC H.264 encoding strategy."""
 
+    def video_filters(self, context: TranscodeContext) -> list[str]:
+        """Convert original-resolution 10-bit hardware frames to 8-bit YUV."""
+        if not context.needs_scale and context.source_is_10_bit:
+            return ["scale_cuda=format=yuv420p"]
+        return []
+
     def encoder_args(self, context: TranscodeContext) -> list[str]:
         """Build NVENC preset and constrained bitrate options.
 

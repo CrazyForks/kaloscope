@@ -4,6 +4,12 @@ from app.core.transcode.hwaccels.base import HWAccelStrategy, TranscodeContext
 class VideoToolbox(HWAccelStrategy):
     """Apple VideoToolbox H.264 encoding strategy."""
 
+    def video_filters(self, context: TranscodeContext) -> list[str]:
+        """Convert original-resolution 10-bit hardware frames to NV12."""
+        if not context.needs_scale and context.source_is_10_bit:
+            return ["scale_vt=format=nv12"]
+        return []
+
     def encoder_args(self, context: TranscodeContext) -> list[str]:
         """Build VideoToolbox bitrate and speed-priority options.
 
