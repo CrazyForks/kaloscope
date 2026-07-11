@@ -37,6 +37,12 @@ def _task_store():
         return _TASKS, _TASKS_LOCK
 
 
+def _same_task(current: dict[str, Any], expected: dict[str, Any]) -> bool:
+    """Check whether two task snapshots describe the same process run."""
+    keys = ("started_at", "pid", "out_dir")
+    return all(current.get(key) == expected.get(key) for key in keys)
+
+
 async def register_task(
     media_path: str,
     media_hash: str,
@@ -101,17 +107,29 @@ async def finish_task(
         if task is None:
             return
         task = dict(task)
-        task["finished_at"] = datetime.now(UTC).isoformat()
+    finally:
+        lock.release()
+
+    if returncode != 0:
+        _remove_endlist(task.get("out_dir"))
+
+    lock.acquire()
+    try:
+        current = tasks.get(task_id)
+        if current is None:
+            return
+        current = dict(current)
+        if not _same_task(current, task):
+            return
+        current["finished_at"] = datetime.now(UTC).isoformat()
         if returncode == 0:
-            task["state"] = "finished"
-        elif task["state"] == "stopping" or returncode == 255:
-            task["state"] = "stopped"
-            _remove_endlist(task.get("out_dir"))
+            current["state"] = "finished"
+        elif current["state"] == "stopping" or returncode == 255:
+            current["state"] = "stopped"
         else:
-            task["state"] = "error"
-            task["error_msg"] = error_msg
-            _remove_endlist(task.get("out_dir"))
-        tasks[task_id] = task
+            current["state"] = "error"
+            current["error_msg"] = error_msg
+        tasks[task_id] = current
     finally:
         lock.release()
 
@@ -181,7 +199,7 @@ async def stop_tasks(ids: list[str]) -> list[str]:
     Returns:
         The IDs of running tasks handled by the request.
     """
-    stopped: list[str] = []
+    claimed: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
     tasks, lock = _task_store()
     lock.acquire()
     try:
@@ -192,23 +210,49 @@ async def stop_tasks(ids: list[str]) -> list[str]:
             task = dict(task)
             if task["state"] != "running":
                 continue
-            task["state"] = "stopping"
-            try:
-                if task.get("pid") is not None:
-                    sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
-                    os.kill(task["pid"], sigkill)
-            except ProcessLookupError:
-                task["finished_at"] = datetime.now(UTC).isoformat()
-                out_dir = task.get("out_dir")
-                if out_dir and _is_complete(Path(out_dir) / "index.m3u8"):
-                    task["state"] = "finished"
-                else:
-                    task["state"] = "stopped"
-                    _remove_endlist(out_dir)
-            tasks[task_id] = task
-            stopped.append(task_id)
+            stopping = dict(task)
+            stopping["state"] = "stopping"
+            tasks[task_id] = stopping
+            claimed.append((task_id, task, stopping))
     finally:
         lock.release()
+
+    stopped: list[str] = []
+    for task_id, original, stopping in claimed:
+        try:
+            if stopping.get("pid") is not None:
+                sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
+                os.kill(stopping["pid"], sigkill)
+        except ProcessLookupError:
+            terminal = dict(stopping)
+            terminal["finished_at"] = datetime.now(UTC).isoformat()
+            out_dir = terminal.get("out_dir")
+            if out_dir and _is_complete(Path(out_dir) / "index.m3u8"):
+                terminal["state"] = "finished"
+            else:
+                terminal["state"] = "stopped"
+                _remove_endlist(out_dir)
+            lock.acquire()
+            try:
+                current = tasks.get(task_id)
+                if current is not None:
+                    current = dict(current)
+                    if current["state"] == "stopping" and _same_task(current, original):
+                        tasks[task_id] = terminal
+            finally:
+                lock.release()
+        except Exception:
+            lock.acquire()
+            try:
+                current = tasks.get(task_id)
+                if current is not None:
+                    current = dict(current)
+                    if current["state"] == "stopping" and _same_task(current, original):
+                        tasks[task_id] = original
+            finally:
+                lock.release()
+            raise
+        stopped.append(task_id)
     return stopped
 
 
@@ -221,7 +265,7 @@ async def delete_tasks(ids: list[str]) -> list[str]:
     Returns:
         The task IDs removed from the task store or output workspace.
     """
-    deleted: list[str] = []
+    candidates: list[tuple[str, dict[str, Any] | None, str, str, Path | None]] = []
     tasks, lock = _task_store()
     lock.acquire()
     try:
@@ -235,10 +279,23 @@ async def delete_tasks(ids: list[str]) -> list[str]:
             if not media_hash or not sep or not profile:
                 continue
             root = Path(task["out_dir"]).parents[1] if task is not None else None
-            deleted_output = delete_output(media_hash, profile, root=root)
-            if deleted_output or task is not None:
-                tasks.pop(task_id, None)
-                deleted.append(task_id)
+            candidates.append((task_id, task, media_hash, profile, root))
     finally:
         lock.release()
+
+    deleted: list[str] = []
+    for task_id, task, media_hash, profile, root in candidates:
+        deleted_output = delete_output(media_hash, profile, root=root)
+        removed_record = False
+        if task is not None:
+            lock.acquire()
+            try:
+                current = tasks.get(task_id)
+                if current is not None and dict(current) == task:
+                    tasks.pop(task_id, None)
+                    removed_record = True
+            finally:
+                lock.release()
+        if deleted_output or removed_record:
+            deleted.append(task_id)
     return deleted

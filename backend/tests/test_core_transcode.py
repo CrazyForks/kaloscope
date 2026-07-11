@@ -327,3 +327,103 @@ def test_list_releases_lock(monkeypatch):
     result = asyncio.run(tasks.list_tasks())
 
     assert [task["id"] for task in result] == ["task"]
+
+
+def test_finish_releases_lock(monkeypatch, tmp_path):
+    lock = _Lock()
+    store = {
+        "task": {
+            "state": "running",
+            "out_dir": str(tmp_path),
+            "started_at": "2026-01-01",
+            "pid": 123,
+        }
+    }
+
+    def remove_endlist(_out_dir):
+        assert lock.locked is False
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, lock))
+    monkeypatch.setattr(tasks, "_remove_endlist", remove_endlist)
+
+    asyncio.run(tasks.finish_task("task", 1, "failed"))
+
+    assert store["task"]["state"] == "error"
+
+
+def test_stop_releases_lock(monkeypatch, tmp_path):
+    lock = _Lock()
+    store = {
+        "task": {
+            "state": "running",
+            "out_dir": str(tmp_path),
+            "started_at": "2026-01-01",
+            "pid": 123,
+        }
+    }
+
+    def kill(_pid, _signal):
+        assert lock.locked is False
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, lock))
+    monkeypatch.setattr(tasks.os, "kill", kill)
+
+    result = asyncio.run(tasks.stop_tasks(["task"]))
+
+    assert result == ["task"]
+    assert store["task"]["state"] == "stopping"
+
+
+def test_delete_releases_lock(monkeypatch, tmp_path):
+    lock = _Lock()
+    out_dir = tmp_path / "hash" / "profile"
+    store = {
+        "hash:profile": {
+            "state": "finished",
+            "out_dir": str(out_dir),
+            "started_at": "2026-01-01",
+            "pid": 123,
+        }
+    }
+
+    def delete_output(_hash, _profile, root=None):
+        assert lock.locked is False
+        assert root == tmp_path
+        return True
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, lock))
+    monkeypatch.setattr(tasks, "delete_output", delete_output)
+
+    result = asyncio.run(tasks.delete_tasks(["hash:profile"]))
+
+    assert result == ["hash:profile"]
+    assert not store
+
+
+def test_delete_keeps_replacement(monkeypatch, tmp_path):
+    lock = _Lock()
+    original = {
+        "state": "finished",
+        "out_dir": str(tmp_path / "hash" / "profile"),
+        "started_at": "2026-01-01",
+        "pid": 123,
+    }
+    replacement = {
+        "state": "running",
+        "out_dir": original["out_dir"],
+        "started_at": "2026-01-02",
+        "pid": 456,
+    }
+    store = {"hash:profile": original}
+
+    def delete_output(_hash, _profile, root=None):
+        assert lock.locked is False
+        store["hash:profile"] = replacement
+        return True
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, lock))
+    monkeypatch.setattr(tasks, "delete_output", delete_output)
+
+    asyncio.run(tasks.delete_tasks(["hash:profile"]))
+
+    assert store["hash:profile"] is replacement
