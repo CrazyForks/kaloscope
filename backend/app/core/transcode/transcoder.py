@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import json
 from pathlib import Path
 
 from filelock import FileLock, Timeout
@@ -46,6 +47,65 @@ async def _ffprobe() -> str:
     return "ffprobe"
 
 
+async def _probe_media(media_path: str) -> tuple[float | None, float | None]:
+    """Probe media duration and first-video-stream framerate via ffprobe.
+
+    Args:
+        media_path: The media file path to probe.
+
+    Returns:
+        A `(duration, framerate)` tuple. Each value is `None` when ffprobe
+        exits unsuccessfully or the corresponding field is invalid.
+
+    Raises:
+        OSError: If the ffprobe process cannot be started.
+        UnicodeDecodeError: If ffprobe output is not valid UTF-8.
+    """
+    proc = await asyncio.create_subprocess_exec(
+        await _ffprobe(),
+        "-v",
+        "quiet",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "format=duration:stream=avg_frame_rate",
+        "-of",
+        "json",
+        media_path,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, _ = await proc.communicate()
+    if proc.returncode != 0:
+        return None, None
+    try:
+        data = json.loads(stdout.decode())
+    except (json.JSONDecodeError, TypeError):
+        return None, None
+    if not isinstance(data, dict):
+        return None, None
+
+    duration = None
+    format_data = data.get("format")
+    if isinstance(format_data, dict):
+        with contextlib.suppress(ValueError, TypeError):
+            duration = float(format_data.get("duration"))
+
+    framerate = None
+    streams = data.get("streams")
+    if isinstance(streams, list) and streams and isinstance(streams[0], dict):
+        raw = streams[0].get("avg_frame_rate")
+        if isinstance(raw, str):
+            try:
+                num, _, den = raw.partition("/")
+                value = float(num) / float(den) if den else float(num)
+                if value > 0:
+                    framerate = value
+            except (ValueError, TypeError, ZeroDivisionError):
+                pass
+    return duration, framerate
+
+
 async def probe_duration(media_path: str) -> float | None:
     """Probe the media file duration in seconds via ffprobe.
 
@@ -60,25 +120,8 @@ async def probe_duration(media_path: str) -> float | None:
         OSError: If the ffprobe process cannot be started.
         UnicodeDecodeError: If ffprobe output is not valid UTF-8.
     """
-    proc = await asyncio.create_subprocess_exec(
-        await _ffprobe(),
-        "-v",
-        "quiet",
-        "-show_entries",
-        "format=duration",
-        "-of",
-        "default=noprint_wrappers=1:nokey=1",
-        media_path,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, _ = await proc.communicate()
-    if proc.returncode != 0:
-        return None
-    try:
-        return float(stdout.decode().strip())
-    except (ValueError, TypeError):
-        return None
+    duration, _ = await _probe_media(media_path)
+    return duration
 
 
 async def probe_framerate(media_path: str) -> float | None:
@@ -99,31 +142,8 @@ async def probe_framerate(media_path: str) -> float | None:
         OSError: If the ffprobe process cannot be started.
         UnicodeDecodeError: If ffprobe output is not valid UTF-8.
     """
-    proc = await asyncio.create_subprocess_exec(
-        await _ffprobe(),
-        "-v",
-        "quiet",
-        "-select_streams",
-        "v:0",
-        "-show_entries",
-        "stream=avg_frame_rate",
-        "-of",
-        "default=noprint_wrappers=1:nokey=1",
-        media_path,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, _ = await proc.communicate()
-    if proc.returncode != 0:
-        return None
-    raw = stdout.decode().strip()
-    try:
-        num, _, den = raw.partition("/")
-        fps = float(num) / float(den) if den else float(num)
-    except (ValueError, TypeError, ZeroDivisionError):
-        return None
-    # guard against bogus values (e.g. "0/0" -> 0.0)
-    return fps if fps > 0 else None
+    _, framerate = await _probe_media(media_path)
+    return framerate
 
 
 async def ensure_transcode(
@@ -174,9 +194,9 @@ async def ensure_transcode(
     try:
         _cleanup_stale_hls(out_dir)
 
-        # Probe the average source framerate so GOP-based hardware encoders can
-        # approximate one GOP per HLS segment for constant-frame-rate input.
-        fps = await probe_framerate(media_path)
+        # Probe once before starting ffmpeg. GOP-based hardware encoders use
+        # the framerate to approximate one GOP per HLS segment.
+        duration, fps = await _probe_media(media_path)
         if fps is not None:
             options.framerate = fps
 
@@ -190,7 +210,6 @@ async def ensure_transcode(
         )
 
         # register the task in the memory store
-        duration = await probe_duration(media_path)
         task_id = await register_task(
             media_path, media_hash, options, out_dir, proc, duration
         )

@@ -110,6 +110,64 @@ def test_scan_skips_excluded(monkeypatch, tmp_path):
     output_stats.assert_not_called()
 
 
+def test_probe_media(monkeypatch):
+    proc = SimpleNamespace(
+        returncode=0,
+        communicate=AsyncMock(
+            return_value=(
+                b'{"streams":[{"avg_frame_rate":"30000/1001"}],'
+                b'"format":{"duration":"60.5"}}',
+                b"",
+            )
+        ),
+    )
+    create = AsyncMock(return_value=proc)
+
+    monkeypatch.setattr(transcoder, "_ffprobe", AsyncMock(return_value="ffprobe"))
+    monkeypatch.setattr(transcoder.asyncio, "create_subprocess_exec", create)
+
+    duration, framerate = asyncio.run(transcoder._probe_media("input.mkv"))
+
+    assert duration == 60.5
+    assert framerate == pytest.approx(30000 / 1001)
+    create.assert_awaited_once()
+    args = create.await_args.args
+    assert "format=duration:stream=avg_frame_rate" in args
+    assert "json" in args
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stdout", "expected"),
+    [
+        (1, b"", (None, None)),
+        (
+            0,
+            b'{"streams":[{"avg_frame_rate":"bad"}],"format":{"duration":"60"}}',
+            (60.0, None),
+        ),
+        (
+            0,
+            b'{"streams":[{"avg_frame_rate":"24/1"}],"format":{"duration":"bad"}}',
+            (None, 24.0),
+        ),
+    ],
+)
+def test_probe_media_invalid(monkeypatch, returncode, stdout, expected):
+    proc = SimpleNamespace(
+        returncode=returncode,
+        communicate=AsyncMock(return_value=(stdout, b"")),
+    )
+
+    monkeypatch.setattr(transcoder, "_ffprobe", AsyncMock(return_value="ffprobe"))
+    monkeypatch.setattr(
+        transcoder.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    )
+
+    assert asyncio.run(transcoder._probe_media("input.mkv")) == expected
+
+
 def test_software_cmd(monkeypatch, tmp_path):
     monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
 
@@ -175,14 +233,15 @@ def test_setup_failure_stops_process(monkeypatch, tmp_path):
     monkeypatch.setattr(transcoder, "_is_complete", Mock(return_value=False))
     monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
     monkeypatch.setattr(transcoder, "_cleanup_stale_hls", Mock())
-    monkeypatch.setattr(transcoder, "probe_framerate", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        transcoder, "_probe_media", AsyncMock(return_value=(60.0, None))
+    )
     monkeypatch.setattr(
         transcoder, "_build_hls_cmd", AsyncMock(return_value=["ffmpeg"])
     )
     monkeypatch.setattr(
         transcoder.asyncio, "create_subprocess_exec", AsyncMock(return_value=proc)
     )
-    monkeypatch.setattr(transcoder, "probe_duration", AsyncMock(return_value=60.0))
     monkeypatch.setattr(
         transcoder, "register_task", AsyncMock(side_effect=RuntimeError("store failed"))
     )
@@ -195,6 +254,48 @@ def test_setup_failure_stops_process(monkeypatch, tmp_path):
 
     assert events == ["terminate", "wait", "release"]
     proc.kill.assert_not_called()
+
+
+def test_ensure_probes_once(monkeypatch, tmp_path):
+    lock = object()
+    proc = SimpleNamespace(pid=123, returncode=None, stderr=None)
+    probe = AsyncMock(return_value=(60.0, 24.0))
+    register = AsyncMock(return_value="hash:profile")
+    options = TranscodeOptions()
+
+    monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
+    monkeypatch.setattr(transcoder, "_is_complete", Mock(return_value=False))
+    monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
+    monkeypatch.setattr(transcoder, "_cleanup_stale_hls", Mock())
+    monkeypatch.setattr(transcoder, "_probe_media", probe)
+    monkeypatch.setattr(
+        transcoder,
+        "probe_framerate",
+        AsyncMock(side_effect=AssertionError("separate probe called")),
+    )
+    monkeypatch.setattr(
+        transcoder,
+        "probe_duration",
+        AsyncMock(side_effect=AssertionError("separate probe called")),
+    )
+    monkeypatch.setattr(
+        transcoder, "_build_hls_cmd", AsyncMock(return_value=["ffmpeg"])
+    )
+    monkeypatch.setattr(
+        transcoder.asyncio, "create_subprocess_exec", AsyncMock(return_value=proc)
+    )
+    monkeypatch.setattr(transcoder, "register_task", register)
+    monkeypatch.setattr(transcoder, "_start_monitor", Mock())
+    monkeypatch.setattr(transcoder, "_wait_segment", AsyncMock(return_value=True))
+
+    result = asyncio.run(transcoder.ensure_transcode("input.mkv", "hash", options))
+
+    assert result == ("hash", options.profile)
+    assert options.framerate == 24.0
+    probe.assert_awaited_once_with("input.mkv")
+    register.assert_awaited_once_with(
+        "input.mkv", "hash", options, tmp_path, proc, 60.0
+    )
 
 
 def test_cleanup_kills_on_timeout():
@@ -283,14 +384,15 @@ def test_timeout_keeps_lock(monkeypatch, tmp_path):
         transcoder, "output_dir", lambda _hash, profile: tmp_path / profile
     )
     monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
-    monkeypatch.setattr(transcoder, "probe_framerate", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        transcoder, "_probe_media", AsyncMock(return_value=(60.0, None))
+    )
     monkeypatch.setattr(
         transcoder, "_build_hls_cmd", AsyncMock(return_value=["ffmpeg"])
     )
     monkeypatch.setattr(
         transcoder.asyncio, "create_subprocess_exec", AsyncMock(return_value=proc)
     )
-    monkeypatch.setattr(transcoder, "probe_duration", AsyncMock(return_value=60.0))
     monkeypatch.setattr(
         transcoder, "register_task", AsyncMock(return_value="hash:profile")
     )
