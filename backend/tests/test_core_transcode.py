@@ -464,9 +464,9 @@ def test_rechecks_completion(monkeypatch, tmp_path):
     options = TranscodeOptions()
 
     monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
-    monkeypatch.setattr(transcoder, "_is_complete", complete)
+    monkeypatch.setattr(transcoder, "is_complete", complete)
     monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
-    monkeypatch.setattr(transcoder, "_cleanup_stale_hls", cleanup)
+    monkeypatch.setattr(transcoder, "cleanup_stale_hls", cleanup)
     monkeypatch.setattr(transcoder, "_release_lock", release)
 
     result = asyncio.run(transcoder.ensure_transcode("input.mkv", "hash", options))
@@ -496,9 +496,9 @@ def test_setup_failure_stops_process(monkeypatch, tmp_path):
     release = Mock(side_effect=lambda _lock: events.append("release"))
 
     monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
-    monkeypatch.setattr(transcoder, "_is_complete", Mock(return_value=False))
+    monkeypatch.setattr(transcoder, "is_complete", Mock(return_value=False))
     monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
-    monkeypatch.setattr(transcoder, "_cleanup_stale_hls", Mock())
+    monkeypatch.setattr(transcoder, "cleanup_stale_hls", Mock())
     monkeypatch.setattr(
         transcoder, "_probe_media", AsyncMock(return_value=(60.0, None))
     )
@@ -531,9 +531,9 @@ def test_ensure_copies_options(monkeypatch, tmp_path):
     options = TranscodeOptions()
 
     monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
-    monkeypatch.setattr(transcoder, "_is_complete", Mock(return_value=False))
+    monkeypatch.setattr(transcoder, "is_complete", Mock(return_value=False))
     monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
-    monkeypatch.setattr(transcoder, "_cleanup_stale_hls", Mock())
+    monkeypatch.setattr(transcoder, "cleanup_stale_hls", Mock())
     monkeypatch.setattr(transcoder, "_probe_media", probe)
     monkeypatch.setattr(
         transcoder,
@@ -551,7 +551,7 @@ def test_ensure_copies_options(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(transcoder, "register_task", register)
     monkeypatch.setattr(transcoder, "_start_monitor", Mock())
-    monkeypatch.setattr(transcoder, "_wait_segment", AsyncMock(return_value=True))
+    monkeypatch.setattr(transcoder, "wait_segment", AsyncMock(return_value=True))
 
     result = asyncio.run(transcoder.ensure_transcode("input.mkv", "hash", options))
 
@@ -672,7 +672,7 @@ def test_timeout_keeps_lock(monkeypatch, tmp_path):
     monkeypatch.setattr(
         transcoder, "register_task", AsyncMock(return_value="hash:profile")
     )
-    monkeypatch.setattr(transcoder, "_wait_segment", AsyncMock(return_value=False))
+    monkeypatch.setattr(transcoder, "wait_segment", AsyncMock(return_value=False))
     monkeypatch.setattr(transcoder, "_release_lock", release)
     monkeypatch.setattr(transcoder, "_start_monitor", Mock())
 
@@ -784,7 +784,7 @@ def test_finish_releases_lock(monkeypatch, tmp_path):
         assert lock.locked is False
 
     monkeypatch.setattr(tasks, "_task_store", lambda: (store, lock))
-    monkeypatch.setattr(tasks, "_remove_endlist", remove_endlist)
+    monkeypatch.setattr(tasks, "remove_endlist", remove_endlist)
 
     asyncio.run(tasks.finish_task("task", 1, "failed"))
 
@@ -882,7 +882,7 @@ def test_finish_states(monkeypatch, tmp_path, state, returncode, expected):
     remove = Mock()
 
     monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
-    monkeypatch.setattr(tasks, "_remove_endlist", remove)
+    monkeypatch.setattr(tasks, "remove_endlist", remove)
 
     asyncio.run(tasks.finish_task("task", returncode))
 
@@ -907,8 +907,8 @@ def test_stop_missing(monkeypatch, tmp_path, complete, expected):
 
     monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
     monkeypatch.setattr(tasks.os, "kill", Mock(side_effect=ProcessLookupError))
-    monkeypatch.setattr(tasks, "_is_complete", Mock(return_value=complete))
-    monkeypatch.setattr(tasks, "_remove_endlist", remove)
+    monkeypatch.setattr(tasks, "is_complete", Mock(return_value=complete))
+    monkeypatch.setattr(tasks, "remove_endlist", remove)
 
     result = asyncio.run(tasks.stop_tasks(["task"]))
 
