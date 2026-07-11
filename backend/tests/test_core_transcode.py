@@ -323,6 +323,25 @@ def test_probe_media_invalid(monkeypatch, returncode, stdout, expected):
     assert asyncio.run(transcoder._probe_media("input.mkv")) == expected
 
 
+def test_probe_timeout(monkeypatch):
+    proc = SimpleNamespace(
+        returncode=None,
+        kill=Mock(),
+        communicate=AsyncMock(side_effect=[TimeoutError, (b"", b"")]),
+    )
+
+    monkeypatch.setattr(transcoder, "_ffprobe", AsyncMock(return_value="ffprobe"))
+    monkeypatch.setattr(
+        transcoder.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    )
+
+    assert asyncio.run(transcoder._probe_media("input.mkv")) == (None, None)
+    proc.kill.assert_called_once_with()
+    assert proc.communicate.await_count == 2
+
+
 def test_software_cmd(monkeypatch, tmp_path):
     monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
 
@@ -623,7 +642,7 @@ def test_shutdown_stops_monitors(monkeypatch):
         started = asyncio.Event()
         blocker = asyncio.Event()
 
-        async def read():
+        async def read(_size):
             started.set()
             await blocker.wait()
 
@@ -678,6 +697,33 @@ def test_monitor_errors_logged(monkeypatch):
 
     assert task not in transcoder._MONITOR_TASKS
     error.assert_called_once()
+
+
+def test_monitor_tail(monkeypatch):
+    read = AsyncMock(side_effect=[b"a" * 400, b"b" * 400, b""])
+    proc = SimpleNamespace(
+        pid=123,
+        returncode=1,
+        stderr=SimpleNamespace(read=read),
+        wait=AsyncMock(),
+    )
+    finish = AsyncMock()
+    release = Mock()
+
+    monkeypatch.setattr(transcoder, "finish_task", finish)
+    monkeypatch.setattr(transcoder, "_release_lock", release)
+    monkeypatch.setattr(transcoder.logger, "error", Mock())
+
+    asyncio.run(
+        transcoder._monitor_ffmpeg(
+            cast(asyncio.subprocess.Process, proc),
+            cast(FileLock, object()),
+            "task",
+        )
+    )
+
+    assert read.await_count == 3
+    finish.assert_awaited_once_with("task", 1, "a" * 100 + "b" * 400)
 
 
 def test_timeout_keeps_lock(monkeypatch, tmp_path):

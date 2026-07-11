@@ -17,7 +17,12 @@ from app.core.transcode.hls import (
 from app.core.transcode.options import TranscodeOptions
 from app.core.transcode.tasks import finish_task, register_task
 
-_PROCESS_TERMINATE_TIMEOUT = 5.0
+_PROBE_TIMEOUT = 30.0
+_TERMINATE_TIMEOUT = 5.0
+
+_STDERR_CHUNK_SIZE = 8192
+_STDERR_TAIL_SIZE = 500
+
 _MONITOR_TASKS: set[asyncio.Task[None]] = set()
 
 
@@ -77,7 +82,19 @@ async def _probe_media(media_path: str) -> tuple[float | None, float | None]:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout, _ = await proc.communicate()
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=_PROBE_TIMEOUT)
+    except TimeoutError:
+        logger.warning(
+            "ffprobe timed out after %.1f seconds for '%s'",
+            _PROBE_TIMEOUT,
+            media_path,
+        )
+        if proc.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+        await proc.communicate()
+        return None, None
     if proc.returncode != 0:
         return None, None
     try:
@@ -390,9 +407,7 @@ async def _terminate_ffmpeg(proc: asyncio.subprocess.Process) -> None:
             with contextlib.suppress(ProcessLookupError):
                 proc.terminate()
         try:
-            await asyncio.wait_for(
-                proc.communicate(), timeout=_PROCESS_TERMINATE_TIMEOUT
-            )
+            await asyncio.wait_for(proc.communicate(), timeout=_TERMINATE_TIMEOUT)
         except TimeoutError:
             if proc.returncode is None:
                 with contextlib.suppress(ProcessLookupError):
@@ -421,10 +436,13 @@ async def _monitor_ffmpeg(
         task_id: The registered task ID, if task tracking is enabled.
     """
     try:
-        stderr_data = b""
+        stderr_data = bytearray()
         try:
             if proc.stderr is not None:
-                stderr_data = await proc.stderr.read()
+                while chunk := await proc.stderr.read(_STDERR_CHUNK_SIZE):
+                    stderr_data.extend(chunk)
+                    if len(stderr_data) > _STDERR_TAIL_SIZE:
+                        del stderr_data[:-_STDERR_TAIL_SIZE]
         except Exception:
             # still reap and classify the process when stderr capture fails
             pass
