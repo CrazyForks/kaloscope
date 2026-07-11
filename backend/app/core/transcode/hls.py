@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import re
@@ -5,7 +7,7 @@ import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 import aiofiles
 from sanic.log import logger
@@ -17,6 +19,9 @@ from app.core.transcode.options import (
     QUALITY_CRF,
     RESOLUTION_MAX_HEIGHT,
 )
+
+if TYPE_CHECKING:
+    from app.core.transcode.tasks import TaskSnapshot
 
 _SEGMENT_WAIT_TIMEOUT = 30.0
 _SEGMENT_WAIT_INTERVAL = 0.25
@@ -150,7 +155,7 @@ def output_stats(out_dir: Path | str, duration: float | None = None) -> Transcod
 
 def scan_outputs(
     root: Path | str | None = None, *, exclude_ids: set[str] | None = None
-) -> list[dict[str, Any]]:
+) -> list[TaskSnapshot]:
     """Scan the transcoded workspace for finished and interrupted HLS outputs.
 
     Args:
@@ -168,7 +173,9 @@ def scan_outputs(
     if not root.is_dir():
         return []
 
-    tasks: list[dict[str, Any]] = []
+    from app.core.transcode.tasks import TaskState
+
+    tasks: list[TaskSnapshot] = []
     for hash_dir in sorted(path for path in root.iterdir() if path.is_dir()):
         media_hash = hash_dir.name
         for profile_dir in sorted(path for path in hash_dir.iterdir() if path.is_dir()):
@@ -180,7 +187,7 @@ def scan_outputs(
             if not stats.finished and stats.segments == 0:
                 continue
             profile_tags = parse_profile(profile)
-            state = "finished" if stats.finished else "stopped"
+            state = TaskState.FINISHED if stats.finished else TaskState.STOPPED
             tasks.append(
                 {
                     "id": task_id,

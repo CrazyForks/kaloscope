@@ -16,6 +16,9 @@ from app.core.transcode.options import (
     TranscodeOptions,
 )
 from app.core.transcode.tasks import (
+    RuntimeTask,
+    TaskSnapshot,
+    TaskState,
     delete_tasks,
     finish_task,
     list_tasks,
@@ -33,6 +36,9 @@ __all__ = [
     "HWAccelType",
     "QualityLevel",
     "ResolutionLimit",
+    "RuntimeTask",
+    "TaskSnapshot",
+    "TaskState",
     "TranscodeOptions",
     "TranscodeStats",
     "delete_output",

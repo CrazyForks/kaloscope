@@ -3,8 +3,9 @@ import os
 import signal
 import threading
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import NotRequired, TypedDict, cast
 
 from sanic import Sanic
 from sanic.exceptions import SanicException
@@ -17,10 +18,70 @@ from app.core.transcode.hls import (
     output_stats,
     scan_outputs,
 )
-from app.core.transcode.options import TranscodeOptions
+from app.core.transcode.options import (
+    HWAccelType,
+    QualityLevel,
+    ResolutionLimit,
+    TranscodeOptions,
+)
 from app.utils.disk import format_bytes
 
-_TASKS: dict[str, dict[str, Any]] = {}
+
+class TaskState(StrEnum):
+    """Lifecycle state of a transcode task."""
+
+    RUNNING = "running"
+    STOPPING = "stopping"
+    STOPPED = "stopped"
+    FINISHED = "finished"
+    ERROR = "error"
+
+
+class RuntimeTask(TypedDict):
+    """Task metadata stored in the cross-worker runtime mapping."""
+
+    id: str
+    name: str
+    path: str
+    hash: str
+    state: TaskState
+    duration: float | None
+    pid: int | None
+    profile: str
+    quality: QualityLevel
+    resolution: ResolutionLimit
+    hwaccel: HWAccelType | None
+    out_dir: str
+    started_at: str
+    finished_at: str | None
+    error_msg: str | None
+
+
+class TaskSnapshot(TypedDict):
+    """API-facing task metadata enriched with HLS output statistics."""
+
+    id: str
+    name: str
+    path: str | None
+    hash: str
+    state: TaskState
+    duration: float | None
+    pid: int | None
+    profile: str
+    quality: QualityLevel | None
+    resolution: ResolutionLimit | None
+    hwaccel: HWAccelType | None
+    started_at: str | None
+    finished_at: str | None
+    error_msg: str | None
+    progress: int | None
+    encoded_duration: float
+    encoded_segments: int
+    encoded_size: int
+    encoded_size_text: NotRequired[str]
+
+
+_TASKS: dict[str, RuntimeTask] = {}
 _TASKS_LOCK = threading.RLock()
 
 
@@ -37,7 +98,7 @@ def _task_store():
         return _TASKS, _TASKS_LOCK
 
 
-def _same_task(current: dict[str, Any], expected: dict[str, Any]) -> bool:
+def _same_task(current: RuntimeTask, expected: RuntimeTask) -> bool:
     """Check whether two task snapshots describe the same process run."""
     keys = ("started_at", "pid", "out_dir")
     return all(current.get(key) == expected.get(key) for key in keys)
@@ -65,26 +126,27 @@ async def register_task(
         The registered task ID.
     """
     task_id = f"{media_hash}:{options.profile}"
+    task: RuntimeTask = {
+        "id": task_id,
+        "name": Path(media_path).name,
+        "path": media_path,
+        "hash": media_hash,
+        "state": TaskState.RUNNING,
+        "duration": duration,
+        "pid": proc.pid,
+        "profile": options.profile,
+        "quality": options.quality,
+        "resolution": options.resolution,
+        "hwaccel": options.hwaccel,
+        "out_dir": str(out_dir),
+        "started_at": datetime.now(UTC).isoformat(),
+        "finished_at": None,
+        "error_msg": None,
+    }
     tasks, lock = _task_store()
     lock.acquire()
     try:
-        tasks[task_id] = {
-            "id": task_id,
-            "name": Path(media_path).name,
-            "path": media_path,
-            "hash": media_hash,
-            "state": "running",
-            "duration": duration,
-            "pid": proc.pid,
-            "profile": options.profile,
-            "quality": options.quality,
-            "resolution": options.resolution,
-            "hwaccel": options.hwaccel,
-            "out_dir": str(out_dir),
-            "started_at": datetime.now(UTC).isoformat(),
-            "finished_at": None,
-            "error_msg": None,
-        }
+        tasks[task_id] = task
     finally:
         lock.release()
     return task_id
@@ -106,7 +168,7 @@ async def finish_task(
         task = tasks.get(task_id)
         if task is None:
             return
-        task = dict(task)
+        task = cast(RuntimeTask, dict(task))
     finally:
         lock.release()
 
@@ -118,23 +180,23 @@ async def finish_task(
         current = tasks.get(task_id)
         if current is None:
             return
-        current = dict(current)
+        current = cast(RuntimeTask, dict(current))
         if not _same_task(current, task):
             return
         current["finished_at"] = datetime.now(UTC).isoformat()
         if returncode == 0:
-            current["state"] = "finished"
-        elif current["state"] == "stopping" or returncode == 255:
-            current["state"] = "stopped"
+            current["state"] = TaskState.FINISHED
+        elif current["state"] == TaskState.STOPPING or returncode == 255:
+            current["state"] = TaskState.STOPPED
         else:
-            current["state"] = "error"
+            current["state"] = TaskState.ERROR
             current["error_msg"] = error_msg
         tasks[task_id] = current
     finally:
         lock.release()
 
 
-async def list_tasks() -> list[dict[str, Any]]:
+async def list_tasks() -> list[TaskSnapshot]:
     """List runtime and finished filesystem transcode tasks.
 
     Returns:
@@ -143,14 +205,14 @@ async def list_tasks() -> list[dict[str, Any]]:
     store, lock = _task_store()
     lock.acquire()
     try:
-        stored_tasks = [dict(task) for task in store.values()]
+        stored_tasks = [cast(RuntimeTask, dict(task)) for task in store.values()]
     finally:
         lock.release()
 
     return await asyncio.to_thread(_build_task_list, stored_tasks)
 
 
-def _build_task_list(stored_tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _build_task_list(stored_tasks: list[RuntimeTask]) -> list[TaskSnapshot]:
     """Build API task snapshots from shared records and filesystem outputs.
 
     Args:
@@ -172,7 +234,7 @@ def _build_task_list(stored_tasks: list[dict[str, Any]]) -> list[dict[str, Any]]
     return tasks
 
 
-def _task_snapshot(task: dict[str, Any]) -> dict[str, Any]:
+def _task_snapshot(task: RuntimeTask) -> TaskSnapshot:
     """Convert shared task metadata into an API-friendly dictionary.
 
     Args:
@@ -181,26 +243,36 @@ def _task_snapshot(task: dict[str, Any]) -> dict[str, Any]:
     Returns:
         The task metadata enriched with output statistics.
     """
-    snapshot = dict(task)
-    stats = output_stats(snapshot.pop("out_dir"), snapshot.get("duration"))
-    state = snapshot["state"]
+    stats = output_stats(task["out_dir"], task["duration"])
+    state = task["state"]
     progress = (
         100
-        if state == "finished"
-        else estimate_progress(stats.duration, snapshot.get("duration"))
+        if state == TaskState.FINISHED
+        else estimate_progress(stats.duration, task["duration"])
     )
-    if state in ("error", "stopped") and progress is None:
+    if state in (TaskState.ERROR, TaskState.STOPPED) and progress is None:
         progress = 0
 
-    snapshot.update(
-        progress=progress,
-        duration=snapshot.get("duration") or stats.duration or None,
-        encoded_duration=stats.duration,
-        encoded_segments=stats.segments,
-        encoded_size=stats.size,
-        finished_at=snapshot.get("finished_at") or stats.updated_at,
-    )
-    return snapshot
+    return {
+        "id": task["id"],
+        "name": task["name"],
+        "path": task["path"],
+        "hash": task["hash"],
+        "state": state,
+        "duration": task["duration"] or stats.duration or None,
+        "pid": task["pid"],
+        "profile": task["profile"],
+        "quality": task["quality"],
+        "resolution": task["resolution"],
+        "hwaccel": task["hwaccel"],
+        "started_at": task["started_at"],
+        "finished_at": task["finished_at"] or stats.updated_at,
+        "error_msg": task["error_msg"],
+        "progress": progress,
+        "encoded_duration": stats.duration,
+        "encoded_segments": stats.segments,
+        "encoded_size": stats.size,
+    }
 
 
 async def stop_tasks(ids: list[str]) -> list[str]:
@@ -212,7 +284,7 @@ async def stop_tasks(ids: list[str]) -> list[str]:
     Returns:
         The IDs of running tasks handled by the request.
     """
-    claimed: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+    claimed: list[tuple[str, RuntimeTask, RuntimeTask]] = []
     tasks, lock = _task_store()
     lock.acquire()
     try:
@@ -220,11 +292,11 @@ async def stop_tasks(ids: list[str]) -> list[str]:
             task = tasks.get(task_id)
             if task is None:
                 continue
-            task = dict(task)
-            if task["state"] != "running":
+            task = cast(RuntimeTask, dict(task))
+            if task["state"] != TaskState.RUNNING:
                 continue
-            stopping = dict(task)
-            stopping["state"] = "stopping"
+            stopping = cast(RuntimeTask, dict(task))
+            stopping["state"] = TaskState.STOPPING
             tasks[task_id] = stopping
             claimed.append((task_id, task, stopping))
     finally:
@@ -237,20 +309,22 @@ async def stop_tasks(ids: list[str]) -> list[str]:
                 sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
                 os.kill(stopping["pid"], sigkill)
         except ProcessLookupError:
-            terminal = dict(stopping)
+            terminal = cast(RuntimeTask, dict(stopping))
             terminal["finished_at"] = datetime.now(UTC).isoformat()
             out_dir = terminal.get("out_dir")
             if out_dir and _is_complete(Path(out_dir) / "index.m3u8"):
-                terminal["state"] = "finished"
+                terminal["state"] = TaskState.FINISHED
             else:
-                terminal["state"] = "stopped"
+                terminal["state"] = TaskState.STOPPED
                 _remove_endlist(out_dir)
             lock.acquire()
             try:
                 current = tasks.get(task_id)
                 if current is not None:
-                    current = dict(current)
-                    if current["state"] == "stopping" and _same_task(current, original):
+                    current = cast(RuntimeTask, dict(current))
+                    if current["state"] == TaskState.STOPPING and _same_task(
+                        current, original
+                    ):
                         tasks[task_id] = terminal
             finally:
                 lock.release()
@@ -259,8 +333,10 @@ async def stop_tasks(ids: list[str]) -> list[str]:
             try:
                 current = tasks.get(task_id)
                 if current is not None:
-                    current = dict(current)
-                    if current["state"] == "stopping" and _same_task(current, original):
+                    current = cast(RuntimeTask, dict(current))
+                    if current["state"] == TaskState.STOPPING and _same_task(
+                        current, original
+                    ):
                         tasks[task_id] = original
             finally:
                 lock.release()
@@ -278,15 +354,18 @@ async def delete_tasks(ids: list[str]) -> list[str]:
     Returns:
         The task IDs removed from the task store or output workspace.
     """
-    candidates: list[tuple[str, dict[str, Any] | None, str, str, Path | None]] = []
+    candidates: list[tuple[str, RuntimeTask | None, str, str, Path | None]] = []
     tasks, lock = _task_store()
     lock.acquire()
     try:
         for task_id in ids:
             task = tasks.get(task_id)
             if task is not None:
-                task = dict(task)
-            if task is not None and task["state"] in ("running", "stopping"):
+                task = cast(RuntimeTask, dict(task))
+            if task is not None and task["state"] in (
+                TaskState.RUNNING,
+                TaskState.STOPPING,
+            ):
                 continue
             media_hash, sep, profile = task_id.partition(":")
             if not media_hash or not sep or not profile:

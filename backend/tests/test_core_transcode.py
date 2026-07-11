@@ -43,6 +43,23 @@ def test_task_exports():
     assert all(getattr(package, name) is getattr(tasks, name) for name in names)
 
 
+def test_task_types():
+    package = importlib.import_module("app.core.transcode")
+
+    assert {state.value for state in package.TaskState} == {
+        "running",
+        "stopping",
+        "stopped",
+        "finished",
+        "error",
+    }
+    assert package.TaskState.RUNNING == "running"
+    assert "out_dir" in package.RuntimeTask.__required_keys__
+    assert "out_dir" not in package.TaskSnapshot.__required_keys__
+    assert "encoded_size" in package.TaskSnapshot.__required_keys__
+    assert "encoded_size_text" in package.TaskSnapshot.__optional_keys__
+
+
 class _Lock:
     def __init__(self):
         self.locked = False
