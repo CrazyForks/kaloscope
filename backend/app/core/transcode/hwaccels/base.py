@@ -14,11 +14,15 @@ class TranscodeContext:
     options: TranscodeOptions
     source_framerate: float = 30.0
     source_pixel_format: str | None = None
+    source_height: int | None = None
     segment_length: ClassVar[int] = 6
 
     @property
     def needs_scale(self) -> bool:
-        return self.options.max_height is not None
+        max_height = self.options.max_height
+        if max_height is None:
+            return False
+        return self.source_height is None or self.source_height > max_height
 
     @property
     def source_is_10_bit(self) -> bool:

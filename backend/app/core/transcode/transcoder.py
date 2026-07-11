@@ -56,16 +56,16 @@ async def _ffprobe() -> str:
 
 async def _probe_media(
     media_path: str,
-) -> tuple[float | None, float | None, str | None]:
-    """Probe media duration, framerate, and pixel format via ffprobe.
+) -> tuple[float | None, float | None, str | None, int | None]:
+    """Probe media duration, framerate, pixel format, and height via ffprobe.
 
     Args:
         media_path: The media file path to probe.
 
     Returns:
-        A `(duration, framerate, pixel_format)` tuple. Each value is `None`
-        when ffprobe exits unsuccessfully or the corresponding field is
-        invalid.
+        A `(duration, framerate, pixel_format, source_height)` tuple. Each
+        value is `None` when ffprobe exits unsuccessfully or the corresponding
+        field is invalid.
 
     Raises:
         OSError: If the ffprobe process cannot be started.
@@ -78,7 +78,7 @@ async def _probe_media(
         "-select_streams",
         "v:0",
         "-show_entries",
-        "format=duration:stream=avg_frame_rate,pix_fmt",
+        "format=duration:stream=avg_frame_rate,pix_fmt,height",
         "-of",
         "json",
         media_path,
@@ -97,15 +97,15 @@ async def _probe_media(
             with contextlib.suppress(ProcessLookupError):
                 proc.kill()
         await proc.communicate()
-        return None, None, None
+        return None, None, None, None
     if proc.returncode != 0:
-        return None, None, None
+        return None, None, None, None
     try:
         data = json.loads(stdout.decode())
     except (json.JSONDecodeError, TypeError):
-        return None, None, None
+        return None, None, None, None
     if not isinstance(data, dict):
-        return None, None, None
+        return None, None, None, None
 
     duration = None
     format_data = data.get("format")
@@ -117,9 +117,14 @@ async def _probe_media(
 
     framerate = None
     pixel_format = None
+    source_height = None
     streams = data.get("streams")
     if isinstance(streams, list) and streams and isinstance(streams[0], dict):
         stream = streams[0]
+        raw_height = stream.get("height")
+        if isinstance(raw_height, int) and raw_height > 0:
+            source_height = raw_height
+
         raw_pixel_format = stream.get("pix_fmt")
         if isinstance(raw_pixel_format, str) and raw_pixel_format:
             pixel_format = raw_pixel_format
@@ -133,7 +138,7 @@ async def _probe_media(
                     framerate = value
             except (ValueError, TypeError, ZeroDivisionError):
                 pass
-    return duration, framerate, pixel_format
+    return duration, framerate, pixel_format, source_height
 
 
 async def probe_duration(media_path: str) -> float | None:
@@ -150,7 +155,7 @@ async def probe_duration(media_path: str) -> float | None:
         OSError: If the ffprobe process cannot be started.
         UnicodeDecodeError: If ffprobe output is not valid UTF-8.
     """
-    duration, _, _ = await _probe_media(media_path)
+    duration, _, _, _ = await _probe_media(media_path)
     return duration
 
 
@@ -172,7 +177,7 @@ async def probe_framerate(media_path: str) -> float | None:
         OSError: If the ffprobe process cannot be started.
         UnicodeDecodeError: If ffprobe output is not valid UTF-8.
     """
-    _, framerate, _ = await _probe_media(media_path)
+    _, framerate, _, _ = await _probe_media(media_path)
     return framerate
 
 
@@ -222,11 +227,12 @@ async def ensure_transcode(
     try:
         cleanup_stale_hls(out_dir)
 
-        duration, fps, pixel_format = await _probe_media(media_path)
+        duration, fps, pixel_format, source_height = await _probe_media(media_path)
         context = TranscodeContext(
             options=options,
             source_framerate=fps if fps is not None else 30.0,
             source_pixel_format=pixel_format,
+            source_height=source_height,
         )
 
         cmd = await _build_hls_cmd(media_path, out_dir, context)

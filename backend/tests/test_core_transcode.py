@@ -270,7 +270,7 @@ def test_probe_media(monkeypatch):
         communicate=AsyncMock(
             return_value=(
                 b'{"streams":[{"avg_frame_rate":"30000/1001",'
-                b'"pix_fmt":"yuv420p10le"}],'
+                b'"pix_fmt":"yuv420p10le","height":1080}],'
                 b'"format":{"duration":"60.5"}}',
                 b"",
             )
@@ -281,34 +281,35 @@ def test_probe_media(monkeypatch):
     monkeypatch.setattr(transcoder, "_ffprobe", AsyncMock(return_value="ffprobe"))
     monkeypatch.setattr(transcoder.asyncio, "create_subprocess_exec", create)
 
-    duration, framerate, pixel_format = asyncio.run(
-        transcoder._probe_media("input.mkv")
-    )
+    result = asyncio.run(transcoder._probe_media("input.mkv"))
 
+    assert len(result) == 4
+    duration, framerate, pixel_format, source_height = result
     assert duration == 60.5
     assert framerate == pytest.approx(30000 / 1001)
     assert pixel_format == "yuv420p10le"
+    assert source_height == 1080
     create.assert_awaited_once()
     await_args = create.await_args
     assert await_args is not None
     args = await_args.args
-    assert "format=duration:stream=avg_frame_rate,pix_fmt" in args
+    assert "format=duration:stream=avg_frame_rate,pix_fmt,height" in args
     assert "json" in args
 
 
 @pytest.mark.parametrize(
     ("returncode", "stdout", "expected"),
     [
-        (1, b"", (None, None, None)),
+        (1, b"", (None, None, None, None)),
         (
             0,
             b'{"streams":[{"avg_frame_rate":"bad"}],"format":{"duration":"60"}}',
-            (60.0, None, None),
+            (60.0, None, None, None),
         ),
         (
             0,
             b'{"streams":[{"avg_frame_rate":"24/1"}],"format":{"duration":"bad"}}',
-            (None, 24.0, None),
+            (None, 24.0, None, None),
         ),
     ],
 )
@@ -342,7 +343,12 @@ def test_probe_timeout(monkeypatch):
         AsyncMock(return_value=proc),
     )
 
-    assert asyncio.run(transcoder._probe_media("input.mkv")) == (None, None, None)
+    assert asyncio.run(transcoder._probe_media("input.mkv")) == (
+        None,
+        None,
+        None,
+        None,
+    )
     proc.kill.assert_called_once_with()
     assert proc.communicate.await_count == 2
 
@@ -359,9 +365,28 @@ def test_transcode_context():
     assert context.source_framerate == 23.5
     assert context.source_pixel_format is None
     assert context.source_is_10_bit is False
+    assert context.source_height is None
     assert context.segment_length == 6
     assert context.needs_scale is True
     assert context.encoder_config is options.encoder_config
+
+
+@pytest.mark.parametrize(
+    ("resolution", "source_height", "expected"),
+    [
+        ("original", 2160, False),
+        ("1080p", 720, False),
+        ("720p", 1080, True),
+        ("720p", None, True),
+    ],
+)
+def test_context_needs_scale_uses_source_height(resolution, source_height, expected):
+    context = TranscodeContext(
+        options=TranscodeOptions(resolution=resolution),
+        source_height=source_height,
+    )
+
+    assert context.needs_scale is expected
 
 
 def test_software_cmd(monkeypatch, tmp_path):
@@ -647,7 +672,9 @@ def test_setup_failure_stops_process(monkeypatch, tmp_path):
     monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
     monkeypatch.setattr(transcoder, "cleanup_stale_hls", Mock())
     monkeypatch.setattr(
-        transcoder, "_probe_media", AsyncMock(return_value=(60.0, None, None))
+        transcoder,
+        "_probe_media",
+        AsyncMock(return_value=(60.0, None, None, None)),
     )
     monkeypatch.setattr(
         transcoder, "_build_hls_cmd", AsyncMock(return_value=["ffmpeg"])
@@ -676,7 +703,7 @@ def test_setup_failure_stops_process(monkeypatch, tmp_path):
 def test_ensure_builds_context(monkeypatch, tmp_path, framerate, expected_framerate):
     lock = object()
     proc = SimpleNamespace(pid=123, returncode=None, stderr=None)
-    probe = AsyncMock(return_value=(60.0, framerate, "yuv420p10le"))
+    probe = AsyncMock(return_value=(60.0, framerate, "yuv420p10le", 1080))
     build = AsyncMock(return_value=["ffmpeg"])
     register = AsyncMock(return_value="hash:profile")
     options = TranscodeOptions()
@@ -716,6 +743,7 @@ def test_ensure_builds_context(monkeypatch, tmp_path, framerate, expected_framer
     assert context.source_framerate == expected_framerate
     assert context.source_pixel_format == "yuv420p10le"
     assert context.source_is_10_bit is True
+    assert context.source_height == 1080
     register.assert_awaited_once_with(
         "input.mkv", "hash", options, tmp_path, proc, 60.0
     )
@@ -841,7 +869,9 @@ def test_timeout_keeps_lock(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
     monkeypatch.setattr(
-        transcoder, "_probe_media", AsyncMock(return_value=(60.0, None, None))
+        transcoder,
+        "_probe_media",
+        AsyncMock(return_value=(60.0, None, None, None)),
     )
     monkeypatch.setattr(
         transcoder, "_build_hls_cmd", AsyncMock(return_value=["ffmpeg"])
