@@ -56,7 +56,7 @@ async def _ffprobe() -> str:
 
 
 async def _probe_media(media_path: str) -> MediaProbe:
-    """Probe container and first-video-stream metadata via ffprobe.
+    """Probe the container and select its primary video and audio streams.
 
     Args:
         media_path: The media file path to probe.
@@ -73,12 +73,11 @@ async def _probe_media(media_path: str) -> MediaProbe:
         await _ffprobe(),
         "-v",
         "quiet",
-        "-select_streams",
-        "v:0",
         "-show_entries",
         (
-            "format=duration:stream=avg_frame_rate,pix_fmt,height,"
-            "color_transfer,color_primaries,color_space"
+            "format=duration:stream=index,codec_type,avg_frame_rate,pix_fmt,"
+            "height,color_transfer,color_primaries,color_space:"
+            "stream_disposition=attached_pic"
         ),
         "-of",
         "json",
@@ -122,9 +121,37 @@ async def _probe_media(media_path: str) -> MediaProbe:
     color_transfer = None
     color_primaries = None
     color_space = None
+    video_stream_index = None
+    audio_stream_index = None
+    video_stream = None
     streams = data.get("streams")
-    if isinstance(streams, list) and streams and isinstance(streams[0], dict):
-        stream = streams[0]
+    if isinstance(streams, list):
+        for stream in streams:
+            if not isinstance(stream, dict):
+                continue
+            raw_index = stream.get("index")
+            if (
+                not isinstance(raw_index, int)
+                or isinstance(raw_index, bool)
+                or raw_index < 0
+            ):
+                continue
+            codec_type = stream.get("codec_type")
+            if codec_type == "audio" and audio_stream_index is None:
+                audio_stream_index = raw_index
+            elif codec_type == "video" and video_stream is None:
+                disposition = stream.get("disposition")
+                attached_pic = (
+                    disposition.get("attached_pic")
+                    if isinstance(disposition, dict)
+                    else 0
+                )
+                if attached_pic not in (1, "1", True):
+                    video_stream_index = raw_index
+                    video_stream = stream
+
+    if video_stream is not None:
+        stream = video_stream
         raw_height = stream.get("height")
         if isinstance(raw_height, int) and raw_height > 0:
             source_height = raw_height
@@ -155,6 +182,8 @@ async def _probe_media(media_path: str) -> MediaProbe:
             except (ValueError, TypeError, ZeroDivisionError):
                 pass
     return MediaProbe(
+        video_stream_index=video_stream_index,
+        audio_stream_index=audio_stream_index,
         height=source_height,
         duration=duration,
         framerate=framerate,
@@ -201,6 +230,13 @@ async def probe_framerate(media_path: str) -> float | None:
         UnicodeDecodeError: If ffprobe output is not valid UTF-8.
     """
     return (await _probe_media(media_path)).framerate
+
+
+def _require_video_stream(metadata: MediaProbe) -> int:
+    """Return the selected video index or reject unsupported media input."""
+    if metadata.video_stream_index is None:
+        raise RuntimeError("Input has no transcodable video stream")
+    return metadata.video_stream_index
 
 
 async def ensure_transcode(
@@ -250,6 +286,7 @@ async def ensure_transcode(
         cleanup_stale_hls(out_dir)
 
         metadata = await _probe_media(media_path)
+        _require_video_stream(metadata)
         capabilities = await load_ffmpeg_capabilities(await _ffmpeg(), options.encoder)
         context = TranscodeContext(
             options=options,
@@ -314,6 +351,9 @@ async def _build_hls_cmd(
     Returns:
         A list of command-line arguments ready for `asyncio.create_subprocess_exec`.
     """
+    video_stream_index = _require_video_stream(context.metadata)
+    audio_stream_index = context.metadata.audio_stream_index
+
     executable = (
         context.capabilities.executable
         if context.capabilities is not None
@@ -335,7 +375,11 @@ async def _build_hls_cmd(
     # strip metadata and chapters that web playback does not use
     cmd.extend(["-map_metadata", "-1", "-map_chapters", "-1"])
 
-    cmd.extend(["-map", "0:v:0?", "-map", "0:a:0?"])
+    cmd.extend(["-map", f"0:{video_stream_index}"])
+    if audio_stream_index is not None:
+        cmd.extend(["-map", f"0:{audio_stream_index}"])
+    else:
+        cmd.append("-an")
 
     vf_parts: list[str] = []
     if context.needs_scale and not context.needs_tonemap:
@@ -373,20 +417,21 @@ async def _build_hls_cmd(
 
     cmd.extend(hwaccel.keyframe_args(context))
 
-    cmd.extend(
-        [
-            "-c:a",
-            "aac",
-            "-profile:a",
-            "aac_low",
-            "-b:a",
-            "128k",
-            "-ac",
-            "2",
-            "-ar",
-            "48000",
-        ]
-    )
+    if audio_stream_index is not None:
+        cmd.extend(
+            [
+                "-c:a",
+                "aac",
+                "-profile:a",
+                "aac_low",
+                "-b:a",
+                "128k",
+                "-ac",
+                "2",
+                "-ar",
+                "48000",
+            ]
+        )
 
     cmd.extend(["-copyts", "-avoid_negative_ts", "disabled"])
 
@@ -426,7 +471,9 @@ def _validate_capabilities(context: TranscodeContext, video_filters: list[str]) 
     if capabilities is None:
         return
 
-    required_encoders = {context.options.encoder, "aac"}
+    required_encoders = {context.options.encoder}
+    if context.metadata.audio_stream_index is not None:
+        required_encoders.add("aac")
     required_filters = {
         expression.split("=", 1)[0].strip()
         for expression in video_filters

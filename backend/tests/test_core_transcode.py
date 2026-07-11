@@ -350,7 +350,12 @@ def test_probe_media(monkeypatch):
         returncode=0,
         communicate=AsyncMock(
             return_value=(
-                b'{"streams":[{"avg_frame_rate":"30000/1001",'
+                b'{"streams":[{"index":0,"codec_type":"video",'
+                b'"disposition":{"attached_pic":1},"height":600},'
+                b'{"index":1,"codec_type":"audio"},'
+                b'{"index":2,"codec_type":"video",'
+                b'"disposition":{"attached_pic":0},'
+                b'"avg_frame_rate":"30000/1001",'
                 b'"pix_fmt":"yuv420p10le","height":1080,'
                 b'"color_transfer":"smpte2084","color_primaries":"bt2020",'
                 b'"color_space":"bt2020nc"}],'
@@ -367,6 +372,8 @@ def test_probe_media(monkeypatch):
     result = asyncio.run(transcoder._probe_media("input.mkv"))
 
     assert result == MediaProbe(
+        video_stream_index=2,
+        audio_stream_index=1,
         duration=60.5,
         framerate=pytest.approx(30000 / 1001),
         pixel_format="yuv420p10le",
@@ -380,9 +387,11 @@ def test_probe_media(monkeypatch):
     assert await_args is not None
     args = await_args.args
     assert (
-        "format=duration:stream=avg_frame_rate,pix_fmt,height,"
-        "color_transfer,color_primaries,color_space"
+        "format=duration:stream=index,codec_type,avg_frame_rate,pix_fmt,height,"
+        "color_transfer,color_primaries,color_space:"
+        "stream_disposition=attached_pic"
     ) in args
+    assert "-select_streams" not in args
     assert "json" in args
 
 
@@ -392,13 +401,15 @@ def test_probe_media(monkeypatch):
         (1, b"", MediaProbe()),
         (
             0,
-            b'{"streams":[{"avg_frame_rate":"bad"}],"format":{"duration":"60"}}',
-            MediaProbe(duration=60.0),
+            b'{"streams":[{"index":0,"codec_type":"video",'
+            b'"avg_frame_rate":"bad"}],"format":{"duration":"60"}}',
+            MediaProbe(video_stream_index=0, duration=60.0),
         ),
         (
             0,
-            b'{"streams":[{"avg_frame_rate":"24/1"}],"format":{"duration":"bad"}}',
-            MediaProbe(framerate=24.0),
+            b'{"streams":[{"index":0,"codec_type":"video",'
+            b'"avg_frame_rate":"24/1"}],"format":{"duration":"bad"}}',
+            MediaProbe(video_stream_index=0, framerate=24.0),
         ),
     ],
 )
@@ -556,6 +567,8 @@ def _hdr_context(
     return TranscodeContext(
         options=TranscodeOptions(hwaccel=hwaccel, resolution=resolution),
         metadata=MediaProbe(
+            video_stream_index=0,
+            audio_stream_index=1,
             framerate=24.0,
             pixel_format="yuv420p10le",
             height=2160,
@@ -664,7 +677,10 @@ def test_build_rejects_missing_required_capabilities(tmp_path, capabilities, mis
 
 def test_software_cmd(monkeypatch, tmp_path):
     monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
-    context = TranscodeContext(options=TranscodeOptions())
+    context = TranscodeContext(
+        options=TranscodeOptions(),
+        metadata=MediaProbe(video_stream_index=0, audio_stream_index=1),
+    )
 
     cmd = asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
 
@@ -674,6 +690,57 @@ def test_software_cmd(monkeypatch, tmp_path):
     assert "-level" not in cmd
     assert "-hls_flags" not in cmd
     assert "-vf" not in cmd
+
+
+def test_build_maps_selected_stream_indexes(tmp_path):
+    context = TranscodeContext(
+        options=TranscodeOptions(),
+        metadata=MediaProbe(video_stream_index=3, audio_stream_index=1),
+        capabilities=_capabilities(),
+    )
+
+    cmd = asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
+
+    maps = [cmd[index + 1] for index, value in enumerate(cmd) if value == "-map"]
+    assert maps == ["0:3", "0:1"]
+    assert "-an" not in cmd
+
+
+def test_build_silent_video_omits_audio_encoder_and_capability(tmp_path):
+    context = TranscodeContext(
+        options=TranscodeOptions(),
+        metadata=MediaProbe(video_stream_index=2),
+        capabilities=_capabilities(encoders=("libx264",)),
+    )
+
+    cmd = asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
+
+    maps = [cmd[index + 1] for index, value in enumerate(cmd) if value == "-map"]
+    assert maps == ["0:2"]
+    assert "-an" in cmd
+    assert "-c:a" not in cmd
+
+
+def test_build_requires_aac_when_audio_is_selected(tmp_path):
+    context = TranscodeContext(
+        options=TranscodeOptions(),
+        metadata=MediaProbe(video_stream_index=0, audio_stream_index=1),
+        capabilities=_capabilities(encoders=("libx264",)),
+    )
+
+    with pytest.raises(RuntimeError, match="encoders: aac"):
+        asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
+
+
+def test_build_rejects_input_without_video_stream(tmp_path):
+    context = TranscodeContext(
+        options=TranscodeOptions(),
+        metadata=MediaProbe(audio_stream_index=1),
+        capabilities=_capabilities(),
+    )
+
+    with pytest.raises(RuntimeError, match="no transcodable video stream"):
+        asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
 
 
 def test_nvenc_args():
@@ -1229,7 +1296,13 @@ def test_setup_failure_stops_process(monkeypatch, tmp_path):
     monkeypatch.setattr(
         transcoder,
         "_probe_media",
-        AsyncMock(return_value=MediaProbe(duration=60.0)),
+        AsyncMock(
+            return_value=MediaProbe(
+                video_stream_index=0,
+                audio_stream_index=1,
+                duration=60.0,
+            )
+        ),
     )
     monkeypatch.setattr(
         transcoder, "_build_hls_cmd", AsyncMock(return_value=["ffmpeg"])
@@ -1270,7 +1343,13 @@ def test_capability_preflight_failure_releases_lock(monkeypatch, tmp_path):
     monkeypatch.setattr(
         transcoder,
         "_probe_media",
-        AsyncMock(return_value=MediaProbe(duration=60.0)),
+        AsyncMock(
+            return_value=MediaProbe(
+                video_stream_index=0,
+                audio_stream_index=1,
+                duration=60.0,
+            )
+        ),
     )
     monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
     monkeypatch.setattr(
@@ -1290,6 +1369,33 @@ def test_capability_preflight_failure_releases_lock(monkeypatch, tmp_path):
     release.assert_called_once_with(lock)
 
 
+def test_no_video_rejected_before_capability_discovery(monkeypatch, tmp_path):
+    lock = object()
+    release = Mock()
+    load = AsyncMock(side_effect=AssertionError("capabilities queried"))
+
+    monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
+    monkeypatch.setattr(transcoder, "is_complete", Mock(return_value=False))
+    monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
+    monkeypatch.setattr(transcoder, "cleanup_stale_hls", Mock())
+    monkeypatch.setattr(
+        transcoder,
+        "_probe_media",
+        AsyncMock(return_value=MediaProbe(audio_stream_index=1, duration=60.0)),
+    )
+    monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
+    monkeypatch.setattr(transcoder, "load_ffmpeg_capabilities", load)
+    monkeypatch.setattr(transcoder, "_release_lock", release)
+
+    with pytest.raises(RuntimeError, match="no transcodable video stream"):
+        asyncio.run(
+            transcoder.ensure_transcode("input.mkv", "hash", TranscodeOptions())
+        )
+
+    load.assert_not_awaited()
+    release.assert_called_once_with(lock)
+
+
 @pytest.mark.parametrize(
     ("framerate", "expected_framerate"),
     [(24.0, 24.0), (None, 30.0)],
@@ -1298,6 +1404,8 @@ def test_ensure_builds_context(monkeypatch, tmp_path, framerate, expected_framer
     lock = object()
     proc = SimpleNamespace(pid=123, returncode=None, stderr=None)
     metadata = MediaProbe(
+        video_stream_index=0,
+        audio_stream_index=1,
         duration=60.0,
         framerate=framerate,
         pixel_format="yuv420p10le",
@@ -1483,7 +1591,13 @@ def test_timeout_keeps_lock(monkeypatch, tmp_path):
     monkeypatch.setattr(
         transcoder,
         "_probe_media",
-        AsyncMock(return_value=MediaProbe(duration=60.0)),
+        AsyncMock(
+            return_value=MediaProbe(
+                video_stream_index=0,
+                audio_stream_index=1,
+                duration=60.0,
+            )
+        ),
     )
     monkeypatch.setattr(
         transcoder, "_build_hls_cmd", AsyncMock(return_value=["ffmpeg"])

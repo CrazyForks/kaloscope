@@ -9,8 +9,10 @@ from app.core.transcode.options import EncoderConfig, TranscodeOptions
 
 @dataclass(frozen=True)
 class MediaProbe:
-    """Metadata probed from the first video stream and its container."""
+    """Selected stream indexes and metadata probed from a media container."""
 
+    video_stream_index: int | None = None
+    audio_stream_index: int | None = None
     height: int | None = None
     duration: float | None = None
     framerate: float | None = None
