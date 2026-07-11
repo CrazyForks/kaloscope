@@ -8,18 +8,23 @@ class VAAPI(HWAccelStrategy):
     config = ENCODER_CONFIG["vaapi"]
 
     async def input_args(self, needs_scale: bool) -> list[str]:
-        """Select an explicit VAAPI device when one is available.
+        """Select the VAAPI device used to upload frames for encoding.
 
         Args:
             needs_scale: Whether the transcode uses a software scaling filter.
 
         Returns:
-            Explicit device options or the base VAAPI decoding options.
+            FFmpeg options selecting the VAAPI device.
+
+        Raises:
+            RuntimeError: If no usable DRM render device is available.
         """
         vaapi_dev = await resolve_vaapi_device()
-        if vaapi_dev:
-            return ["-vaapi_device", vaapi_dev]
-        return await super().input_args(needs_scale)
+        if not vaapi_dev:
+            raise RuntimeError(
+                "VAAPI requires a DRM render device, e.g. /dev/dri/renderD128"
+            )
+        return ["-vaapi_device", vaapi_dev]
 
     def video_filters(self, needs_scale: bool) -> list[str]:
         """Convert system-memory frames to NV12 and upload them to VAAPI.

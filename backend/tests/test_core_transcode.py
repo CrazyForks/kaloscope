@@ -448,17 +448,25 @@ def test_vaapi_args(monkeypatch):
     monkeypatch.setattr(
         vaapi_module,
         "resolve_vaapi_device",
-        AsyncMock(side_effect=[device, None]),
+        AsyncMock(return_value=device),
     )
 
     assert asyncio.run(strategy.input_args(False)) == ["-vaapi_device", device]
-    assert asyncio.run(strategy.input_args(False)) == ["-hwaccel", "vaapi"]
     assert strategy.video_filters(False) == ["format=nv12", "hwupload"]
     assert strategy.encoder_args(options) == ["-rc_mode", "CQP", "-qp", "18"]
     assert strategy.keyframe_args(options, 6) == [
         "-force_key_frames:0",
         "expr:gte(t,n_forced*6)",
     ]
+
+
+def test_vaapi_device(monkeypatch):
+    monkeypatch.setattr(
+        vaapi_module, "resolve_vaapi_device", AsyncMock(return_value=None)
+    )
+
+    with pytest.raises(RuntimeError, match="DRM render device"):
+        asyncio.run(get_hwaccel("vaapi").input_args(False))
 
 
 def test_videotoolbox_args():
