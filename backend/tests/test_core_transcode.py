@@ -933,6 +933,32 @@ def test_stop_rollback(monkeypatch, tmp_path):
     assert store["task"]["state"] == tasks.TaskState.RUNNING
 
 
+def test_stop_restores_pending(monkeypatch, tmp_path):
+    store = {}
+    for pid in (1, 2, 3):
+        task = _runtime_task(tmp_path / str(pid))
+        task["pid"] = pid
+        store[str(pid)] = task
+
+    killed = []
+
+    def kill(pid, _signal):
+        killed.append(pid)
+        if pid == 2:
+            raise PermissionError
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+    monkeypatch.setattr(tasks.os, "kill", kill)
+
+    with pytest.raises(PermissionError):
+        asyncio.run(tasks.stop_tasks(["1", "2", "3"]))
+
+    assert killed == [1, 2]
+    assert store["1"]["state"] == tasks.TaskState.STOPPING
+    assert store["2"]["state"] == tasks.TaskState.RUNNING
+    assert store["3"]["state"] == tasks.TaskState.RUNNING
+
+
 @pytest.mark.parametrize("state", [tasks.TaskState.RUNNING, tasks.TaskState.STOPPING])
 def test_delete_active(monkeypatch, tmp_path, state):
     store = {"hash:profile": _runtime_task(tmp_path, state)}

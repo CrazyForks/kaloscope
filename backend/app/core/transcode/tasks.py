@@ -315,7 +315,7 @@ async def stop_tasks(ids: list[str]) -> list[str]:
         lock.release()
 
     stopped: list[str] = []
-    for task_id, original, stopping in claimed:
+    for index, (task_id, original, stopping) in enumerate(claimed):
         try:
             pid = stopping["pid"]
             if pid is not None:
@@ -344,16 +344,18 @@ async def stop_tasks(ids: list[str]) -> list[str]:
             finally:
                 lock.release()
         except Exception:
-            # restore the original state when signaling fails
+            # restore the failed task and any tasks not yet signaled
             lock.acquire()
             try:
-                current = tasks.get(task_id)
-                if current is not None:
+                for pending_id, pending_original, _ in claimed[index:]:
+                    current = tasks.get(pending_id)
+                    if current is None:
+                        continue
                     current = cast(RuntimeTask, dict(current))
                     if current["state"] == TaskState.STOPPING and _same_task(
-                        current, original
+                        current, pending_original
                     ):
-                        tasks[task_id] = original
+                        tasks[pending_id] = pending_original
             finally:
                 lock.release()
             raise
