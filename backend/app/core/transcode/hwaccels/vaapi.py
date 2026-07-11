@@ -71,21 +71,24 @@ class VAAPI(HWAccelStrategy):
         return ["scale_vaapi=format=nv12"]
 
     def encoder_args(self, context: TranscodeContext) -> list[str]:
-        """Build broadly compatible VAAPI constant-QP options.
+        """Build VAAPI bitrate options with automatic rate-control selection.
 
         Args:
             context: The runtime transcode context.
 
         Returns:
-            FFmpeg CQP options using the quality CRF as the QP target.
+            FFmpeg target, maximum, and buffer bitrate options.
         """
-        # prefer CQP because bitrate modes vary across VAAPI drivers
-        args: list[str] = []
-        if context.supports_encoder_option("rc_mode"):
-            args.extend(["-rc_mode", "CQP"])
-        if context.supports_encoder_option("qp"):
-            args.extend(["-qp", str(context.options.crf)])
-        return args
+        bitrate = context.options.bitrate
+        bitrate_num = int(bitrate[:-1])
+        return [
+            "-b:v",
+            bitrate,
+            "-maxrate",
+            bitrate,
+            "-bufsize",
+            f"{bitrate_num * 2}k",
+        ]
 
     def keyframe_args(self, context: TranscodeContext) -> list[str]:
         """Build timestamp-based keyframe placement for VAAPI.

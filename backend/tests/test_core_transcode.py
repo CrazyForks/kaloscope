@@ -907,10 +907,32 @@ def test_vaapi_args(monkeypatch):
         device,
     ]
     assert strategy.video_filters(scaled_context) == ["format=nv12", "hwupload"]
-    assert strategy.encoder_args(context) == ["-rc_mode", "CQP", "-qp", "18"]
     assert strategy.keyframe_args(context) == [
         "-force_key_frames:0",
         "expr:gte(t,n_forced*6)",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("quality", "bitrate", "bufsize"),
+    [
+        ("low", "1500k", "3000k"),
+        ("medium", "3000k", "6000k"),
+        ("high", "6000k", "12000k"),
+    ],
+)
+def test_vaapi_auto_rate_control(quality, bitrate, bufsize):
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="vaapi", quality=quality)
+    )
+
+    assert get_hwaccel("vaapi").encoder_args(context) == [
+        "-b:v",
+        bitrate,
+        "-maxrate",
+        bitrate,
+        "-bufsize",
+        bufsize,
     ]
 
 
