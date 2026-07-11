@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from filelock import FileLock, Timeout
@@ -197,10 +198,11 @@ async def ensure_transcode(
         # Probe once before starting ffmpeg. GOP-based hardware encoders use
         # the framerate to approximate one GOP per HLS segment.
         duration, fps = await _probe_media(media_path)
-        if fps is not None:
-            options.framerate = fps
+        effective_options = (
+            replace(options, framerate=fps) if fps is not None else options
+        )
 
-        cmd = await _build_hls_cmd(media_path, out_dir, options)
+        cmd = await _build_hls_cmd(media_path, out_dir, effective_options)
         logger.info("Starting ffmpeg HLS: %s", " ".join(cmd))
 
         proc = await asyncio.create_subprocess_exec(
@@ -211,7 +213,7 @@ async def ensure_transcode(
 
         # register the task in the memory store
         task_id = await register_task(
-            media_path, media_hash, options, out_dir, proc, duration
+            media_path, media_hash, effective_options, out_dir, proc, duration
         )
 
         # monitor completion in the background

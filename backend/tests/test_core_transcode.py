@@ -200,7 +200,11 @@ def test_software_cmd(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize(
     "kwargs",
-    [{"quality": "/tmp/outside"}, {"resolution": "../outside"}],
+    [
+        {"quality": "/tmp/outside"},
+        {"resolution": "../outside"},
+        {"hwaccel": "invalid"},
+    ],
 )
 def test_options_reject_invalid(kwargs):
     with pytest.raises(ValueError):
@@ -273,10 +277,11 @@ def test_setup_failure_stops_process(monkeypatch, tmp_path):
     proc.kill.assert_not_called()
 
 
-def test_ensure_probes_once(monkeypatch, tmp_path):
+def test_ensure_copies_options(monkeypatch, tmp_path):
     lock = object()
     proc = SimpleNamespace(pid=123, returncode=None, stderr=None)
     probe = AsyncMock(return_value=(60.0, 24.0))
+    build = AsyncMock(return_value=["ffmpeg"])
     register = AsyncMock(return_value="hash:profile")
     options = TranscodeOptions()
 
@@ -295,9 +300,7 @@ def test_ensure_probes_once(monkeypatch, tmp_path):
         "probe_duration",
         AsyncMock(side_effect=AssertionError("separate probe called")),
     )
-    monkeypatch.setattr(
-        transcoder, "_build_hls_cmd", AsyncMock(return_value=["ffmpeg"])
-    )
+    monkeypatch.setattr(transcoder, "_build_hls_cmd", build)
     monkeypatch.setattr(
         transcoder.asyncio, "create_subprocess_exec", AsyncMock(return_value=proc)
     )
@@ -308,10 +311,13 @@ def test_ensure_probes_once(monkeypatch, tmp_path):
     result = asyncio.run(transcoder.ensure_transcode("input.mkv", "hash", options))
 
     assert result == ("hash", options.profile)
-    assert options.framerate == 24.0
+    assert options.framerate == 30.0
     probe.assert_awaited_once_with("input.mkv")
+    effective_options = build.await_args.args[2]
+    assert effective_options is not options
+    assert effective_options.framerate == 24.0
     register.assert_awaited_once_with(
-        "input.mkv", "hash", options, tmp_path, proc, 60.0
+        "input.mkv", "hash", effective_options, tmp_path, proc, 60.0
     )
 
 

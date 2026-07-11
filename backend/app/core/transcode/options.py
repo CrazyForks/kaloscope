@@ -79,7 +79,7 @@ class TranscodeOptions:
         if self.resolution not in RESOLUTION_MAX_HEIGHT:
             raise ValueError(f"Invalid transcode resolution: {self.resolution!r}")
         if self.hwaccel not in ENCODER_CONFIG:
-            self.hwaccel = None
+            raise ValueError(f"Invalid transcode hwaccel: {self.hwaccel!r}")
 
     @property
     def encoder_config(self) -> EncoderConfig:
