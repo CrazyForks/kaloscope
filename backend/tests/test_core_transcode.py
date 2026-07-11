@@ -1,13 +1,31 @@
 """Unit tests for core transcoding."""
 
 import asyncio
+import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from app.core.transcode import transcoder
+from app.core.transcode import hls, transcoder
 from app.core.transcode.options import TranscodeOptions
+
+
+def test_hls_exports():
+    package = importlib.import_module("app.core.transcode")
+    hls = importlib.import_module("app.core.transcode.hls")
+    names = (
+        "TranscodeStats",
+        "delete_output",
+        "estimate_progress",
+        "output_dir",
+        "output_stats",
+        "parse_profile",
+        "read_m3u8",
+        "scan_outputs",
+    )
+
+    assert all(getattr(package, name) is getattr(hls, name) for name in names)
 
 
 class _Lock:
@@ -26,7 +44,7 @@ class _Lock:
     [(25, 100, 25), (100, 100, 99), (0, 100, None), (25, None, None)],
 )
 def test_progress(encoded, duration, expected):
-    assert transcoder.estimate_progress(encoded, duration) == expected
+    assert hls.estimate_progress(encoded, duration) == expected
 
 
 @pytest.mark.parametrize(
@@ -47,7 +65,7 @@ def test_progress(encoded, duration, expected):
     ],
 )
 def test_parse_profile(profile, expected):
-    assert transcoder.parse_profile(profile) == expected
+    assert hls.parse_profile(profile) == expected
 
 
 def test_output_stats(tmp_path):
@@ -57,7 +75,7 @@ def test_output_stats(tmp_path):
         "#EXTINF:5.5,\nsegment_000001.ts\n#EXT-X-ENDLIST\n"
     )
 
-    stats = transcoder.output_stats(tmp_path, duration=12)
+    stats = hls.output_stats(tmp_path, duration=12)
 
     assert stats.finished is True
     assert stats.duration == 11.5
