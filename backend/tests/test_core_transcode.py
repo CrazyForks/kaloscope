@@ -8,7 +8,10 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+import app.core.transcode.hwaccels.qsv as qsv_module
+import app.core.transcode.hwaccels.vaapi as vaapi_module
 from app.core.transcode import hls, tasks, transcoder
+from app.core.transcode.hwaccels import get_hwaccel
 from app.core.transcode.options import TranscodeOptions
 
 
@@ -71,6 +74,26 @@ class _Lock:
         self.locked = False
 
 
+def _runtime_task(out_dir, state=tasks.TaskState.RUNNING):
+    return {
+        "id": "hash:profile",
+        "name": "input.mkv",
+        "path": "/media/input.mkv",
+        "hash": "hash",
+        "state": state,
+        "duration": 60.0,
+        "pid": 123,
+        "profile": "profile",
+        "quality": "medium",
+        "resolution": "original",
+        "hwaccel": None,
+        "out_dir": str(out_dir),
+        "started_at": "2026-01-01",
+        "finished_at": None,
+        "error_msg": None,
+    }
+
+
 @pytest.mark.parametrize(
     ("encoded", "duration", "expected"),
     [(25, 100, 25), (100, 100, 99), (0, 100, None), (25, None, None)],
@@ -125,6 +148,83 @@ def test_scan_skips_excluded(monkeypatch, tmp_path):
 
     assert result == []
     output_stats.assert_not_called()
+
+
+def test_scan_outputs(tmp_path):
+    finished = tmp_path / "hash-a" / "high_720p_nvenc"
+    stopped = tmp_path / "hash-b" / "medium_original_none"
+    empty = tmp_path / "hash-c" / "low_480p_vaapi"
+    finished.mkdir(parents=True)
+    stopped.mkdir(parents=True)
+    empty.mkdir(parents=True)
+    (finished / "index.m3u8").write_text(
+        "#EXTM3U\n#EXTINF:6.0,\nsegment_000000.ts\n#EXT-X-ENDLIST\n"
+    )
+    (stopped / "index.m3u8").write_text("#EXTM3U\n#EXTINF:3.0,\nsegment_000000.ts\n")
+
+    result = {task["id"]: task for task in hls.scan_outputs(tmp_path)}
+
+    assert set(result) == {
+        "hash-a:high_720p_nvenc",
+        "hash-b:medium_original_none",
+    }
+    assert result["hash-a:high_720p_nvenc"]["state"] == tasks.TaskState.FINISHED
+    assert result["hash-a:high_720p_nvenc"]["duration"] == 6.0
+    assert result["hash-b:medium_original_none"]["state"] == tasks.TaskState.STOPPED
+    assert result["hash-b:medium_original_none"]["encoded_duration"] == 3.0
+
+
+def test_delete_output(tmp_path):
+    root = tmp_path / "transcoded"
+    out_dir = root / "hash" / "profile"
+    out_dir.mkdir(parents=True)
+    (out_dir / "index.m3u8").write_text("#EXTM3U\n")
+
+    assert hls.delete_output("hash", "profile", root=root) is True
+    assert not out_dir.exists()
+    assert not out_dir.parent.exists()
+
+
+def test_delete_escape(tmp_path):
+    root = tmp_path / "transcoded"
+    outside = tmp_path / "outside"
+    root.mkdir()
+    outside.mkdir()
+
+    assert hls.delete_output("..", "outside", root=root) is False
+    assert outside.is_dir()
+
+
+def test_read_fallback(tmp_path):
+    playlist = tmp_path / "profile" / "index.m3u8"
+    playlist.parent.mkdir()
+
+    assert asyncio.run(hls.read_m3u8(playlist)) == hls._MINIMAL_M3U8
+    playlist.write_text("")
+    assert asyncio.run(hls.read_m3u8(playlist)) == hls._MINIMAL_M3U8
+    playlist.write_text("#EXTM3U\n")
+    assert asyncio.run(hls.read_m3u8(playlist)) == "#EXTM3U\n"
+
+
+def test_read_missing(tmp_path):
+    assert asyncio.run(hls.read_m3u8(tmp_path / "missing" / "index.m3u8")) is None
+
+
+def test_wait_segment(tmp_path):
+    playlist = tmp_path / "index.m3u8"
+    playlist.write_text("#EXTM3U\n#EXTINF:6.0,\nsegment_000000.ts\n")
+
+    assert asyncio.run(hls._wait_segment(playlist, timeout=0.01, interval=0)) is True
+
+
+def test_wait_exited(tmp_path):
+    proc = SimpleNamespace(returncode=1)
+
+    result = asyncio.run(
+        hls._wait_segment(tmp_path / "index.m3u8", proc=proc, timeout=1, interval=0.1)
+    )
+
+    assert result is False
 
 
 def test_probe_media(monkeypatch):
@@ -196,6 +296,142 @@ def test_software_cmd(monkeypatch, tmp_path):
     assert cmd[cmd.index("-crf") + 1] == "23"
     assert cmd[cmd.index("-hls_time") + 1] == "6"
     assert "-vf" not in cmd
+
+
+def test_nvenc_args():
+    strategy = get_hwaccel("nvenc")
+    options = TranscodeOptions(hwaccel="nvenc", quality="high", framerate=23.5)
+
+    assert asyncio.run(strategy.input_args(False)) == [
+        "-hwaccel",
+        "cuda",
+        "-hwaccel_output_format",
+        "cuda",
+    ]
+    assert asyncio.run(strategy.input_args(True)) == ["-hwaccel", "cuda"]
+    assert strategy.encoder_args(options) == [
+        "-preset",
+        "p7",
+        "-b:v",
+        "6000k",
+        "-maxrate",
+        "6000k",
+        "-bufsize",
+        "12000k",
+    ]
+    assert strategy.keyframe_args(options, 6) == [
+        "-g:v:0",
+        "141",
+        "-keyint_min:v:0",
+        "141",
+    ]
+
+
+def test_qsv_args(monkeypatch):
+    device = "/dev/dri/renderD128"
+    strategy = get_hwaccel("qsv")
+    options = TranscodeOptions(hwaccel="qsv", framerate=25.0)
+
+    monkeypatch.setattr(
+        qsv_module, "resolve_vaapi_device", AsyncMock(return_value=device)
+    )
+
+    assert asyncio.run(strategy.input_args(False)) == [
+        "-init_hw_device",
+        f"qsv=qs:hw,child_device={device},child_device_type=vaapi",
+        "-filter_hw_device",
+        "qs",
+        "-hwaccel",
+        "qsv",
+        "-hwaccel_device",
+        "qs",
+        "-hwaccel_output_format",
+        "qsv",
+    ]
+    assert "-hwaccel" not in asyncio.run(strategy.input_args(True))
+    assert strategy.video_filters(False) == ["vpp_qsv=format=nv12"]
+    assert strategy.video_filters(True) == ["format=nv12"]
+    assert strategy.encoder_args(options) == [
+        "-preset",
+        "veryfast",
+        "-b:v",
+        "3000k",
+        "-maxrate",
+        "3001k",
+        "-bufsize",
+        "12000k",
+        "-mbbrc",
+        "1",
+        "-rc_init_occupancy",
+        "6000000",
+    ]
+    assert strategy.keyframe_args(options, 6) == [
+        "-g:v:0",
+        "150",
+        "-keyint_min:v:0",
+        "150",
+    ]
+
+
+def test_qsv_device(monkeypatch):
+    monkeypatch.setattr(
+        qsv_module, "resolve_vaapi_device", AsyncMock(return_value=None)
+    )
+
+    with pytest.raises(RuntimeError, match="DRM render device"):
+        asyncio.run(get_hwaccel("qsv").input_args(False))
+
+
+def test_vaapi_args(monkeypatch):
+    device = "/dev/dri/renderD128"
+    strategy = get_hwaccel("vaapi")
+    options = TranscodeOptions(hwaccel="vaapi", quality="high")
+
+    monkeypatch.setattr(
+        vaapi_module,
+        "resolve_vaapi_device",
+        AsyncMock(side_effect=[device, None]),
+    )
+
+    assert asyncio.run(strategy.input_args(False)) == ["-vaapi_device", device]
+    assert asyncio.run(strategy.input_args(False)) == ["-hwaccel", "vaapi"]
+    assert strategy.video_filters(False) == ["format=nv12", "hwupload"]
+    assert strategy.encoder_args(options) == ["-rc_mode", "CQP", "-qp", "18"]
+    assert strategy.keyframe_args(options, 6) == [
+        "-force_key_frames:0",
+        "expr:gte(t,n_forced*6)",
+    ]
+
+
+def test_videotoolbox_args():
+    strategy = get_hwaccel("videotoolbox")
+    options = TranscodeOptions(hwaccel="videotoolbox", quality="low")
+
+    assert asyncio.run(strategy.input_args(False)) == [
+        "-hwaccel",
+        "videotoolbox",
+        "-hwaccel_output_format",
+        "videotoolbox",
+    ]
+    assert asyncio.run(strategy.input_args(True)) == ["-hwaccel", "videotoolbox"]
+    assert strategy.encoder_args(options) == [
+        "-b:v",
+        "1500k",
+        "-qmin",
+        "-1",
+        "-qmax",
+        "-1",
+        "-prio_speed",
+        "1",
+    ]
+    assert strategy.keyframe_args(options, 6) == [
+        "-force_key_frames:0",
+        "expr:gte(t,n_forced*6)",
+        "-g:v:0",
+        "180",
+        "-keyint_min:v:0",
+        "180",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -608,3 +844,82 @@ def test_delete_keeps_replacement(monkeypatch, tmp_path):
     asyncio.run(tasks.delete_tasks(["hash:profile"]))
 
     assert store["hash:profile"] is replacement
+
+
+@pytest.mark.parametrize(
+    ("state", "returncode", "expected"),
+    [
+        (tasks.TaskState.RUNNING, 0, tasks.TaskState.FINISHED),
+        (tasks.TaskState.RUNNING, 255, tasks.TaskState.STOPPED),
+        (tasks.TaskState.STOPPING, 1, tasks.TaskState.STOPPED),
+    ],
+)
+def test_finish_states(monkeypatch, tmp_path, state, returncode, expected):
+    store = {"task": _runtime_task(tmp_path, state)}
+    remove = Mock()
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+    monkeypatch.setattr(tasks, "_remove_endlist", remove)
+
+    asyncio.run(tasks.finish_task("task", returncode))
+
+    assert store["task"]["state"] == expected
+    assert store["task"]["finished_at"] is not None
+    if returncode == 0:
+        remove.assert_not_called()
+    else:
+        remove.assert_called_once_with(str(tmp_path))
+
+
+@pytest.mark.parametrize(
+    ("complete", "expected"),
+    [
+        (True, tasks.TaskState.FINISHED),
+        (False, tasks.TaskState.STOPPED),
+    ],
+)
+def test_stop_missing(monkeypatch, tmp_path, complete, expected):
+    store = {"task": _runtime_task(tmp_path)}
+    remove = Mock()
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+    monkeypatch.setattr(tasks.os, "kill", Mock(side_effect=ProcessLookupError))
+    monkeypatch.setattr(tasks, "_is_complete", Mock(return_value=complete))
+    monkeypatch.setattr(tasks, "_remove_endlist", remove)
+
+    result = asyncio.run(tasks.stop_tasks(["task"]))
+
+    assert result == ["task"]
+    assert store["task"]["state"] == expected
+    assert store["task"]["finished_at"] is not None
+    if complete:
+        remove.assert_not_called()
+    else:
+        remove.assert_called_once_with(str(tmp_path))
+
+
+def test_stop_rollback(monkeypatch, tmp_path):
+    store = {"task": _runtime_task(tmp_path)}
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+    monkeypatch.setattr(tasks.os, "kill", Mock(side_effect=PermissionError))
+
+    with pytest.raises(PermissionError):
+        asyncio.run(tasks.stop_tasks(["task"]))
+
+    assert store["task"]["state"] == tasks.TaskState.RUNNING
+
+
+@pytest.mark.parametrize("state", [tasks.TaskState.RUNNING, tasks.TaskState.STOPPING])
+def test_delete_active(monkeypatch, tmp_path, state):
+    store = {"hash:profile": _runtime_task(tmp_path, state)}
+    delete = Mock()
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+    monkeypatch.setattr(tasks, "delete_output", delete)
+
+    result = asyncio.run(tasks.delete_tasks(["hash:profile"]))
+
+    assert result == []
+    assert "hash:profile" in store
+    delete.assert_not_called()
