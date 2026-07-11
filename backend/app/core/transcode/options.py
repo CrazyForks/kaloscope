@@ -74,6 +74,10 @@ class TranscodeOptions:
     framerate: float = 30.0
 
     def __post_init__(self):
+        if self.quality not in QUALITY_CRF:
+            raise ValueError(f"Invalid transcode quality: {self.quality!r}")
+        if self.resolution not in RESOLUTION_MAX_HEIGHT:
+            raise ValueError(f"Invalid transcode resolution: {self.resolution!r}")
         if self.hwaccel not in ENCODER_CONFIG:
             self.hwaccel = None
 
