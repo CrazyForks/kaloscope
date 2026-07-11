@@ -343,8 +343,6 @@ async def _build_hls_cmd(
             "mpegts",
             "-hls_segment_filename",
             segment_pattern,
-            "-hls_flags",
-            "append_list",
             "-start_number",
             "0",
             "-max_delay",
