@@ -9,13 +9,17 @@ class VAAPI(HWAccelStrategy):
     """Linux VAAPI H.264 encoding strategy."""
 
     async def input_args(self, context: TranscodeContext) -> list[str]:
-        """Select the VAAPI device used to upload frames for encoding.
+        """Configure VAAPI decoding and select its render device.
+
+        Hardware frames stay on the VAAPI device when software scaling is not
+        required. Otherwise FFmpeg returns decoded frames to system memory so
+        the shared software scale filter can consume them.
 
         Args:
             context: The runtime transcode context.
 
         Returns:
-            FFmpeg options selecting the VAAPI device.
+            FFmpeg hardware-decoding and device-selection options.
 
         Raises:
             RuntimeError: If no usable DRM render device is available.
@@ -25,18 +29,25 @@ class VAAPI(HWAccelStrategy):
             raise RuntimeError(
                 "VAAPI requires a DRM render device, e.g. /dev/dri/renderD128"
             )
-        return ["-vaapi_device", vaapi_dev]
+        cmd = await super().input_args(context)
+        cmd.extend(["-vaapi_device", vaapi_dev])
+        return cmd
 
     def video_filters(self, context: TranscodeContext) -> list[str]:
-        """Convert system-memory frames to NV12 and upload them to VAAPI.
+        """Normalize frames to NV12 on the active memory path.
+
+        VAAPI-decoded frames use the hardware scaler directly. Software-scaled
+        frames are converted in system memory and uploaded before encoding.
 
         Args:
             context: The runtime transcode context.
 
         Returns:
-            The NV12 conversion and hardware upload filters.
+            Hardware or software NV12 conversion filters for VAAPI encoding.
         """
-        return ["format=nv12", "hwupload"]
+        if context.needs_scale:
+            return ["format=nv12", "hwupload"]
+        return ["scale_vaapi=format=nv12"]
 
     def encoder_args(self, context: TranscodeContext) -> list[str]:
         """Build broadly compatible VAAPI constant-QP options.

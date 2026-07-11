@@ -32,7 +32,7 @@ ENCODER_CONFIG: dict[str | None, EncoderConfig] = {
     "vaapi": EncoderConfig(
         encoder="h264_vaapi",
         hwaccel="vaapi",
-        hwaccel_output_format=None,
+        hwaccel_output_format="vaapi",
     ),
     "nvenc": EncoderConfig(
         encoder="h264_nvenc",

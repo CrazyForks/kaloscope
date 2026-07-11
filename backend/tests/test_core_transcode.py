@@ -480,8 +480,26 @@ def test_vaapi_args(monkeypatch):
         AsyncMock(return_value=device),
     )
 
-    assert asyncio.run(strategy.input_args(context)) == ["-vaapi_device", device]
-    assert strategy.video_filters(context) == ["format=nv12", "hwupload"]
+    assert asyncio.run(strategy.input_args(context)) == [
+        "-hwaccel",
+        "vaapi",
+        "-hwaccel_output_format",
+        "vaapi",
+        "-vaapi_device",
+        device,
+    ]
+    assert strategy.video_filters(context) == ["scale_vaapi=format=nv12"]
+
+    scaled_context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="vaapi", resolution="720p")
+    )
+    assert asyncio.run(strategy.input_args(scaled_context)) == [
+        "-hwaccel",
+        "vaapi",
+        "-vaapi_device",
+        device,
+    ]
+    assert strategy.video_filters(scaled_context) == ["format=nv12", "hwupload"]
     assert strategy.encoder_args(context) == ["-rc_mode", "CQP", "-qp", "18"]
     assert strategy.keyframe_args(context) == [
         "-force_key_frames:0",
