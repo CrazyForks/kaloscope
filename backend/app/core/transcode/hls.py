@@ -7,7 +7,7 @@ import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict, cast
 
 import aiofiles
 from sanic.log import logger
@@ -18,6 +18,9 @@ from app.core.transcode.options import (
     ENCODER_CONFIG,
     QUALITY_CRF,
     RESOLUTION_MAX_HEIGHT,
+    HWAccelType,
+    QualityLevel,
+    ResolutionLimit,
 )
 
 if TYPE_CHECKING:
@@ -35,6 +38,14 @@ _SEGMENT_LINE_RE = re.compile(r"^(?!\s*#)(.+\.ts)\s*$", re.MULTILINE)
 _MINIMAL_M3U8 = (
     "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n"
 )
+
+
+class ProfileTags(TypedDict):
+    """Validated tags parsed from a transcode profile name."""
+
+    quality: QualityLevel | None
+    resolution: ResolutionLimit | None
+    hwaccel: HWAccelType | None
 
 
 @dataclass
@@ -64,7 +75,7 @@ def estimate_progress(encoded_duration: float, duration: float | None) -> int | 
     return None
 
 
-def parse_profile(profile: str) -> dict[str, str | None]:
+def parse_profile(profile: str) -> ProfileTags:
     """Parse a transcode profile directory name into UI tags.
 
     Profiles are generated as `{quality}_{resolution}_{hwaccel}` by
@@ -90,9 +101,13 @@ def parse_profile(profile: str) -> dict[str, str | None]:
         return {"quality": None, "resolution": None, "hwaccel": None}
 
     return {
-        "quality": quality,
-        "resolution": resolution,
-        "hwaccel": None if hwaccel in ("none", "null", "software") else hwaccel,
+        "quality": cast(QualityLevel, quality),
+        "resolution": cast(ResolutionLimit, resolution),
+        "hwaccel": (
+            None
+            if hwaccel in ("none", "null", "software")
+            else cast(HWAccelType, hwaccel)
+        ),
     }
 
 

@@ -4,9 +4,11 @@ import asyncio
 import importlib
 import threading
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from filelock import FileLock
 
 import app.core.transcode.hwaccels.qsv as qsv_module
 import app.core.transcode.hwaccels.vaapi as vaapi_module
@@ -221,7 +223,12 @@ def test_wait_exited(tmp_path):
     proc = SimpleNamespace(returncode=1)
 
     result = asyncio.run(
-        hls._wait_segment(tmp_path / "index.m3u8", proc=proc, timeout=1, interval=0.1)
+        hls._wait_segment(
+            tmp_path / "index.m3u8",
+            proc=cast(asyncio.subprocess.Process, proc),
+            timeout=1,
+            interval=0.1,
+        )
     )
 
     assert result is False
@@ -248,7 +255,9 @@ def test_probe_media(monkeypatch):
     assert duration == 60.5
     assert framerate == pytest.approx(30000 / 1001)
     create.assert_awaited_once()
-    args = create.await_args.args
+    await_args = create.await_args
+    assert await_args is not None
+    args = await_args.args
     assert "format=duration:stream=avg_frame_rate" in args
     assert "json" in args
 
@@ -549,7 +558,9 @@ def test_ensure_copies_options(monkeypatch, tmp_path):
     assert result == ("hash", options.profile)
     assert options.framerate == 30.0
     probe.assert_awaited_once_with("input.mkv")
-    effective_options = build.await_args.args[2]
+    await_args = build.await_args
+    assert await_args is not None
+    effective_options = await_args.args[2]
     assert effective_options is not options
     assert effective_options.framerate == 24.0
     register.assert_awaited_once_with(
@@ -565,7 +576,7 @@ def test_cleanup_kills_on_timeout():
         communicate=AsyncMock(side_effect=[TimeoutError, (b"", b"")]),
     )
 
-    asyncio.run(transcoder._terminate_ffmpeg(proc))
+    asyncio.run(transcoder._terminate_ffmpeg(cast(asyncio.subprocess.Process, proc)))
 
     proc.terminate.assert_called_once_with()
     proc.kill.assert_called_once_with()
@@ -596,7 +607,9 @@ def test_shutdown_stops_monitors(monkeypatch):
             communicate=AsyncMock(return_value=(b"", b"")),
         )
         lock = object()
-        task = transcoder._start_monitor(proc, lock, "task")
+        task = transcoder._start_monitor(
+            cast(asyncio.subprocess.Process, proc), cast(FileLock, lock), "task"
+        )
         assert task in transcoder._MONITOR_TASKS
 
         await started.wait()
@@ -622,7 +635,11 @@ def test_monitor_errors_logged(monkeypatch):
     monkeypatch.setattr(transcoder.logger, "error", error)
 
     async def run():
-        task = transcoder._start_monitor(object(), object(), "task")
+        task = transcoder._start_monitor(
+            cast(asyncio.subprocess.Process, object()),
+            cast(FileLock, object()),
+            "task",
+        )
         assert task in transcoder._MONITOR_TASKS
         await asyncio.gather(task, return_exceptions=True)
         await asyncio.sleep(0)
@@ -680,7 +697,13 @@ def test_monitor_releases_lock(monkeypatch, tmp_path):
     monkeypatch.setattr(transcoder, "_release_lock", release)
 
     with pytest.raises(RuntimeError, match="store failed"):
-        asyncio.run(transcoder._monitor_ffmpeg(proc, lock, "task"))
+        asyncio.run(
+            transcoder._monitor_ffmpeg(
+                cast(asyncio.subprocess.Process, proc),
+                cast(FileLock, lock),
+                "task",
+            )
+        )
 
     release.assert_called_once_with(lock)
 

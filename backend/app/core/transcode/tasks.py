@@ -222,11 +222,11 @@ def _build_task_list(stored_tasks: list[RuntimeTask]) -> list[TaskSnapshot]:
         Runtime task snapshots followed by unregistered filesystem outputs.
     """
     tasks = [_task_snapshot(task) for task in stored_tasks]
-    tasks.sort(key=lambda task: task["started_at"], reverse=True)
+    tasks.sort(key=lambda task: task["started_at"] or "", reverse=True)
 
     task_ids = {task["id"] for task in tasks}
     scanned_tasks = scan_outputs(exclude_ids=task_ids)
-    scanned_tasks.sort(key=lambda task: task["finished_at"], reverse=True)
+    scanned_tasks.sort(key=lambda task: task["finished_at"] or "", reverse=True)
     tasks.extend(scanned_tasks)
 
     for task in tasks:
@@ -305,9 +305,10 @@ async def stop_tasks(ids: list[str]) -> list[str]:
     stopped: list[str] = []
     for task_id, original, stopping in claimed:
         try:
-            if stopping.get("pid") is not None:
+            pid = stopping["pid"]
+            if pid is not None:
                 sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
-                os.kill(stopping["pid"], sigkill)
+                os.kill(pid, sigkill)
         except ProcessLookupError:
             terminal = cast(RuntimeTask, dict(stopping))
             terminal["finished_at"] = datetime.now(UTC).isoformat()

@@ -89,8 +89,10 @@ async def _probe_media(media_path: str) -> tuple[float | None, float | None]:
     duration = None
     format_data = data.get("format")
     if isinstance(format_data, dict):
-        with contextlib.suppress(ValueError, TypeError):
-            duration = float(format_data.get("duration"))
+        raw_duration = format_data.get("duration")
+        if isinstance(raw_duration, (str, int, float)):
+            with contextlib.suppress(ValueError, TypeError):
+                duration = float(raw_duration)
 
     framerate = None
     streams = data.get("streams")
@@ -238,108 +240,6 @@ async def ensure_transcode(
     return media_hash, profile
 
 
-def _acquire_lock(out_dir: Path) -> FileLock | None:
-    """Try to acquire an exclusive transcode lock for the given output directory.
-
-    Uses a non-blocking `FileLock` on a `.lock` file within the output directory.
-
-    Args:
-        out_dir: The output directory to lock.
-
-    Returns:
-        The acquired `FileLock` instance if successful,
-        or `None` if another process holds the lock.
-    """
-    out_dir.mkdir(parents=True, exist_ok=True)
-    lock = FileLock(out_dir / ".lock", blocking=False)
-    try:
-        lock.acquire()
-        return lock
-    except Timeout:
-        return None
-
-
-def _release_lock(lock: FileLock):
-    """Release the transcode lock, suppressing any exceptions.
-
-    Args:
-        lock: The `FileLock` instance to release.
-    """
-    with contextlib.suppress(Exception):
-        lock.release()
-
-
-async def _terminate_ffmpeg(proc: asyncio.subprocess.Process) -> None:
-    """Stop an unmonitored ffmpeg process without masking setup errors.
-
-    Args:
-        proc: The ffmpeg subprocess that failed before monitor handoff.
-    """
-    try:
-        if proc.returncode is None:
-            with contextlib.suppress(ProcessLookupError):
-                proc.terminate()
-        try:
-            await asyncio.wait_for(
-                proc.communicate(), timeout=_PROCESS_TERMINATE_TIMEOUT
-            )
-        except TimeoutError:
-            if proc.returncode is None:
-                with contextlib.suppress(ProcessLookupError):
-                    proc.kill()
-            await proc.communicate()
-    except Exception:
-        logger.warning(
-            "Failed to stop unmonitored ffmpeg process %s",
-            getattr(proc, "pid", None),
-            exc_info=True,
-        )
-
-
-def _start_monitor(
-    proc: asyncio.subprocess.Process, lock: FileLock, task_id: str | None = None
-) -> asyncio.Task[None]:
-    """Start and retain an ffmpeg monitor task until it finishes.
-
-    Args:
-        proc: The ffmpeg subprocess to monitor.
-        lock: The `FileLock` held for the output directory.
-        task_id: The registered transcode task ID, if available.
-
-    Returns:
-        The scheduled monitor task.
-    """
-    name = f"transcode-monitor:{task_id or proc.pid}"
-    task = asyncio.create_task(_monitor_ffmpeg(proc, lock, task_id), name=name)
-    _MONITOR_TASKS.add(task)
-    task.add_done_callback(_monitor_done)
-    return task
-
-
-def _monitor_done(task: asyncio.Task[None]) -> None:
-    """Remove a completed monitor and consume any background exception."""
-    _MONITOR_TASKS.discard(task)
-    if task.cancelled():
-        return
-    try:
-        task.result()
-    except Exception:
-        logger.error(
-            "Transcode monitor task failed: %s", task.get_name(), exc_info=True
-        )
-
-
-async def shutdown_monitors() -> None:
-    """Cancel and wait for all ffmpeg monitor tasks in this worker."""
-    monitors = tuple(_MONITOR_TASKS)
-    if not monitors:
-        return
-    for task in monitors:
-        task.cancel()
-    await asyncio.gather(*monitors, return_exceptions=True)
-    _MONITOR_TASKS.difference_update(monitors)
-
-
 async def _build_hls_cmd(
     input_path: str, out_dir: Path, options: TranscodeOptions
 ) -> list[str]:
@@ -462,6 +362,64 @@ async def _build_hls_cmd(
     return cmd
 
 
+def _acquire_lock(out_dir: Path) -> FileLock | None:
+    """Try to acquire an exclusive transcode lock for the given output directory.
+
+    Uses a non-blocking `FileLock` on a `.lock` file within the output directory.
+
+    Args:
+        out_dir: The output directory to lock.
+
+    Returns:
+        The acquired `FileLock` instance if successful,
+        or `None` if another process holds the lock.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    lock = FileLock(out_dir / ".lock", blocking=False)
+    try:
+        lock.acquire()
+        return lock
+    except Timeout:
+        return None
+
+
+def _release_lock(lock: FileLock):
+    """Release the transcode lock, suppressing any exceptions.
+
+    Args:
+        lock: The `FileLock` instance to release.
+    """
+    with contextlib.suppress(Exception):
+        lock.release()
+
+
+async def _terminate_ffmpeg(proc: asyncio.subprocess.Process) -> None:
+    """Stop an unmonitored ffmpeg process without masking setup errors.
+
+    Args:
+        proc: The ffmpeg subprocess that failed before monitor handoff.
+    """
+    try:
+        if proc.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                proc.terminate()
+        try:
+            await asyncio.wait_for(
+                proc.communicate(), timeout=_PROCESS_TERMINATE_TIMEOUT
+            )
+        except TimeoutError:
+            if proc.returncode is None:
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
+            await proc.communicate()
+    except Exception:
+        logger.warning(
+            "Failed to stop unmonitored ffmpeg process %s",
+            getattr(proc, "pid", None),
+            exc_info=True,
+        )
+
+
 async def _monitor_ffmpeg(
     proc: asyncio.subprocess.Process, lock: FileLock, task_id: str | None = None
 ):
@@ -510,3 +468,49 @@ async def _monitor_ffmpeg(
     finally:
         _release_lock(lock)
     logger.debug("ffmpeg HLS finished for '%s'", Path(lock.lock_file).parent)
+
+
+def _start_monitor(
+    proc: asyncio.subprocess.Process, lock: FileLock, task_id: str | None = None
+) -> asyncio.Task[None]:
+    """Start and retain an ffmpeg monitor task until it finishes.
+
+    Args:
+        proc: The ffmpeg subprocess to monitor.
+        lock: The `FileLock` held for the output directory.
+        task_id: The registered transcode task ID, if available.
+
+    Returns:
+        The scheduled monitor task.
+    """
+
+    def _done(task: asyncio.Task[None]) -> None:
+        """Remove a completed monitor and consume its exception."""
+        _MONITOR_TASKS.discard(task)
+        if task.cancelled():
+            return
+        try:
+            task.result()
+        except Exception:
+            logger.error(
+                "Transcode monitor task failed: %s",
+                task.get_name(),
+                exc_info=True,
+            )
+
+    name = f"transcode-monitor:{task_id or proc.pid}"
+    task = asyncio.create_task(_monitor_ffmpeg(proc, lock, task_id), name=name)
+    _MONITOR_TASKS.add(task)
+    task.add_done_callback(_done)
+    return task
+
+
+async def shutdown_monitors() -> None:
+    """Cancel and wait for all ffmpeg monitor tasks in this worker."""
+    monitors = tuple(_MONITOR_TASKS)
+    if not monitors:
+        return
+    for task in monitors:
+        task.cancel()
+    await asyncio.gather(*monitors, return_exceptions=True)
+    _MONITOR_TASKS.difference_update(monitors)
