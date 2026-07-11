@@ -30,8 +30,6 @@ class Software(HWAccelStrategy):
             str(options.crf),
             "-profile:v",
             "main",
-            "-level",
-            "4.0",
             "-pix_fmt",
             "yuv420p",
             # cap CRF bitrate spikes to keep streaming bandwidth predictable

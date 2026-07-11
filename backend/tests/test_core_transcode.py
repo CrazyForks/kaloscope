@@ -352,6 +352,7 @@ def test_software_cmd(monkeypatch, tmp_path):
     assert cmd[cmd.index("-c:v") + 1] == "libx264"
     assert cmd[cmd.index("-crf") + 1] == "23"
     assert cmd[cmd.index("-hls_time") + 1] == "6"
+    assert "-level" not in cmd
     assert "-vf" not in cmd
 
 
