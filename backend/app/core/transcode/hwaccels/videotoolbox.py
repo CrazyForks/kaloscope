@@ -1,4 +1,8 @@
-from app.core.transcode.hwaccels.base import HWAccelStrategy, TranscodeContext
+from app.core.transcode.hwaccels.base import (
+    HWAccelStrategy,
+    TranscodeContext,
+    software_tonemap_filters,
+)
 
 
 class VideoToolbox(HWAccelStrategy):
@@ -10,6 +14,10 @@ class VideoToolbox(HWAccelStrategy):
 
     def video_filters(self, context: TranscodeContext) -> list[str]:
         """Normalize non-YUV420P VideoToolbox frames to NV12."""
+        if not context.uses_hardware_decode:
+            if context.needs_tonemap:
+                return software_tonemap_filters(context, "nv12")
+            return ["format=nv12"]
         if context.needs_tonemap:
             options: list[str] = []
             if context.needs_scale:
@@ -47,7 +55,7 @@ class VideoToolbox(HWAccelStrategy):
         quality = context.options.quality
         bitrate = context.options.bitrate
         vt_prio = "0" if quality in ("high", "medium") else "1"
-        return [
+        args = [
             "-b:v",
             bitrate,
             # disable quantizer bounds so bitrate control acts alone
@@ -55,6 +63,7 @@ class VideoToolbox(HWAccelStrategy):
             "-1",
             "-qmax",
             "-1",
-            "-prio_speed",
-            vt_prio,
         ]
+        if context.supports_encoder_option("prio_speed"):
+            args.extend(["-prio_speed", vt_prio])
+        return args

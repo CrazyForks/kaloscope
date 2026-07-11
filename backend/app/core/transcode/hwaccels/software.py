@@ -27,21 +27,25 @@ class Software(HWAccelStrategy):
         bitrate = options.bitrate
         bitrate_num = int(bitrate[:-1])
         bufsize = str(bitrate_num * 2) + "k"
-        return [
-            "-preset",
-            "veryfast",
-            "-crf",
-            str(options.crf),
-            "-profile:v",
-            "main",
-            "-pix_fmt",
-            "yuv420p",
-            # cap CRF bitrate spikes to keep streaming bandwidth predictable
-            "-maxrate",
-            bitrate,
-            "-bufsize",
-            bufsize,
-        ]
+        args: list[str] = []
+        if context.supports_encoder_option("preset"):
+            args.extend(["-preset", "veryfast"])
+        if context.supports_encoder_option("crf"):
+            args.extend(["-crf", str(options.crf)])
+        if context.supports_encoder_option("profile"):
+            args.extend(["-profile:v", "main"])
+        args.extend(
+            [
+                "-pix_fmt",
+                "yuv420p",
+                # cap CRF bitrate spikes to keep streaming bandwidth predictable
+                "-maxrate",
+                bitrate,
+                "-bufsize",
+                bufsize,
+            ]
+        )
+        return args
 
     def keyframe_args(self, context: TranscodeContext) -> list[str]:
         """Build segment-timed keyframes without scene-change insertion.

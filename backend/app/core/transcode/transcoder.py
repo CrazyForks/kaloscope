@@ -6,6 +6,7 @@ from pathlib import Path
 from filelock import FileLock
 from sanic.log import logger
 
+from app.core.transcode.capabilities import load_ffmpeg_capabilities
 from app.core.transcode.hls import (
     acquire_output_lock,
     cleanup_stale_hls,
@@ -249,7 +250,12 @@ async def ensure_transcode(
         cleanup_stale_hls(out_dir)
 
         metadata = await _probe_media(media_path)
-        context = TranscodeContext(options=options, metadata=metadata)
+        capabilities = await load_ffmpeg_capabilities(await _ffmpeg(), options.encoder)
+        context = TranscodeContext(
+            options=options,
+            metadata=metadata,
+            capabilities=capabilities,
+        )
 
         cmd = await _build_hls_cmd(media_path, out_dir, context)
         logger.info("Starting ffmpeg HLS: %s", " ".join(cmd))
@@ -308,7 +314,12 @@ async def _build_hls_cmd(
     Returns:
         A list of command-line arguments ready for `asyncio.create_subprocess_exec`.
     """
-    cmd = [await _ffmpeg(), "-hide_banner", "-loglevel", "error"]
+    executable = (
+        context.capabilities.executable
+        if context.capabilities is not None
+        else await _ffmpeg()
+    )
+    cmd = [executable, "-hide_banner", "-loglevel", "error"]
 
     # software scale cannot consume GPU-resident frames
     # omit hwaccel_output_format so decoding stays in system memory
@@ -336,6 +347,8 @@ async def _build_hls_cmd(
 
     vf_parts.extend(hwaccel.video_filters(context))
 
+    _validate_capabilities(context, vf_parts)
+
     enc = context.encoder_config.encoder
     cmd.extend(["-c:v", enc])
     cmd.extend(hwaccel.encoder_args(context))
@@ -343,7 +356,10 @@ async def _build_hls_cmd(
     if vf_parts:
         cmd.extend(["-vf", ",".join(vf_parts)])
 
-    if context.needs_tonemap:
+    if context.needs_tonemap and (
+        context.capabilities is None
+        or context.capabilities.supports_bsf("h264_metadata")
+    ):
         cmd.extend(
             [
                 "-bsf:v",
@@ -402,6 +418,35 @@ async def _build_hls_cmd(
 
     cmd.extend(["-y", "-nostdin"])
     return cmd
+
+
+def _validate_capabilities(context: TranscodeContext, video_filters: list[str]) -> None:
+    """Reject capabilities that remain mandatory in the generated command."""
+    capabilities = context.capabilities
+    if capabilities is None:
+        return
+
+    required_encoders = {context.options.encoder, "aac"}
+    required_filters = {
+        expression.split("=", 1)[0].strip()
+        for expression in video_filters
+        if expression.strip()
+    }
+    required_muxers = {"hls", "mpegts"}
+
+    missing = {
+        "encoders": sorted(required_encoders - capabilities.encoders),
+        "filters": sorted(required_filters - capabilities.filters),
+        "muxers": sorted(required_muxers - capabilities.muxers),
+    }
+    details = [
+        f"{kind}: {', '.join(names)}" for kind, names in missing.items() if names
+    ]
+    if details:
+        raise RuntimeError(
+            f"FFmpeg '{capabilities.executable}' is missing required capabilities: "
+            + "; ".join(details)
+        )
 
 
 def _acquire_lock(out_dir: Path) -> FileLock | None:

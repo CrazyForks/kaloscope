@@ -17,12 +17,14 @@ class NVENC(HWAccelStrategy):
     def video_filters(self, context: TranscodeContext) -> list[str]:
         """Normalize original-resolution CUDA frames to 8-bit YUV."""
         if context.needs_tonemap:
-            return [
-                *software_tonemap_filters(context, "yuv420p"),
-                "hwupload_cuda",
-            ]
+            filters = software_tonemap_filters(context, "yuv420p")
+            if context.supports_filter("hwupload_cuda"):
+                filters.append("hwupload_cuda")
+            return filters
         if not context.needs_scale:
-            return ["scale_cuda=format=yuv420p"]
+            if context.uses_hardware_decode:
+                return ["scale_cuda=format=yuv420p"]
+            return ["format=yuv420p"]
         return []
 
     def encoder_args(self, context: TranscodeContext) -> list[str]:
@@ -41,16 +43,20 @@ class NVENC(HWAccelStrategy):
             if options.quality == "medium"
             else ("p7" if options.quality == "high" else "p1")
         )
-        return [
-            "-preset",
-            nvenc_preset,
-            "-b:v",
-            bitrate,
-            "-maxrate",
-            bitrate,
-            "-bufsize",
-            str(int(bitrate[:-1]) * 2) + "k",
-        ]
+        args: list[str] = []
+        if context.supports_encoder_option("preset"):
+            args.extend(["-preset", nvenc_preset])
+        args.extend(
+            [
+                "-b:v",
+                bitrate,
+                "-maxrate",
+                bitrate,
+                "-bufsize",
+                str(int(bitrate[:-1]) * 2) + "k",
+            ]
+        )
+        return args
 
     def keyframe_args(self, context: TranscodeContext) -> list[str]:
         """Build a fixed GOP approximating one HLS segment.

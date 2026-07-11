@@ -14,7 +14,9 @@ from filelock import FileLock
 
 import app.core.transcode.hwaccels.qsv as qsv_module
 import app.core.transcode.hwaccels.vaapi as vaapi_module
+from app.core.transcode import capabilities as capability_module
 from app.core.transcode import hls, tasks, transcoder
+from app.core.transcode.capabilities import FFmpegCapabilities
 from app.core.transcode.hwaccels import get_hwaccel
 from app.core.transcode.hwaccels.base import MediaProbe, TranscodeContext
 from app.core.transcode.options import TranscodeOptions
@@ -66,6 +68,84 @@ def test_task_types():
     assert "out_dir" not in package.TaskSnapshot.__required_keys__
     assert "encoded_size" in package.TaskSnapshot.__required_keys__
     assert "encoded_size_text" in package.TaskSnapshot.__optional_keys__
+
+
+@pytest.mark.parametrize(
+    ("kind", "output", "expected"),
+    [
+        (
+            "encoders",
+            "Encoders:\n V....D libx264 H.264\n A....D aac AAC\n",
+            {"libx264", "aac"},
+        ),
+        (
+            "filters",
+            "Filters:\n .. scale V->V Scale\n .S tonemap V->V Tone map\n",
+            {"scale", "tonemap"},
+        ),
+        (
+            "hwaccels",
+            "Hardware acceleration methods:\nvaapi\nqsv\n",
+            {"vaapi", "qsv"},
+        ),
+        (
+            "bsfs",
+            "Bitstream filters:\nh264_metadata\nnull\n",
+            {"h264_metadata", "null"},
+        ),
+        (
+            "muxers",
+            "Muxers:\n E  hls Apple HLS\n E  stream_segment,ssegment Segment\n",
+            {"hls", "stream_segment", "ssegment"},
+        ),
+    ],
+)
+def test_parse_ffmpeg_capability_listing(kind, output, expected):
+    capabilities = importlib.import_module("app.core.transcode.capabilities")
+
+    assert capabilities._parse_listing(kind, output) == expected
+
+
+def test_parse_ffmpeg_encoder_options():
+    capabilities = importlib.import_module("app.core.transcode.capabilities")
+    output = (
+        "h264_videotoolbox AVOptions:\n"
+        "  -profile <int> E..V....... Profile\n"
+        "  -prio_speed <boolean> E..V....... prioritize speed\n"
+    )
+
+    assert capabilities._parse_encoder_options(output) == {"profile", "prio_speed"}
+
+
+def test_load_ffmpeg_capabilities_caches_success(monkeypatch):
+    outputs = {
+        "-encoders": " V....D libx264 H.264\n A....D aac AAC\n",
+        "-filters": " .. scale V->V Scale\n",
+        "-hwaccels": "videotoolbox\n",
+        "-bsfs": "h264_metadata\n",
+        "-muxers": " E  hls Apple HLS\n E  mpegts MPEG-TS\n",
+        "-h": "  -preset <string> E..V....... Preset\n",
+    }
+
+    async def query(_executable, *args):
+        return outputs[args[0]]
+
+    query_mock = AsyncMock(side_effect=query)
+    capability_module.clear_ffmpeg_capability_cache()
+    monkeypatch.setattr(capability_module, "_resolved_executable", lambda value: value)
+    monkeypatch.setattr(capability_module, "_query_ffmpeg", query_mock)
+
+    first = asyncio.run(
+        capability_module.load_ffmpeg_capabilities("ffmpeg-test", "libx264")
+    )
+    second = asyncio.run(
+        capability_module.load_ffmpeg_capabilities("ffmpeg-test", "libx264")
+    )
+
+    assert first is second
+    assert first.encoders == {"libx264", "aac"}
+    assert first.encoder_options == {"preset"}
+    assert query_mock.await_count == 6
 
 
 class _Lock:
@@ -419,7 +499,60 @@ def test_context_needs_scale_uses_source_height(resolution, source_height, expec
     assert context.needs_scale is expected
 
 
-def _hdr_context(hwaccel=None, resolution="original", transfer="smpte2084"):
+def _capabilities(
+    *,
+    encoders=(
+        "aac",
+        "h264_nvenc",
+        "h264_qsv",
+        "h264_vaapi",
+        "h264_videotoolbox",
+        "libx264",
+    ),
+    hwaccels=("cuda", "qsv", "vaapi", "videotoolbox"),
+    filters=(
+        "format",
+        "hwupload",
+        "hwupload_cuda",
+        "scale",
+        "scale_cuda",
+        "scale_vaapi",
+        "scale_vt",
+        "tonemap",
+        "tonemap_vaapi",
+        "vpp_qsv",
+        "zscale",
+    ),
+    encoder_options=(
+        "crf",
+        "mbbrc",
+        "preset",
+        "prio_speed",
+        "profile",
+        "qp",
+        "rc_init_occupancy",
+        "rc_mode",
+    ),
+    bsfs=("h264_metadata",),
+    muxers=("hls", "mpegts"),
+):
+    return FFmpegCapabilities(
+        executable="ffmpeg",
+        encoders=frozenset(encoders),
+        filters=frozenset(filters),
+        hwaccels=frozenset(hwaccels),
+        bsfs=frozenset(bsfs),
+        muxers=frozenset(muxers),
+        encoder_options=frozenset(encoder_options),
+    )
+
+
+def _hdr_context(
+    hwaccel=None,
+    resolution="original",
+    transfer="smpte2084",
+    capabilities=None,
+):
     return TranscodeContext(
         options=TranscodeOptions(hwaccel=hwaccel, resolution=resolution),
         metadata=MediaProbe(
@@ -430,6 +563,7 @@ def _hdr_context(hwaccel=None, resolution="original", transfer="smpte2084"):
             color_primaries="bt2020",
             color_space="bt2020nc",
         ),
+        capabilities=capabilities,
     )
 
 
@@ -487,6 +621,45 @@ def test_hdr_cmd_sets_bt709_bitstream_metadata(monkeypatch, tmp_path):
         "h264_metadata=colour_primaries=1:transfer_characteristics=1:"
         "matrix_coefficients=1:video_full_range_flag=0"
     )
+
+
+def test_hdr_cmd_omits_unavailable_optional_bitstream_filter(tmp_path):
+    context = _hdr_context(capabilities=_capabilities(bsfs=()))
+
+    cmd = asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
+
+    assert "-bsf:v" not in cmd
+
+
+@pytest.mark.parametrize(
+    ("capabilities", "missing"),
+    [
+        (
+            _capabilities(
+                encoders=(
+                    "aac",
+                    "h264_nvenc",
+                    "h264_qsv",
+                    "h264_vaapi",
+                    "h264_videotoolbox",
+                )
+            ),
+            "encoders: libx264",
+        ),
+        (_capabilities(encoders=("libx264",)), "encoders: aac"),
+        (_capabilities(muxers=("mpegts",)), "muxers: hls"),
+        (_capabilities(muxers=("hls",)), "muxers: mpegts"),
+        (
+            _capabilities(filters=("format", "tonemap")),
+            "filters: zscale",
+        ),
+    ],
+)
+def test_build_rejects_missing_required_capabilities(tmp_path, capabilities, missing):
+    context = _hdr_context(capabilities=capabilities)
+
+    with pytest.raises(RuntimeError, match=missing):
+        asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
 
 
 def test_software_cmd(monkeypatch, tmp_path):
@@ -548,6 +721,32 @@ def test_nvenc_args():
         "-keyint_min:v:0",
         "141",
     ]
+
+
+def test_nvenc_falls_back_to_software_decoding():
+    strategy = get_hwaccel("nvenc")
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="nvenc"),
+        metadata=MediaProbe(pixel_format="yuv420p10le"),
+        capabilities=_capabilities(hwaccels=()),
+    )
+
+    assert asyncio.run(strategy.input_args(context)) == []
+    assert strategy.video_filters(context) == ["format=yuv420p"]
+
+
+def test_nvenc_fallback_omits_unavailable_cuda_upload():
+    context = _hdr_context(
+        hwaccel="nvenc",
+        capabilities=_capabilities(
+            hwaccels=(), filters=("format", "tonemap", "zscale")
+        ),
+    )
+
+    filters = get_hwaccel("nvenc").video_filters(context)
+
+    assert "hwupload_cuda" not in filters
+    assert filters[-1] == "format=yuv420p"
 
 
 def test_qsv_args(monkeypatch):
@@ -629,6 +828,41 @@ def test_qsv_hdr_filters(monkeypatch, transfer):
             f"w='{context.scale_width}':h='{context.scale_height}'"
         )
     ]
+
+
+def test_qsv_falls_back_to_software_decoding(monkeypatch):
+    device = "/dev/dri/renderD128"
+    strategy = get_hwaccel("qsv")
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="qsv"),
+        capabilities=_capabilities(hwaccels=()),
+    )
+    monkeypatch.setattr(
+        qsv_module, "resolve_vaapi_device", AsyncMock(return_value=device)
+    )
+
+    args = asyncio.run(strategy.input_args(context))
+
+    assert "-hwaccel" not in args
+    assert strategy.video_filters(context) == ["format=nv12"]
+
+
+def test_qsv_hdr_fallback_uploads_for_vpp(monkeypatch):
+    context = _hdr_context(
+        hwaccel="qsv",
+        capabilities=_capabilities(hwaccels=()),
+    )
+    monkeypatch.setattr(
+        qsv_module,
+        "resolve_vaapi_device",
+        AsyncMock(return_value="/dev/dri/renderD128"),
+    )
+
+    args = asyncio.run(get_hwaccel("qsv").input_args(context))
+    filters = get_hwaccel("qsv").video_filters(context)
+
+    assert "-hwaccel" not in args
+    assert filters[:2] == ["format=p010le", "hwupload"]
 
 
 def test_qsv_device(monkeypatch):
@@ -720,6 +954,42 @@ def test_vaapi_hlg_filters(monkeypatch):
     assert filters[-2:] == ["format=nv12", "hwupload"]
 
 
+def test_vaapi_falls_back_to_software_decoding(monkeypatch):
+    strategy = get_hwaccel("vaapi")
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="vaapi"),
+        capabilities=_capabilities(hwaccels=()),
+    )
+    monkeypatch.setattr(
+        vaapi_module,
+        "resolve_vaapi_device",
+        AsyncMock(return_value="/dev/dri/renderD128"),
+    )
+
+    args = asyncio.run(strategy.input_args(context))
+
+    assert args == ["-vaapi_device", "/dev/dri/renderD128"]
+    assert strategy.video_filters(context) == ["format=nv12", "hwupload"]
+
+
+def test_vaapi_hdr10_fallback_uploads_for_tonemap(monkeypatch):
+    context = _hdr_context(
+        hwaccel="vaapi",
+        capabilities=_capabilities(hwaccels=()),
+    )
+    monkeypatch.setattr(
+        vaapi_module,
+        "resolve_vaapi_device",
+        AsyncMock(return_value="/dev/dri/renderD128"),
+    )
+
+    args = asyncio.run(get_hwaccel("vaapi").input_args(context))
+    filters = get_hwaccel("vaapi").video_filters(context)
+
+    assert "-hwaccel" not in args
+    assert filters[:2] == ["format=p010", "hwupload"]
+
+
 def test_vaapi_device(monkeypatch):
     monkeypatch.setattr(
         vaapi_module, "resolve_vaapi_device", AsyncMock(return_value=None)
@@ -800,6 +1070,51 @@ def test_videotoolbox_sdr_normalization_uses_standard_scale_vt():
 
     assert strategy.video_filters(unknown) == ["scale_vt"]
     assert strategy.video_filters(ten_bit) == ["scale_vt"]
+
+
+def test_videotoolbox_falls_back_to_software_decoding():
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="videotoolbox"),
+        metadata=MediaProbe(pixel_format="yuv420p10le"),
+        capabilities=_capabilities(hwaccels=()),
+    )
+    strategy = get_hwaccel("videotoolbox")
+
+    assert asyncio.run(strategy.input_args(context)) == []
+    assert strategy.video_filters(context) == ["format=nv12"]
+
+
+def test_videotoolbox_hdr_fallback_uses_software_tonemap():
+    context = _hdr_context(
+        hwaccel="videotoolbox",
+        capabilities=_capabilities(hwaccels=()),
+    )
+
+    filters = get_hwaccel("videotoolbox").video_filters(context)
+
+    assert "tonemap=hable:desat=0" in filters
+    assert filters[-1] == "format=nv12"
+
+
+@pytest.mark.parametrize(
+    ("hwaccel", "missing"),
+    [
+        (None, {"-preset", "-crf", "-profile:v"}),
+        ("nvenc", {"-preset"}),
+        ("qsv", {"-preset", "-mbbrc", "-rc_init_occupancy"}),
+        ("vaapi", {"-rc_mode", "-qp"}),
+        ("videotoolbox", {"-prio_speed"}),
+    ],
+)
+def test_encoder_args_omit_unavailable_private_options(hwaccel, missing):
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel=hwaccel),
+        capabilities=_capabilities(encoder_options=()),
+    )
+
+    args = get_hwaccel(hwaccel).encoder_args(context)
+
+    assert missing.isdisjoint(args)
 
 
 @pytest.mark.parametrize("transfer", ["smpte2084", "arib-std-b67"])
@@ -897,6 +1212,12 @@ def test_setup_failure_stops_process(monkeypatch, tmp_path):
     monkeypatch.setattr(
         transcoder, "_build_hls_cmd", AsyncMock(return_value=["ffmpeg"])
     )
+    monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
+    monkeypatch.setattr(
+        transcoder,
+        "load_ffmpeg_capabilities",
+        AsyncMock(return_value=_capabilities()),
+    )
     monkeypatch.setattr(
         transcoder.asyncio, "create_subprocess_exec", AsyncMock(return_value=proc)
     )
@@ -912,6 +1233,39 @@ def test_setup_failure_stops_process(monkeypatch, tmp_path):
 
     assert events == ["terminate", "wait", "release"]
     proc.kill.assert_not_called()
+
+
+def test_capability_preflight_failure_releases_lock(monkeypatch, tmp_path):
+    lock = object()
+    release = Mock()
+    create = AsyncMock(side_effect=AssertionError("transcode process started"))
+    capabilities = _capabilities(encoders=("aac",))
+
+    monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
+    monkeypatch.setattr(transcoder, "is_complete", Mock(return_value=False))
+    monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
+    monkeypatch.setattr(transcoder, "cleanup_stale_hls", Mock())
+    monkeypatch.setattr(
+        transcoder,
+        "_probe_media",
+        AsyncMock(return_value=MediaProbe(duration=60.0)),
+    )
+    monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
+    monkeypatch.setattr(
+        transcoder,
+        "load_ffmpeg_capabilities",
+        AsyncMock(return_value=capabilities),
+    )
+    monkeypatch.setattr(transcoder.asyncio, "create_subprocess_exec", create)
+    monkeypatch.setattr(transcoder, "_release_lock", release)
+
+    with pytest.raises(RuntimeError, match="encoders: libx264"):
+        asyncio.run(
+            transcoder.ensure_transcode("input.mkv", "hash", TranscodeOptions())
+        )
+
+    create.assert_not_awaited()
+    release.assert_called_once_with(lock)
 
 
 @pytest.mark.parametrize(
@@ -934,6 +1288,7 @@ def test_ensure_builds_context(monkeypatch, tmp_path, framerate, expected_framer
     build = AsyncMock(return_value=["ffmpeg"])
     register = AsyncMock(return_value="hash:profile")
     options = TranscodeOptions()
+    capabilities = _capabilities()
 
     monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
     monkeypatch.setattr(transcoder, "is_complete", Mock(return_value=False))
@@ -951,6 +1306,12 @@ def test_ensure_builds_context(monkeypatch, tmp_path, framerate, expected_framer
         AsyncMock(side_effect=AssertionError("separate probe called")),
     )
     monkeypatch.setattr(transcoder, "_build_hls_cmd", build)
+    monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
+    monkeypatch.setattr(
+        transcoder,
+        "load_ffmpeg_capabilities",
+        AsyncMock(return_value=capabilities),
+    )
     monkeypatch.setattr(
         transcoder.asyncio, "create_subprocess_exec", AsyncMock(return_value=proc)
     )
@@ -971,6 +1332,7 @@ def test_ensure_builds_context(monkeypatch, tmp_path, framerate, expected_framer
     assert context.source_pixel_format == "yuv420p10le"
     assert context.source_height == 1080
     assert context.metadata is metadata
+    assert context.capabilities is capabilities
     assert context.needs_tonemap is True
     register.assert_awaited_once_with(
         "input.mkv", "hash", options, tmp_path, proc, 60.0
@@ -1103,6 +1465,12 @@ def test_timeout_keeps_lock(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         transcoder, "_build_hls_cmd", AsyncMock(return_value=["ffmpeg"])
+    )
+    monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
+    monkeypatch.setattr(
+        transcoder,
+        "load_ffmpeg_capabilities",
+        AsyncMock(return_value=_capabilities()),
     )
     monkeypatch.setattr(
         transcoder.asyncio, "create_subprocess_exec", AsyncMock(return_value=proc)

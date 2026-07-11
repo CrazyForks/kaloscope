@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from app.core.transcode.capabilities import FFmpegCapabilities
 from app.core.transcode.options import EncoderConfig, TranscodeOptions
 
 
@@ -25,6 +26,7 @@ class TranscodeContext:
 
     options: TranscodeOptions
     metadata: MediaProbe = field(default_factory=MediaProbe)
+    capabilities: FFmpegCapabilities | None = None
 
     @property
     def source_framerate(self) -> float:
@@ -78,6 +80,26 @@ class TranscodeContext:
     def encoder_config(self) -> EncoderConfig:
         return self.options.encoder_config
 
+    def supports_filter(self, name: str) -> bool:
+        """Return whether a filter is available or capabilities are unprobed."""
+        return self.capabilities is None or self.capabilities.supports_filter(name)
+
+    def supports_hwaccel(self, name: str) -> bool:
+        """Return whether a hardware decoder is available."""
+        return self.capabilities is None or self.capabilities.supports_hwaccel(name)
+
+    def supports_encoder_option(self, name: str) -> bool:
+        """Return whether the selected encoder advertises a private option."""
+        return self.capabilities is None or self.capabilities.supports_encoder_option(
+            name
+        )
+
+    @property
+    def uses_hardware_decode(self) -> bool:
+        """Return whether the selected strategy can request hardware decoding."""
+        hwaccel = self.encoder_config.hwaccel
+        return hwaccel is not None and self.supports_hwaccel(hwaccel)
+
 
 def software_tonemap_filters(
     context: TranscodeContext, output_format: str
@@ -124,7 +146,7 @@ class HWAccelStrategy(ABC):
         """Return whether decoding should keep frames in device memory.
 
         Args:
-            context: The runtime transcode context._
+            context: The runtime transcode context.
 
         Returns:
             Whether to keep hardware frames.
@@ -148,7 +170,7 @@ class HWAccelStrategy(ABC):
         """
         cmd: list[str] = []
         config = context.encoder_config
-        if config.hwaccel:
+        if config.hwaccel and context.supports_hwaccel(config.hwaccel):
             cmd.extend(["-hwaccel", config.hwaccel])
             if config.hwaccel_output_format and self.keep_hardware_frames(context):
                 cmd.extend(["-hwaccel_output_format", config.hwaccel_output_format])

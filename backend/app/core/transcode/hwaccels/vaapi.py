@@ -56,6 +56,8 @@ class VAAPI(HWAccelStrategy):
         """
         if context.is_hdr10:
             filters: list[str] = []
+            if not context.uses_hardware_decode:
+                filters.extend(["format=p010", "hwupload"])
             if context.needs_scale:
                 filters.append(
                     f"scale_vaapi=w='{context.scale_width}':h='{context.scale_height}'"
@@ -64,7 +66,7 @@ class VAAPI(HWAccelStrategy):
             return filters
         if context.is_hlg:
             return [*software_tonemap_filters(context, "nv12"), "hwupload"]
-        if context.needs_scale:
+        if context.needs_scale or not context.uses_hardware_decode:
             return ["format=nv12", "hwupload"]
         return ["scale_vaapi=format=nv12"]
 
@@ -78,12 +80,12 @@ class VAAPI(HWAccelStrategy):
             FFmpeg CQP options using the quality CRF as the QP target.
         """
         # prefer CQP because bitrate modes vary across VAAPI drivers
-        return [
-            "-rc_mode",
-            "CQP",
-            "-qp",
-            str(context.options.crf),
-        ]
+        args: list[str] = []
+        if context.supports_encoder_option("rc_mode"):
+            args.extend(["-rc_mode", "CQP"])
+        if context.supports_encoder_option("qp"):
+            args.extend(["-qp", str(context.options.crf)])
+        return args
 
     def keyframe_args(self, context: TranscodeContext) -> list[str]:
         """Build timestamp-based keyframe placement for VAAPI.

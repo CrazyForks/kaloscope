@@ -33,7 +33,9 @@ class QSV(HWAccelStrategy):
             "-filter_hw_device",
             "qs",
         ]
-        if context.needs_tonemap or not context.needs_scale:
+        if context.supports_hwaccel("qsv") and (
+            context.needs_tonemap or not context.needs_scale
+        ):
             cmd.extend(
                 [
                     "-hwaccel",
@@ -56,14 +58,20 @@ class QSV(HWAccelStrategy):
             A software format filter or QSV VPP filter.
         """
         if context.needs_tonemap:
+            filters: list[str] = []
+            if not context.uses_hardware_decode:
+                filters.extend(["format=p010le", "hwupload"])
             value = (
                 "vpp_qsv=tonemap=1:format=nv12:out_color_matrix=bt709:"
                 "out_color_primaries=bt709:out_color_transfer=bt709"
             )
             if context.needs_scale:
                 value += f":w='{context.scale_width}':h='{context.scale_height}'"
-            return [value]
-        return ["format=nv12" if context.needs_scale else "vpp_qsv=format=nv12"]
+            filters.append(value)
+            return filters
+        if context.needs_scale or not context.uses_hardware_decode:
+            return ["format=nv12"]
+        return ["vpp_qsv=format=nv12"]
 
     def encoder_args(self, context: TranscodeContext) -> list[str]:
         """Build QSV VBR options with conservative buffer sizing.
@@ -79,20 +87,24 @@ class QSV(HWAccelStrategy):
         """
         bitrate = context.options.bitrate
         bitrate_num = int(bitrate[:-1])
-        return [
-            "-preset",
-            "veryfast",
-            "-b:v",
-            bitrate,
-            "-maxrate",
-            str(bitrate_num + 1) + "k",
-            "-bufsize",
-            str(bitrate_num * 2 * 2) + "k",
-            "-mbbrc",
-            "1",
-            "-rc_init_occupancy",
-            str(bitrate_num * 2 * 1000),
-        ]
+        args: list[str] = []
+        if context.supports_encoder_option("preset"):
+            args.extend(["-preset", "veryfast"])
+        args.extend(
+            [
+                "-b:v",
+                bitrate,
+                "-maxrate",
+                str(bitrate_num + 1) + "k",
+                "-bufsize",
+                str(bitrate_num * 2 * 2) + "k",
+            ]
+        )
+        if context.supports_encoder_option("mbbrc"):
+            args.extend(["-mbbrc", "1"])
+        if context.supports_encoder_option("rc_init_occupancy"):
+            args.extend(["-rc_init_occupancy", str(bitrate_num * 2 * 1000)])
+        return args
 
     def keyframe_args(self, context: TranscodeContext) -> list[str]:
         """Build a fixed GOP approximating one HLS segment.
