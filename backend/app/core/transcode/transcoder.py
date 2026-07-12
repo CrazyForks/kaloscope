@@ -584,13 +584,12 @@ def _require_supported_geometry(metadata: MediaProbe, options: TranscodeOptions)
         raise RuntimeError("Video geometry transform requires valid width and height")
 
 
-async def _prepare_hardware(context: TranscodeContext, media_path: str):
+async def _prepare_hardware(context: TranscodeContext):
     """Prepare selected hardware before building the real transcode command."""
     from app.core.transcode.hwaccels import get_hwaccel
 
-    context.hardware = await get_hwaccel(context.options.hwaccel).prepare_hardware(
-        context, media_path
-    )
+    strategy = get_hwaccel(context.options.hwaccel)
+    context.hardware = await strategy.prepare_hardware(context)
 
 
 async def ensure_transcode(
@@ -646,11 +645,12 @@ async def ensure_transcode(
         capabilities = await load_ffmpeg_capabilities(await _ffmpeg(), options.encoder)
         context = TranscodeContext(
             options=options,
+            media_path=media_path,
             metadata=metadata,
             capabilities=capabilities,
         )
 
-        await _prepare_hardware(context, media_path)
+        await _prepare_hardware(context)
         cmd = await _build_hls_cmd(media_path, out_dir, context)
         logger.info("Starting ffmpeg HLS: %s", " ".join(cmd))
 

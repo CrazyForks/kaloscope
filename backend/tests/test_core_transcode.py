@@ -1421,9 +1421,25 @@ def _eligible_hardware_context(hwaccel, *, capabilities=None, resolution="origin
 
 
 def test_software_prepare_hardware_is_noop():
-    context = TranscodeContext(options=TranscodeOptions())
+    context = TranscodeContext(
+        options=TranscodeOptions(),
+        media_path="input.mkv",
+    )
 
-    assert asyncio.run(get_hwaccel(None).prepare_hardware(context, "input.mkv")) is None
+    assert asyncio.run(get_hwaccel(None).prepare_hardware(context)) is None
+
+
+def test_prepare_hardware_requires_media_path_for_decode_probe(monkeypatch):
+    monkeypatch.setattr(base_module, "require_hardware_encoder", AsyncMock())
+    monkeypatch.setattr(
+        base_module,
+        "probe_hardware_decode",
+        AsyncMock(return_value=True),
+    )
+    context = _eligible_hardware_context("videotoolbox")
+
+    with pytest.raises(RuntimeError, match="decode probe requires a media path"):
+        asyncio.run(get_hwaccel("videotoolbox").prepare_hardware(context))
 
 
 def test_videotoolbox_prepare_hardware_uses_null_probes(monkeypatch, tmp_path):
@@ -1444,10 +1460,9 @@ def test_videotoolbox_prepare_hardware_uses_null_probes(monkeypatch, tmp_path):
         raising=False,
     )
     context = _eligible_hardware_context("videotoolbox")
+    context.media_path = str(media)
 
-    runtime = asyncio.run(
-        get_hwaccel("videotoolbox").prepare_hardware(context, str(media))
-    )
+    runtime = asyncio.run(get_hwaccel("videotoolbox").prepare_hardware(context))
 
     assert runtime == base_module.HardwareRuntime(None, True)
     encoder_args = require_encoder.await_args.args[-1]
@@ -1484,8 +1499,9 @@ def test_prepare_hardware_downloads_10_bit_probe_frame(monkeypatch, tmp_path):
         profile="Main 10",
         pixel_format="yuv420p10le",
     )
+    context.media_path = str(media)
 
-    asyncio.run(get_hwaccel("videotoolbox").prepare_hardware(context, str(media)))
+    asyncio.run(get_hwaccel("videotoolbox").prepare_hardware(context))
 
     decode_args = probe_decode.await_args.args[-1]
     assert decode_args[decode_args.index("-vf") + 1] == "hwdownload,format=p010le"
@@ -1509,8 +1525,9 @@ def test_nvenc_prepare_hardware_decode_failure_keeps_encoder(monkeypatch, tmp_pa
         raising=False,
     )
     context = _eligible_hardware_context("nvenc")
+    context.media_path = str(media)
 
-    runtime = asyncio.run(get_hwaccel("nvenc").prepare_hardware(context, str(media)))
+    runtime = asyncio.run(get_hwaccel("nvenc").prepare_hardware(context))
 
     assert runtime == base_module.HardwareRuntime("0", False)
     require_encoder.assert_awaited_once()
@@ -1557,8 +1574,9 @@ def test_prepare_hardware_probes_source_transform_graph(monkeypatch, tmp_path):
         height=1080,
         rotation=90,
     )
+    context.media_path = str(media)
 
-    runtime = asyncio.run(strategy.prepare_hardware(context, str(media)))
+    runtime = asyncio.run(strategy.prepare_hardware(context))
 
     assert runtime == base_module.HardwareRuntime("0", True, True)
     transform_args = probe_transform.await_args.args[-1]
@@ -1599,8 +1617,9 @@ def test_prepare_hardware_missing_transform_filter_uses_cpu(monkeypatch, tmp_pat
         raising=False,
     )
     context = _eligible_hardware_context("nvenc")
+    context.media_path = str(media)
 
-    runtime = asyncio.run(strategy.prepare_hardware(context, str(media)))
+    runtime = asyncio.run(strategy.prepare_hardware(context))
 
     assert runtime == base_module.HardwareRuntime("0", True, False)
     probe_transform.assert_not_awaited()
@@ -1689,8 +1708,9 @@ def test_scaled_transform_success_builds_hardware_frame_command(
         height=1080,
         field_order="progressive",
     )
+    context.media_path = str(media)
 
-    context.hardware = asyncio.run(strategy.prepare_hardware(context, str(media)))
+    context.hardware = asyncio.run(strategy.prepare_hardware(context))
     cmd = asyncio.run(transcoder._build_hls_cmd(str(media), tmp_path, context))
 
     assert context.hardware == base_module.HardwareRuntime(device, True, True)
@@ -1753,8 +1773,9 @@ def test_ten_bit_sdr_scale_probe_uses_transform_output_format(
         width=1920,
         height=1080,
     )
+    context.media_path = str(media)
 
-    asyncio.run(strategy.prepare_hardware(context, str(media)))
+    asyncio.run(strategy.prepare_hardware(context))
 
     transform_args = probe_transform.await_args.args[-1]
     assert transform_args[transform_args.index("-vf") + 1].endswith(
@@ -1849,8 +1870,9 @@ def test_scaled_transform_fallback_builds_cpu_scale_command(
         resolution="720p",
     )
     context.metadata = replace(context.metadata, width=1920, height=1080)
+    context.media_path = str(media)
 
-    context.hardware = asyncio.run(strategy.prepare_hardware(context, str(media)))
+    context.hardware = asyncio.run(strategy.prepare_hardware(context))
     cmd = asyncio.run(transcoder._build_hls_cmd(str(media), tmp_path, context))
 
     assert context.hardware == base_module.HardwareRuntime(
@@ -1931,8 +1953,9 @@ def test_scaled_unsupported_source_keeps_hardware_encoder(
         width=1920,
         height=1080,
     )
+    context.media_path = str(media)
 
-    context.hardware = asyncio.run(strategy.prepare_hardware(context, str(media)))
+    context.hardware = asyncio.run(strategy.prepare_hardware(context))
     cmd = asyncio.run(transcoder._build_hls_cmd(str(media), tmp_path, context))
 
     assert context.hardware == base_module.HardwareRuntime(device, False, False)
@@ -2050,8 +2073,9 @@ def test_transform_fallback_builds_system_memory_command(
         rotation=rotation,
         field_order=field_order,
     )
+    context.media_path = str(media)
 
-    context.hardware = asyncio.run(strategy.prepare_hardware(context, str(media)))
+    context.hardware = asyncio.run(strategy.prepare_hardware(context))
     cmd = asyncio.run(transcoder._build_hls_cmd(str(media), tmp_path, context))
 
     assert context.hardware == base_module.HardwareRuntime(
@@ -2116,8 +2140,9 @@ def test_runtime_decode_failure_builds_software_decode_command(
         AsyncMock(return_value=device),
     )
     context = _eligible_hardware_context(hwaccel)
+    context.media_path = str(media)
 
-    context.hardware = asyncio.run(strategy.prepare_hardware(context, str(media)))
+    context.hardware = asyncio.run(strategy.prepare_hardware(context))
     cmd = asyncio.run(transcoder._build_hls_cmd(str(media), tmp_path, context))
 
     assert context.hardware == base_module.HardwareRuntime(device, False)
@@ -2147,13 +2172,10 @@ def test_vaapi_prepare_hardware_uses_device_once(monkeypatch, tmp_path):
         probe_decode,
         raising=False,
     )
+    context = _eligible_hardware_context("vaapi")
+    context.media_path = str(media)
 
-    runtime = asyncio.run(
-        get_hwaccel("vaapi").prepare_hardware(
-            _eligible_hardware_context("vaapi"),
-            str(media),
-        )
-    )
+    runtime = asyncio.run(get_hwaccel("vaapi").prepare_hardware(context))
 
     assert runtime == base_module.HardwareRuntime(device, True)
     resolve.assert_awaited_once()
@@ -2186,13 +2208,10 @@ def test_qsv_prepare_hardware_uses_device_once(monkeypatch, tmp_path):
         probe_decode,
         raising=False,
     )
+    context = _eligible_hardware_context("qsv")
+    context.media_path = str(media)
 
-    runtime = asyncio.run(
-        get_hwaccel("qsv").prepare_hardware(
-            _eligible_hardware_context("qsv"),
-            str(media),
-        )
-    )
+    runtime = asyncio.run(get_hwaccel("qsv").prepare_hardware(context))
 
     assert runtime == base_module.HardwareRuntime(device, True)
     resolve.assert_awaited_once()
@@ -2266,10 +2285,7 @@ def test_prepare_hardware_skips_ineligible_decode(monkeypatch, tmp_path, case):
         )
 
     runtime = asyncio.run(
-        get_hwaccel(context.options.hwaccel).prepare_hardware(
-            context,
-            str(media),
-        )
+        get_hwaccel(context.options.hwaccel).prepare_hardware(context)
     )
 
     assert runtime is not None
@@ -2287,7 +2303,7 @@ def test_prepare_hardware_rejects_missing_encoder_before_device(monkeypatch):
     monkeypatch.setattr(vaapi_module, "resolve_vaapi_device", resolve)
 
     with pytest.raises(RuntimeError, match="encoders: h264_vaapi"):
-        asyncio.run(get_hwaccel("vaapi").prepare_hardware(context, "input.mkv"))
+        asyncio.run(get_hwaccel("vaapi").prepare_hardware(context))
 
     resolve.assert_not_awaited()
 
@@ -3784,8 +3800,9 @@ def test_vaapi_scaled_hdr10_probe_preserves_p010(monkeypatch, tmp_path):
         codec="hevc",
         profile="Main 10",
     )
+    context.media_path = str(media)
 
-    context.hardware = asyncio.run(strategy.prepare_hardware(context, str(media)))
+    context.hardware = asyncio.run(strategy.prepare_hardware(context))
 
     assert context.hardware == base_module.HardwareRuntime(device, True, True)
     transform_args = probe_transform.await_args.args[-1]
@@ -4396,9 +4413,9 @@ def test_hardware_preparation_precedes_build_and_start(monkeypatch, tmp_path):
     )
     options = TranscodeOptions(hwaccel="nvenc")
 
-    async def prepare(context, media_path):
+    async def prepare(context):
         events.append("prepare")
-        assert media_path == "input.mkv"
+        assert context.media_path == "input.mkv"
         context.hardware = base_module.HardwareRuntime("0", False)
 
     async def build(_media_path, _out_dir, context):

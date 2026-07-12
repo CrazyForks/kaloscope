@@ -187,6 +187,7 @@ class TranscodeContext:
     """State shared while building a transcode command."""
 
     options: TranscodeOptions
+    media_path: str | None = None
     metadata: MediaProbe = field(default_factory=MediaProbe)
     capabilities: FFmpegCapabilities | None = None
     hardware: HardwareRuntime | None = None
@@ -542,13 +543,12 @@ class HWAccelStrategy(ABC):
         return True
 
     async def prepare_hardware(
-        self, context: TranscodeContext, media_path: str
+        self, context: TranscodeContext
     ) -> HardwareRuntime | None:
         """Validate hardware encoding and choose decoding for one source.
 
         Args:
             context: The runtime transcode context.
-            media_path: The source media path used by runtime probes.
 
         Returns:
             Source-specific hardware decisions, or `None` for software encoding.
@@ -591,6 +591,9 @@ class HWAccelStrategy(ABC):
         ):
             return HardwareRuntime(device, False)
 
+        media_path = context.media_path
+        if media_path is None:
+            raise RuntimeError("Hardware decode probe requires a media path")
         stream_index = context.metadata.video_stream_index
         assert stream_index is not None
         probe_context = replace(
