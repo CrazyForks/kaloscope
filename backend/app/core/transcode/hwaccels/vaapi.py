@@ -23,9 +23,11 @@ class VAAPI(HWAccelStrategy):
 
     def encoder_probe_args(self, context: TranscodeContext) -> list[str]:
         """Build a synthetic VAAPI upload and encode probe."""
+        device = context.device
+        assert device is not None
         return [
             "-vaapi_device",
-            context.device,
+            device,
             "-f",
             "lavfi",
             "-i",
