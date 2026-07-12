@@ -3,12 +3,15 @@ import contextlib
 import json
 import math
 import re
+from dataclasses import dataclass
+from enum import StrEnum
 from fractions import Fraction
 from pathlib import Path
 
 from filelock import FileLock
 from sanic.log import logger
 
+from app.core.exceptions import KaloscopeException
 from app.core.transcode.capabilities import load_ffmpeg_capabilities
 from app.core.transcode.hls import (
     acquire_output_lock,
@@ -30,9 +33,11 @@ _PROBE_TIMEOUT = 30.0
 _TERMINATE_TIMEOUT = 5.0
 
 _STDERR_CHUNK_SIZE = 8192
-_STDERR_TAIL_SIZE = 500
+_STDERR_TAIL_SIZE = 16 * 1024
+_ERROR_DETAIL_SIZE = 8 * 1024
+_ERROR_DETAIL_LINES = 24
 
-_MONITOR_TASKS: set[asyncio.Task[None]] = set()
+_MONITOR_TASKS: set[asyncio.Task["FFmpegCompletion"]] = set()
 
 _EIGHT_BIT_PIXEL_FORMATS = {
     "nv12",
@@ -44,6 +49,59 @@ _EIGHT_BIT_PIXEL_FORMATS = {
     "yuvj422p",
     "yuvj444p",
 }
+
+
+class FFmpegExitKind(StrEnum):
+    """Terminal classification published by an FFmpeg monitor."""
+
+    FINISHED = "finished"
+    STOPPED = "stopped"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class FFmpegCompletion:
+    """Bounded FFmpeg process result shared with startup and task tracking."""
+
+    returncode: int | None
+    kind: FFmpegExitKind
+    error_detail: str | None = None
+
+    @classmethod
+    def from_exit(
+        cls, returncode: int | None, error_detail: str | None = None
+    ) -> "FFmpegCompletion":
+        """Classify a normal process exit code."""
+        if returncode == 0:
+            kind = FFmpegExitKind.FINISHED
+        elif returncode == 255:
+            kind = FFmpegExitKind.STOPPED
+        else:
+            kind = FFmpegExitKind.FAILED
+        return cls(returncode, kind, error_detail)
+
+
+class TranscodeStartupError(KaloscopeException):
+    """An API-visible FFmpeg failure before the first HLS segment."""
+
+
+def _stderr_detail(data: bytes, redactions: dict[str, str] | None = None) -> str | None:
+    """Format a bounded recent stderr detail with sensitive paths redacted."""
+    if not data:
+        return None
+    detail = data.decode(errors="replace")
+    if redactions:
+        for value in sorted(redactions, key=len, reverse=True):
+            if value:
+                detail = detail.replace(value, redactions[value])
+    lines = [line.strip() for line in detail.splitlines() if line.strip()]
+    if not lines:
+        return None
+    detail = "\n".join(lines[-_ERROR_DETAIL_LINES:])
+    encoded = detail.encode()
+    if len(encoded) > _ERROR_DETAIL_SIZE:
+        detail = encoded[-_ERROR_DETAIL_SIZE:].decode(errors="ignore")
+    return detail or None
 
 
 async def _ffmpeg() -> str:
@@ -599,14 +657,28 @@ async def ensure_transcode(
             metadata.duration,
         )
 
-        _start_monitor(proc, lock, task_id)
+        completion = _start_monitor(
+            proc,
+            lock,
+            task_id,
+            redactions={
+                media_path: "<input>",
+                Path(media_path).name: "<input>",
+                str(out_dir): "<output>",
+            },
+        )
         lock_handed_off = True
 
         if not await wait_segment(m3u8_path, proc=proc):
             if proc.returncode is not None:
-                raise RuntimeError(
-                    "ffmpeg exited before generating the first HLS segment"
+                result = await asyncio.shield(completion)
+                message = (
+                    f"ffmpeg exited with code {result.returncode} before "
+                    "generating the first HLS segment"
                 )
+                if result.error_detail:
+                    message = f"{message}: {result.error_detail}"
+                raise TranscodeStartupError(message)
             raise RuntimeError("HLS first segment was not ready in time")
 
     except Exception:
@@ -854,8 +926,12 @@ async def _terminate_ffmpeg(proc: asyncio.subprocess.Process) -> None:
 
 
 async def _monitor_ffmpeg(
-    proc: asyncio.subprocess.Process, lock: FileLock, task_id: str | None = None
-):
+    proc: asyncio.subprocess.Process,
+    lock: FileLock,
+    task_id: str | None = None,
+    completion: asyncio.Future[FFmpegCompletion] | None = None,
+    redactions: dict[str, str] | None = None,
+) -> FFmpegCompletion:
     """Monitor ffmpeg completion, update task state, and release the lock.
 
     Reads stderr and retains a bounded tail for failed tasks. Cancellation
@@ -866,6 +942,8 @@ async def _monitor_ffmpeg(
         proc: The ffmpeg subprocess to monitor.
         lock: The `FileLock` instance.
         task_id: The registered task ID, if task tracking is enabled.
+        completion: The future that receives the process result, if requested.
+        redactions: Sensitive stderr values mapped to safe placeholders.
     """
     try:
         stderr_data = bytearray()
@@ -880,23 +958,33 @@ async def _monitor_ffmpeg(
             pass
         await proc.wait()
 
-        error_tail = None
+        error_detail = None
         # treat exit 255 as an application-requested stop
-        if proc.returncode not in (0, 255):
-            if stderr_data:
-                with contextlib.suppress(Exception):
-                    error_tail = stderr_data.decode(errors="replace")[-500:]
+        if proc.returncode not in (0, 255) and stderr_data:
+            error_detail = _stderr_detail(bytes(stderr_data), redactions)
+
+        result = FFmpegCompletion.from_exit(proc.returncode, error_detail)
+        if completion is not None and not completion.done():
+            completion.set_result(result)
+
+        if result.kind is FFmpegExitKind.FAILED:
             logger.error(
-                "ffmpeg HLS exited with code %d for task '%s': %s",
+                "ffmpeg HLS exited with code %s for task '%s': %s",
                 proc.returncode,
                 task_id or proc.pid,
-                error_tail or "",
+                error_detail or "",
             )
 
         if task_id:
-            await finish_task(task_id, proc.returncode, error_tail)
+            await finish_task(task_id, proc.returncode, error_detail)
     except asyncio.CancelledError:
         await _terminate_ffmpeg(proc)
+        result = FFmpegCompletion(
+            proc.returncode,
+            FFmpegExitKind.STOPPED,
+        )
+        if completion is not None and not completion.done():
+            completion.set_result(result)
         if task_id:
             try:
                 await finish_task(task_id, 255)
@@ -910,41 +998,71 @@ async def _monitor_ffmpeg(
     finally:
         _release_lock(lock)
     logger.debug("ffmpeg HLS finished for task '%s'", task_id or proc.pid)
+    return result
 
 
 def _start_monitor(
-    proc: asyncio.subprocess.Process, lock: FileLock, task_id: str | None = None
-) -> asyncio.Task[None]:
+    proc: asyncio.subprocess.Process,
+    lock: FileLock,
+    task_id: str | None = None,
+    redactions: dict[str, str] | None = None,
+) -> asyncio.Future[FFmpegCompletion]:
     """Start and retain an ffmpeg monitor task until it finishes.
 
     Args:
         proc: The ffmpeg subprocess to monitor.
         lock: The `FileLock` held for the output directory.
         task_id: The registered transcode task ID, if available.
+        redactions: Sensitive stderr values mapped to safe placeholders.
 
     Returns:
-        The scheduled monitor task.
+        A future resolved with the monitored FFmpeg process result.
     """
 
-    def _done(task: asyncio.Task[None]) -> None:
+    completion: asyncio.Future[FFmpegCompletion] = (
+        asyncio.get_running_loop().create_future()
+    )
+
+    def _done(task: asyncio.Task[FFmpegCompletion]) -> None:
         """Remove a completed monitor and consume its exception."""
         _MONITOR_TASKS.discard(task)
         if task.cancelled():
+            if not completion.done():
+                completion.set_result(FFmpegCompletion(None, FFmpegExitKind.STOPPED))
             return
         try:
-            task.result()
+            result = task.result()
         except Exception:
+            if not completion.done():
+                completion.set_result(
+                    FFmpegCompletion(
+                        getattr(proc, "returncode", None),
+                        FFmpegExitKind.FAILED,
+                    )
+                )
             logger.error(
                 "Transcode monitor task failed: %s",
                 task.get_name(),
                 exc_info=True,
             )
+        else:
+            if not completion.done():
+                completion.set_result(result)
 
     name = f"transcode-monitor:{task_id or proc.pid}"
-    task = asyncio.create_task(_monitor_ffmpeg(proc, lock, task_id), name=name)
+    task = asyncio.create_task(
+        _monitor_ffmpeg(
+            proc,
+            lock,
+            task_id,
+            completion=completion,
+            redactions=redactions,
+        ),
+        name=name,
+    )
     _MONITOR_TASKS.add(task)
     task.add_done_callback(_done)
-    return task
+    return completion
 
 
 async def shutdown_monitors() -> None:

@@ -16,6 +16,7 @@ from filelock import FileLock
 import app.core.transcode.hwaccels.base as base_module
 import app.core.transcode.hwaccels.qsv as qsv_module
 import app.core.transcode.hwaccels.vaapi as vaapi_module
+from app.core.exceptions import KaloscopeException
 from app.core.transcode import capabilities as capability_module
 from app.core.transcode import hls, tasks, transcoder
 from app.core.transcode.capabilities import FFmpegCapabilities
@@ -58,6 +59,12 @@ def test_task_exports():
     )
 
     assert all(getattr(package, name) is getattr(tasks, name) for name in names)
+
+
+def test_transcoder_error_exports():
+    package = importlib.import_module("app.core.transcode")
+
+    assert package.TranscodeStartupError is transcoder.TranscodeStartupError
 
 
 def test_task_types():
@@ -4546,18 +4553,20 @@ def test_shutdown_stops_monitors(monkeypatch):
             communicate=AsyncMock(return_value=(b"", b"")),
         )
         lock = object()
-        task = transcoder._start_monitor(
+        completion = transcoder._start_monitor(
             cast(asyncio.subprocess.Process, proc), cast(FileLock, lock), "task"
         )
+        task = next(iter(transcoder._MONITOR_TASKS))
         assert task in transcoder._MONITOR_TASKS
 
         await started.wait()
         await transcoder.shutdown_monitors()
-        return task, proc, lock
+        return task, completion, proc, lock
 
-    task, proc, lock = asyncio.run(run())
+    task, completion, proc, lock = asyncio.run(run())
 
     assert task.cancelled()
+    assert completion.result().kind == "stopped"
     assert not transcoder._MONITOR_TASKS
     proc.terminate.assert_called_once_with()
     finish.assert_awaited_once_with("task", 255)
@@ -4567,27 +4576,75 @@ def test_shutdown_stops_monitors(monkeypatch):
 def test_monitor_errors_logged(monkeypatch):
     error = Mock()
 
-    async def fail(*_args):
+    async def fail(*_args, **_kwargs):
         raise RuntimeError("monitor failed")
 
     monkeypatch.setattr(transcoder, "_monitor_ffmpeg", fail)
     monkeypatch.setattr(transcoder.logger, "error", error)
 
     async def run():
-        task = transcoder._start_monitor(
+        completion = transcoder._start_monitor(
             cast(asyncio.subprocess.Process, object()),
             cast(FileLock, object()),
             "task",
         )
+        task = next(iter(transcoder._MONITOR_TASKS))
         assert task in transcoder._MONITOR_TASKS
         await asyncio.gather(task, return_exceptions=True)
         await asyncio.sleep(0)
-        return task
+        return task, completion
 
-    task = asyncio.run(run())
+    task, completion = asyncio.run(run())
 
     assert task not in transcoder._MONITOR_TASKS
+    assert completion.result().kind == "failed"
+    assert completion.result().error_detail is None
     error.assert_called_once()
+
+
+def test_stderr_detail_redacts_media_and_output_paths():
+    detail = transcoder._stderr_detail(
+        (
+            b"Cannot open /private/media/secret.mkv\n"
+            b"/output/hash/segment_000000.ts failed\n"
+        ),
+        {
+            "/private/media/secret.mkv": "<input>",
+            "secret.mkv": "<input>",
+            "/output/hash": "<output>",
+        },
+    )
+
+    assert detail == "Cannot open <input>\n<output>/segment_000000.ts failed"
+
+
+def test_stderr_detail_is_bounded_to_recent_lines():
+    data = b"".join(f"error-{index:02d} {'x' * 500}\n".encode() for index in range(40))
+
+    detail = transcoder._stderr_detail(data)
+
+    assert detail is not None
+    assert len(detail.encode()) <= 8 * 1024
+    assert len(detail.splitlines()) <= 24
+    assert "error-39" in detail
+    assert "error-00" not in detail
+
+
+@pytest.mark.parametrize(
+    ("returncode", "expected"),
+    [
+        (0, "finished"),
+        (255, "stopped"),
+        (1, "failed"),
+        (None, "failed"),
+    ],
+)
+def test_ffmpeg_completion_classifies_exit(returncode, expected):
+    completion = transcoder.FFmpegCompletion.from_exit(returncode, "detail")
+
+    assert completion.returncode == returncode
+    assert completion.kind == expected
+    assert completion.error_detail == "detail"
 
 
 def test_monitor_tail(monkeypatch):
@@ -4605,7 +4662,7 @@ def test_monitor_tail(monkeypatch):
     monkeypatch.setattr(transcoder, "_release_lock", release)
     monkeypatch.setattr(transcoder.logger, "error", Mock())
 
-    asyncio.run(
+    result = asyncio.run(
         transcoder._monitor_ffmpeg(
             cast(asyncio.subprocess.Process, proc),
             cast(FileLock, object()),
@@ -4614,7 +4671,204 @@ def test_monitor_tail(monkeypatch):
     )
 
     assert read.await_count == 3
-    finish.assert_awaited_once_with("task", 1, "a" * 100 + "b" * 400)
+    assert result == transcoder.FFmpegCompletion.from_exit(1, "a" * 400 + "b" * 400)
+    finish.assert_awaited_once_with("task", 1, "a" * 400 + "b" * 400)
+
+
+def test_monitor_completion_precedes_task_store_completion(monkeypatch):
+    proc = SimpleNamespace(
+        pid=123,
+        returncode=1,
+        stderr=SimpleNamespace(
+            read=AsyncMock(side_effect=[b"device initialization failed\n", b""])
+        ),
+        wait=AsyncMock(),
+    )
+    release = Mock()
+    persistence_started = asyncio.Event()
+    allow_persistence = asyncio.Event()
+
+    async def finish_task(*_args):
+        persistence_started.set()
+        await allow_persistence.wait()
+
+    monkeypatch.setattr(transcoder, "finish_task", AsyncMock(side_effect=finish_task))
+    monkeypatch.setattr(transcoder, "_release_lock", release)
+    monkeypatch.setattr(transcoder.logger, "error", Mock())
+
+    async def run():
+        completion = transcoder._start_monitor(
+            cast(asyncio.subprocess.Process, proc),
+            cast(FileLock, object()),
+            "task",
+        )
+        monitor = next(iter(transcoder._MONITOR_TASKS))
+        await persistence_started.wait()
+        assert completion.done()
+        result = completion.result()
+        allow_persistence.set()
+        await monitor
+        await asyncio.sleep(0)
+        return result
+
+    result = asyncio.run(run())
+
+    assert result == transcoder.FFmpegCompletion.from_exit(
+        1, "device initialization failed"
+    )
+    release.assert_called_once()
+
+
+def test_monitor_discards_stderr_older_than_raw_tail(monkeypatch):
+    read = AsyncMock(
+        side_effect=[
+            b"old root cause\n" + b"x" * (20 * 1024),
+            b"\nlatest failure\n",
+            b"",
+        ]
+    )
+    proc = SimpleNamespace(
+        pid=123,
+        returncode=1,
+        stderr=SimpleNamespace(read=read),
+        wait=AsyncMock(),
+    )
+    monkeypatch.setattr(transcoder, "finish_task", AsyncMock())
+    monkeypatch.setattr(transcoder, "_release_lock", Mock())
+    monkeypatch.setattr(transcoder.logger, "error", Mock())
+
+    result = asyncio.run(
+        transcoder._monitor_ffmpeg(
+            cast(asyncio.subprocess.Process, proc),
+            cast(FileLock, object()),
+            "task",
+        )
+    )
+
+    assert result.error_detail is not None
+    assert "old root cause" not in result.error_detail
+    assert "latest failure" in result.error_detail
+    assert len(result.error_detail.encode()) <= 8 * 1024
+    assert len(result.error_detail.splitlines()) <= 24
+
+
+def test_monitor_completion_precedes_logging_failure(monkeypatch):
+    proc = SimpleNamespace(
+        pid=123,
+        returncode=1,
+        stderr=SimpleNamespace(
+            read=AsyncMock(side_effect=[b"primary encoder failure\n", b""])
+        ),
+        wait=AsyncMock(),
+    )
+    release = Mock()
+    monkeypatch.setattr(transcoder, "finish_task", AsyncMock())
+    monkeypatch.setattr(transcoder, "_release_lock", release)
+    monkeypatch.setattr(
+        transcoder.logger,
+        "error",
+        Mock(side_effect=[RuntimeError("logging failed"), None]),
+    )
+
+    async def run():
+        completion = transcoder._start_monitor(
+            cast(asyncio.subprocess.Process, proc),
+            cast(FileLock, object()),
+            "task",
+        )
+        monitor = next(iter(transcoder._MONITOR_TASKS))
+        await asyncio.gather(monitor, return_exceptions=True)
+        await asyncio.sleep(0)
+        return completion.result()
+
+    result = asyncio.run(run())
+
+    assert result == transcoder.FFmpegCompletion.from_exit(1, "primary encoder failure")
+    release.assert_called_once()
+
+
+def test_startup_failure_returns_ffmpeg_detail(monkeypatch, tmp_path):
+    source = "/private/media/secret.mkv"
+    out_dir = tmp_path / "hash" / "profile"
+    lock = object()
+    proc = SimpleNamespace(
+        pid=123,
+        returncode=1,
+        stderr=SimpleNamespace(
+            read=AsyncMock(
+                side_effect=[
+                    (
+                        f"Cannot create compression session for {source}\n"
+                        f"{out_dir}/segment_000000.ts was not written\n"
+                    ).encode(),
+                    b"",
+                ]
+            )
+        ),
+        wait=AsyncMock(),
+    )
+    finish = AsyncMock()
+    release = Mock()
+    options = TranscodeOptions()
+
+    monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: out_dir)
+    monkeypatch.setattr(transcoder, "is_complete", Mock(return_value=False))
+    monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
+    monkeypatch.setattr(transcoder, "cleanup_stale_hls", Mock())
+    monkeypatch.setattr(
+        transcoder,
+        "_probe_media",
+        AsyncMock(return_value=MediaProbe(video_stream_index=0, duration=60.0)),
+    )
+    monkeypatch.setattr(
+        transcoder, "_build_hls_cmd", AsyncMock(return_value=["ffmpeg"])
+    )
+    monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
+    monkeypatch.setattr(
+        transcoder,
+        "load_ffmpeg_capabilities",
+        AsyncMock(return_value=_capabilities()),
+    )
+    monkeypatch.setattr(
+        transcoder.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    )
+    monkeypatch.setattr(
+        transcoder, "register_task", AsyncMock(return_value="hash:profile")
+    )
+    monkeypatch.setattr(transcoder, "finish_task", finish)
+    monkeypatch.setattr(transcoder, "wait_segment", AsyncMock(return_value=False))
+    monkeypatch.setattr(transcoder, "_release_lock", release)
+    monkeypatch.setattr(transcoder.logger, "error", Mock())
+
+    async def run():
+        try:
+            return await transcoder.ensure_transcode(source, "hash", options)
+        finally:
+            await asyncio.gather(
+                *tuple(transcoder._MONITOR_TASKS), return_exceptions=True
+            )
+
+    with pytest.raises(KaloscopeException) as caught:
+        asyncio.run(run())
+
+    assert isinstance(caught.value, transcoder.TranscodeStartupError)
+    message = str(caught.value)
+    assert "ffmpeg exited with code 1" in message
+    assert "Cannot create compression session" in message
+    assert source not in message
+    assert Path(source).name not in message
+    assert str(out_dir) not in message
+    finish.assert_awaited_once_with(
+        "hash:profile",
+        1,
+        (
+            "Cannot create compression session for <input>\n"
+            "<output>/segment_000000.ts was not written"
+        ),
+    )
+    release.assert_called_once_with(lock)
 
 
 def test_timeout_keeps_lock(monkeypatch, tmp_path):
