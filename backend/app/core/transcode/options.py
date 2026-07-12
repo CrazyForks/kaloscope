@@ -19,11 +19,7 @@ class EncoderConfig:
 
 HWAccelType = Literal["qsv", "vaapi", "nvenc", "videotoolbox"]
 ENCODER_CONFIG: dict[str | None, EncoderConfig] = {
-    None: EncoderConfig(
-        encoder="libx264",
-        hwaccel=None,
-        hwaccel_output_format=None,
-    ),
+    None: EncoderConfig(),
     "qsv": EncoderConfig(
         encoder="h264_qsv",
         hwaccel="qsv",
@@ -72,6 +68,7 @@ class TranscodeOptions:
     """Validated transcoding parameters for web playback.
 
     Attributes:
+        segment_length: The fixed HLS segment duration in seconds.
         hwaccel: The selected hardware acceleration strategy.
         quality: The requested quality preset.
         resolution: The maximum output resolution.
@@ -98,25 +95,30 @@ class TranscodeOptions:
 
     @property
     def encoder_config(self) -> EncoderConfig:
+        """Return the encoder configuration for the selected strategy."""
         return ENCODER_CONFIG[self.hwaccel]
 
     @property
     def encoder(self) -> str:
+        """Return the selected FFmpeg video encoder name."""
         return self.encoder_config.encoder
 
     @property
     def crf(self) -> int:
+        """Return the software encoder CRF for the selected quality."""
         return QUALITY_CRF[self.quality]
 
     @property
     def bitrate(self) -> str:
+        """Return the hardware encoder bitrate for the selected quality."""
         return HW_BITRATE[self.quality]
 
     @property
     def max_height(self) -> int | None:
+        """Return the maximum output height, or `None` for original resolution."""
         return RESOLUTION_MAX_HEIGHT[self.resolution]
 
     @property
     def profile(self) -> str:
         """Transcode profile identifier derived from the selected settings."""
-        return f"{self.quality}_{self.resolution}_{str(self.hwaccel).lower()}"
+        return f"{self.quality}_{self.resolution}_{self.hwaccel or 'none'}"

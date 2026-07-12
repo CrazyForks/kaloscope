@@ -61,7 +61,13 @@ class FFmpegExitKind(StrEnum):
 
 @dataclass(frozen=True)
 class FFmpegCompletion:
-    """Bounded FFmpeg process result shared with startup and task tracking."""
+    """Bounded FFmpeg process result shared with startup and task tracking.
+
+    Attributes:
+        returncode: The process return code, or `None` when unavailable.
+        kind: The application-level terminal classification.
+        error_detail: A bounded and redacted stderr summary.
+    """
 
     returncode: int | None
     kind: FFmpegExitKind
@@ -91,6 +97,7 @@ def _stderr_detail(data: bytes, redactions: dict[str, str] | None = None) -> str
         return None
     detail = data.decode(errors="replace")
     if redactions:
+        # longer values must be replaced before any overlapping path suffixes
         for value in sorted(redactions, key=len, reverse=True):
             if value:
                 detail = detail.replace(value, redactions[value])
@@ -217,7 +224,15 @@ def _parse_rotation(value: object) -> int | None:
 
 
 async def _probe_hdr10_plus(media_path: str, stream_index: int) -> bool:
-    """Detect HDR10+ dynamic metadata from the selected stream's first frame."""
+    """Detect HDR10+ dynamic metadata from the selected stream's first frame.
+
+    Args:
+        media_path: The media file path to probe.
+        stream_index: The selected video stream index.
+
+    Returns:
+        Whether the first decoded frame carries SMPTE ST 2094-40 metadata.
+    """
     try:
         proc = await asyncio.create_subprocess_exec(
             await _ffprobe(),
@@ -284,8 +299,8 @@ async def _probe_media(media_path: str) -> MediaProbe:
         media_path: The media file path to probe.
 
     Returns:
-        Named probe values. Each field is `None` when ffprobe exits
-        unsuccessfully or the corresponding value is invalid.
+        Named probe values. Invalid or unavailable metadata uses the
+        corresponding `MediaProbe` default.
 
     Raises:
         OSError: If the ffprobe process cannot be started.
@@ -356,15 +371,16 @@ async def _probe_media(media_path: str) -> MediaProbe:
     color_transfer = None
     color_primaries = None
     color_space = None
-    video_stream_index = None
-    audio_stream_index = None
+    video_index = None
+    audio_index = None
     dovi_profile = None
     dovi_bl_present = None
-    dovi_bl_signal_compatibility_id = None
+    dovi_compat_id = None
     hdr10_plus = False
     video_stream = None
     streams = data.get("streams")
     if isinstance(streams, list):
+        # attached pictures are skipped so playback selects the first real video
         for stream in streams:
             if not isinstance(stream, dict):
                 continue
@@ -376,8 +392,8 @@ async def _probe_media(media_path: str) -> MediaProbe:
             ):
                 continue
             codec_type = stream.get("codec_type")
-            if codec_type == "audio" and audio_stream_index is None:
-                audio_stream_index = raw_index
+            if codec_type == "audio" and audio_index is None:
+                audio_index = raw_index
             elif codec_type == "video" and video_stream is None:
                 disposition = stream.get("disposition")
                 attached_pic = (
@@ -386,7 +402,7 @@ async def _probe_media(media_path: str) -> MediaProbe:
                     else 0
                 )
                 if attached_pic not in (1, "1", True):
-                    video_stream_index = raw_index
+                    video_index = raw_index
                     video_stream = stream
 
     if video_stream is not None:
@@ -413,8 +429,8 @@ async def _probe_media(media_path: str) -> MediaProbe:
 
         raw_field_order = stream.get("field_order")
         if isinstance(raw_field_order, str):
-            normalized_field_order = raw_field_order.lower()
-            if normalized_field_order in {
+            normalized_order = raw_field_order.lower()
+            if normalized_order in {
                 "progressive",
                 "tt",
                 "bb",
@@ -422,12 +438,13 @@ async def _probe_media(media_path: str) -> MediaProbe:
                 "bt",
                 "unknown",
             }:
-                field_order = normalized_field_order
+                field_order = normalized_order
 
         raw_pixel_format = stream.get("pix_fmt")
         if isinstance(raw_pixel_format, str) and raw_pixel_format:
             pixel_format = raw_pixel_format
 
+        # explicit stream depth takes precedence over pixel-format inference
         bit_depth = (
             _optional_int(stream.get("bits_per_raw_sample"), positive=True)
             or _optional_int(stream.get("bits_per_sample"), positive=True)
@@ -466,23 +483,24 @@ async def _probe_media(media_path: str) -> MediaProbe:
                         side_data.get("dv_profile"), positive=True
                     )
                     dovi_bl_present = _optional_flag(side_data.get("bl_present_flag"))
-                    dovi_bl_signal_compatibility_id = _optional_int(
+                    dovi_compat_id = _optional_int(
                         side_data.get("dv_bl_signal_compatibility_id")
                     )
 
         avg_frame_rate = _parse_frame_rate(stream.get("avg_frame_rate"))
         r_frame_rate = _parse_frame_rate(stream.get("r_frame_rate"))
+        # frame probing is reserved for plausible PQ sources to avoid extra work
         if (
-            video_stream_index is not None
+            video_index is not None
             and bit_depth is not None
             and bit_depth >= 10
             and color_transfer is not None
             and color_transfer.lower() == "smpte2084"
         ):
-            hdr10_plus = await _probe_hdr10_plus(media_path, video_stream_index)
+            hdr10_plus = await _probe_hdr10_plus(media_path, video_index)
     return MediaProbe(
-        video_stream_index=video_stream_index,
-        audio_stream_index=audio_stream_index,
+        video_stream_index=video_index,
+        audio_stream_index=audio_index,
         height=source_height,
         width=source_width,
         sample_aspect_ratio=sample_aspect_ratio,
@@ -502,7 +520,7 @@ async def _probe_media(media_path: str) -> MediaProbe:
         hdr10_plus=hdr10_plus,
         dovi_profile=dovi_profile,
         dovi_bl_present=dovi_bl_present,
-        dovi_bl_signal_compatibility_id=dovi_bl_signal_compatibility_id,
+        dovi_bl_signal_compatibility_id=dovi_compat_id,
     )
 
 
@@ -667,6 +685,7 @@ async def ensure_transcode(
                 str(out_dir): "<output>",
             },
         )
+        # the monitor owns process cleanup and lock release after this handoff
         lock_handed_off = True
 
         if not await wait_segment(m3u8_path, proc=proc):
@@ -710,10 +729,10 @@ async def _build_hls_cmd(
     Returns:
         A list of command-line arguments ready for `asyncio.create_subprocess_exec`.
     """
-    video_stream_index = _require_video_stream(context.metadata)
+    video_index = _require_video_stream(context.metadata)
     _require_supported_hdr(context.metadata)
     _require_supported_geometry(context.metadata, context.options)
-    audio_stream_index = context.metadata.audio_stream_index
+    audio_index = context.metadata.audio_stream_index
 
     executable = (
         context.capabilities.executable
@@ -722,13 +741,12 @@ async def _build_hls_cmd(
     )
     cmd = [executable, "-hide_banner", "-loglevel", "error"]
 
-    # software scale cannot consume GPU-resident frames
-    # omit hwaccel_output_format so decoding stays in system memory
     options = context.options
 
     from app.core.transcode.hwaccels import get_hwaccel
 
     hwaccel = get_hwaccel(options.hwaccel)
+    # strategy input args decide whether decoded frames remain on the device
     cmd.extend(await hwaccel.input_args(context))
 
     cmd.extend(["-display_rotation", "0", "-noautorotate", "-i", input_path])
@@ -745,9 +763,9 @@ async def _build_hls_cmd(
         ]
     )
 
-    cmd.extend(["-map", f"0:{video_stream_index}"])
-    if audio_stream_index is not None:
-        cmd.extend(["-map", f"0:{audio_stream_index}"])
+    cmd.extend(["-map", f"0:{video_index}"])
+    if audio_index is not None:
+        cmd.extend(["-map", f"0:{audio_index}"])
     else:
         cmd.append("-an")
 
@@ -769,6 +787,7 @@ async def _build_hls_cmd(
         context.capabilities is None
         or context.capabilities.supports_bsf("h264_metadata")
     ):
+        # tone-mapped output must advertise SDR color metadata
         cmd.extend(
             [
                 "-bsf:v",
@@ -782,7 +801,8 @@ async def _build_hls_cmd(
 
     cmd.extend(hwaccel.keyframe_args(context))
 
-    if audio_stream_index is not None:
+    if audio_index is not None:
+        # web playback uses one normalized AAC stereo track
         cmd.extend(
             [
                 "-c:a",
@@ -802,6 +822,7 @@ async def _build_hls_cmd(
 
     m3u8_path = str(out_dir / "index.m3u8")
     segment_pattern = str(out_dir / "segment_%06d.ts")
+    # event playlists expose completed segments while encoding continues
     cmd.extend(
         [
             "-f",

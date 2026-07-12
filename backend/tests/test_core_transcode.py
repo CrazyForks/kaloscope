@@ -1384,7 +1384,7 @@ def test_transcode_context_frame_rate_stability(
     ],
 )
 def test_hardware_decode_candidate(metadata, expected):
-    assert base_module.is_hardware_decode_candidate(metadata) is expected
+    assert base_module._is_decode_candidate(metadata) is expected
 
 
 def test_context_uses_prepared_hardware_decode_result():
@@ -1403,9 +1403,9 @@ def test_context_uses_prepared_hardware_decode_result():
     )
     unprepared = TranscodeContext(options=options, capabilities=capabilities)
 
-    assert enabled.uses_hardware_decode is True
-    assert disabled.uses_hardware_decode is False
-    assert unprepared.uses_hardware_decode is True
+    assert enabled.uses_hw_decode is True
+    assert disabled.uses_hw_decode is False
+    assert unprepared.uses_hw_decode is True
 
 
 def _eligible_hardware_context(hwaccel, *, capabilities=None, resolution="original"):
@@ -1538,13 +1538,13 @@ def test_prepare_hardware_probes_source_transform_graph(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         strategy,
-        "hardware_transform_filters",
+        "transform_filters",
         Mock(return_value=["transpose_cuda=dir=clock"]),
         raising=False,
     )
     monkeypatch.setattr(
         strategy,
-        "hardware_transform_filter_names",
+        "transform_filter_names",
         Mock(return_value={"transpose_cuda"}),
         raising=False,
     )
@@ -1591,13 +1591,13 @@ def test_prepare_hardware_missing_transform_filter_uses_cpu(monkeypatch, tmp_pat
     )
     monkeypatch.setattr(
         strategy,
-        "hardware_transform_filters",
+        "transform_filters",
         Mock(return_value=["transpose_cuda=dir=clock"]),
         raising=False,
     )
     monkeypatch.setattr(
         strategy,
-        "hardware_transform_filter_names",
+        "transform_filter_names",
         Mock(return_value={"transpose_cuda"}),
         raising=False,
     )
@@ -1682,7 +1682,7 @@ def test_scaled_transform_success_builds_hardware_frame_command(
     monkeypatch.setattr(base_module, "probe_hardware_transform", probe_transform)
     monkeypatch.setattr(
         strategy,
-        "resolve_hardware_device",
+        "resolve_device",
         AsyncMock(return_value=device),
     )
     context = _eligible_hardware_context(hwaccel, resolution="720p")
@@ -1743,7 +1743,7 @@ def test_ten_bit_sdr_scale_probe_uses_transform_output_format(
     monkeypatch.setattr(base_module, "probe_hardware_transform", probe_transform)
     monkeypatch.setattr(
         strategy,
-        "resolve_hardware_device",
+        "resolve_device",
         AsyncMock(return_value=device),
     )
     context = _eligible_hardware_context(hwaccel, resolution="720p")
@@ -1840,7 +1840,7 @@ def test_scaled_transform_fallback_builds_cpu_scale_command(
     monkeypatch.setattr(base_module, "probe_hardware_transform", probe_transform)
     monkeypatch.setattr(
         strategy,
-        "resolve_hardware_device",
+        "resolve_device",
         AsyncMock(return_value=device),
     )
     capabilities = _capabilities()
@@ -1921,7 +1921,7 @@ def test_scaled_unsupported_source_keeps_hardware_encoder(
     monkeypatch.setattr(base_module, "probe_hardware_transform", probe_transform)
     monkeypatch.setattr(
         strategy,
-        "resolve_hardware_device",
+        "resolve_device",
         AsyncMock(return_value=device),
     )
     context = _eligible_hardware_context(hwaccel, resolution="720p")
@@ -2038,7 +2038,7 @@ def test_transform_fallback_builds_system_memory_command(
     monkeypatch.setattr(base_module, "probe_hardware_transform", probe_transform)
     monkeypatch.setattr(
         strategy,
-        "resolve_hardware_device",
+        "resolve_device",
         AsyncMock(return_value=device),
     )
     capabilities = _capabilities()
@@ -2115,7 +2115,7 @@ def test_runtime_decode_failure_builds_software_decode_command(
     )
     monkeypatch.setattr(
         strategy,
-        "resolve_hardware_device",
+        "resolve_device",
         AsyncMock(return_value=device),
     )
     context = _eligible_hardware_context(hwaccel)
@@ -2276,7 +2276,7 @@ def test_prepare_hardware_skips_ineligible_decode(monkeypatch, tmp_path, case):
     )
 
     assert runtime is not None
-    assert runtime.can_decode_source is False
+    assert runtime.can_decode is False
     require_encoder.assert_awaited_once()
     probe_decode.assert_not_awaited()
 
@@ -2554,8 +2554,8 @@ def test_context_detects_hdr(hdr_type, is_hdr10, is_hlg, needs_tonemap):
         "resolution",
         "display",
         "target",
-        "needs_resolution_scale",
-        "needs_sar_normalization",
+        "needs_downscale",
+        "needs_square_pixels",
     ),
     [
         (1920, 1080, None, 0, "720p", (1920, 1080), (1280, 720), True, False),
@@ -2604,8 +2604,8 @@ def test_context_uses_display_geometry(
     resolution,
     display,
     target,
-    needs_resolution_scale,
-    needs_sar_normalization,
+    needs_downscale,
+    needs_square_pixels,
 ):
     context = TranscodeContext(
         options=TranscodeOptions(resolution=resolution),
@@ -2620,8 +2620,8 @@ def test_context_uses_display_geometry(
     assert (context.display_width, context.display_height) == tuple(
         Fraction(value) for value in display
     )
-    assert context.needs_resolution_scale is needs_resolution_scale
-    assert context.needs_sar_normalization is needs_sar_normalization
+    assert context.needs_downscale is needs_downscale
+    assert context.needs_square_pixels is needs_square_pixels
     assert context.needs_scale is (target is not None)
     if target is None:
         assert context.scale_width is None
@@ -2662,7 +2662,7 @@ def test_context_uses_display_geometry(
         ("unknown", 0, None, []),
     ],
 )
-def test_software_geometry_filters(field_order, rotation, sar, expected):
+def test_cpu_geometry_filters(field_order, rotation, sar, expected):
     context = TranscodeContext(
         options=TranscodeOptions(),
         metadata=MediaProbe(
@@ -2674,7 +2674,7 @@ def test_software_geometry_filters(field_order, rotation, sar, expected):
         ),
     )
 
-    assert base_module.software_geometry_filters(context) == expected
+    assert base_module.cpu_geometry_filters(context) == expected
 
 
 def _capabilities(
@@ -3774,7 +3774,7 @@ def test_vaapi_scaled_hdr10_probe_preserves_p010(monkeypatch, tmp_path):
     monkeypatch.setattr(base_module, "probe_hardware_transform", probe_transform)
     monkeypatch.setattr(
         strategy,
-        "resolve_hardware_device",
+        "resolve_device",
         AsyncMock(return_value=device),
     )
     context = _hdr_context(

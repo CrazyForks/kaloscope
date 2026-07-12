@@ -104,9 +104,12 @@ def parse_profile(profile: str) -> ProfileTags:
     """
     quality, sep1, rest = profile.partition("_")
     resolution, sep2, hwaccel = rest.rpartition("_")
-    if not sep1 or not sep2:
-        return {"quality": None, "resolution": None, "hwaccel": None}
-    if quality not in QUALITY_CRF or resolution not in RESOLUTION_MAX_HEIGHT:
+    if (
+        not sep1
+        or not sep2
+        or quality not in QUALITY_CRF
+        or resolution not in RESOLUTION_MAX_HEIGHT
+    ):
         return {"quality": None, "resolution": None, "hwaccel": None}
 
     hwaccel = hwaccel.lower()

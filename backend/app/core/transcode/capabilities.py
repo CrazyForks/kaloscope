@@ -18,16 +18,24 @@ _LISTING_OPTIONS = {
 }
 
 _CAPABILITY_CACHE: dict[tuple[str, str], "FFmpegCapabilities"] = {}
-_HARDWARE_ENCODER_CACHE: set[tuple[str, str, str | None]] = set()
-_HARDWARE_DECODE_CACHE: set[tuple[str, str, str | None, str, int, int, int]] = set()
-_HARDWARE_TRANSFORM_CACHE: set[tuple[str, str, str | None, str, int, int, int, str]] = (
-    set()
-)
+_HW_ENCODER_CACHE: set[tuple[str, str, str | None]] = set()
+_HW_DECODE_CACHE: set[tuple[str, str, str | None, str, int, int, int]] = set()
+_HW_TRANSFORM_CACHE: set[tuple[str, str, str | None, str, int, int, int, str]] = set()
 
 
 @dataclass(frozen=True)
 class FFmpegCapabilities:
-    """Capabilities advertised by one FFmpeg executable and video encoder."""
+    """Capabilities advertised by one FFmpeg executable and video encoder.
+
+    Attributes:
+        executable: The executable name or path, resolved absolutely when available.
+        encoders: The advertised audio and video encoder names.
+        filters: The advertised filter names.
+        hwaccels: The advertised hardware acceleration methods.
+        bsfs: The advertised bitstream filter names.
+        muxers: The advertised output muxer names.
+        encoder_options: The selected encoder's private option names.
+    """
 
     executable: str
     encoders: frozenset[str]
@@ -38,21 +46,27 @@ class FFmpegCapabilities:
     encoder_options: frozenset[str]
 
     def supports_encoder(self, name: str) -> bool:
+        """Return whether FFmpeg advertises an encoder."""
         return name in self.encoders
 
     def supports_filter(self, name: str) -> bool:
+        """Return whether FFmpeg advertises a filter."""
         return name in self.filters
 
     def supports_hwaccel(self, name: str) -> bool:
+        """Return whether FFmpeg advertises a hardware acceleration method."""
         return name in self.hwaccels
 
     def supports_bsf(self, name: str) -> bool:
+        """Return whether FFmpeg advertises a bitstream filter."""
         return name in self.bsfs
 
     def supports_muxer(self, name: str) -> bool:
+        """Return whether FFmpeg advertises an output muxer."""
         return name in self.muxers
 
     def supports_encoder_option(self, name: str) -> bool:
+        """Return whether the selected encoder advertises a private option."""
         return name in self.encoder_options
 
 
@@ -125,9 +139,8 @@ async def _read_stderr_tail(stream: asyncio.StreamReader) -> bytes:
     tail = bytearray()
     while chunk := await stream.read(4096):
         tail.extend(chunk)
-        overflow = len(tail) - _RUNTIME_STDERR_LIMIT
-        if overflow > 0:
-            del tail[:overflow]
+        if len(tail) > _RUNTIME_STDERR_LIMIT:
+            del tail[:-_RUNTIME_STDERR_LIMIT]
     return bytes(tail)
 
 
@@ -171,6 +184,7 @@ async def _run_ffmpeg_probe(executable: str, args: list[str]) -> tuple[bool, str
 
 
 def _resolved_executable(executable: str) -> str:
+    """Return a stable absolute executable path when one can be resolved."""
     resolved = shutil.which(executable)
     if resolved:
         return str(Path(resolved).resolve())
@@ -184,10 +198,21 @@ async def require_hardware_encoder(
     device: str | None,
     args: list[str],
 ) -> None:
-    """Require one hardware encoder/device combination to encode a frame."""
+    """Require one hardware encoder and device combination to encode a frame.
+
+    Args:
+        executable: The FFmpeg executable name or path.
+        strategy: The hardware strategy identifier.
+        encoder: The selected FFmpeg video encoder.
+        device: The selected hardware device identifier.
+        args: The one-frame encoder probe arguments.
+
+    Raises:
+        RuntimeError: If the encoder probe cannot produce one frame.
+    """
     executable = _resolved_executable(executable)
     key = (executable, strategy, device)
-    if key in _HARDWARE_ENCODER_CACHE:
+    if key in _HW_ENCODER_CACHE:
         return
     success, detail = await _run_ffmpeg_probe(executable, args)
     if not success:
@@ -196,7 +221,7 @@ async def require_hardware_encoder(
             f"Hardware encoder '{encoder}' is unavailable for {strategy} "
             f"on device '{device or 'default'}'{suffix}"
         )
-    _HARDWARE_ENCODER_CACHE.add(key)
+    _HW_ENCODER_CACHE.add(key)
 
 
 def _decode_cache_key(
@@ -206,6 +231,7 @@ def _decode_cache_key(
     media_path: str,
     stream_index: int,
 ) -> tuple[str, str, str | None, str, int, int, int] | None:
+    """Build a source-state cache key for one hardware decode probe."""
     path = Path(media_path).resolve()
     try:
         stat = path.stat()
@@ -230,7 +256,19 @@ async def probe_hardware_decode(
     stream_index: int,
     args: list[str],
 ) -> bool:
-    """Probe source hardware decoding and cache successful file states."""
+    """Probe source hardware decoding and cache successful file states.
+
+    Args:
+        executable: The FFmpeg executable name or path.
+        strategy: The hardware strategy identifier.
+        device: The selected hardware device identifier.
+        media_path: The source media path.
+        stream_index: The selected video stream index.
+        args: The one-frame decode probe arguments.
+
+    Returns:
+        Whether the source frame decoded and downloaded successfully.
+    """
     executable = _resolved_executable(executable)
     key = _decode_cache_key(
         executable,
@@ -239,11 +277,11 @@ async def probe_hardware_decode(
         media_path,
         stream_index,
     )
-    if key is not None and key in _HARDWARE_DECODE_CACHE:
+    if key is not None and key in _HW_DECODE_CACHE:
         return True
     success, _ = await _run_ffmpeg_probe(executable, args)
     if success and key is not None:
-        _HARDWARE_DECODE_CACHE.add(key)
+        _HW_DECODE_CACHE.add(key)
     return success
 
 
@@ -256,7 +294,20 @@ async def probe_hardware_transform(
     signature: str,
     args: list[str],
 ) -> bool:
-    """Probe a source hardware-filter graph and cache successful file states."""
+    """Probe a source hardware-filter graph and cache successful file states.
+
+    Args:
+        executable: The FFmpeg executable name or path.
+        strategy: The hardware strategy identifier.
+        device: The selected hardware device identifier.
+        media_path: The source media path.
+        stream_index: The selected video stream index.
+        signature: The hardware filter graph string used in cache keys.
+        args: The one-frame transform probe arguments.
+
+    Returns:
+        Whether the source frame completed every requested hardware transform.
+    """
     executable = _resolved_executable(executable)
     decode_key = _decode_cache_key(
         executable,
@@ -266,16 +317,28 @@ async def probe_hardware_transform(
         stream_index,
     )
     key = (*decode_key, signature) if decode_key is not None else None
-    if key is not None and key in _HARDWARE_TRANSFORM_CACHE:
+    if key is not None and key in _HW_TRANSFORM_CACHE:
         return True
     success, _ = await _run_ffmpeg_probe(executable, args)
     if success and key is not None:
-        _HARDWARE_TRANSFORM_CACHE.add(key)
+        _HW_TRANSFORM_CACHE.add(key)
     return success
 
 
 async def load_ffmpeg_capabilities(executable: str, encoder: str) -> FFmpegCapabilities:
-    """Discover and cache FFmpeg capabilities for the selected video encoder."""
+    """Discover and cache FFmpeg capabilities for the selected video encoder.
+
+    Args:
+        executable: The FFmpeg executable name or path.
+        encoder: The selected video encoder name.
+
+    Returns:
+        The cached or newly discovered capability snapshot.
+
+    Raises:
+        OSError: If the FFmpeg process cannot be started.
+        RuntimeError: If an FFmpeg capability query fails or times out.
+    """
     executable = _resolved_executable(executable)
     key = (executable, encoder)
     cached = _CAPABILITY_CACHE.get(key)
@@ -292,6 +355,7 @@ async def load_ffmpeg_capabilities(executable: str, encoder: str) -> FFmpegCapab
     }
 
     encoder_options: frozenset[str] = frozenset()
+    # private option help is only valid for encoders present in this build
     if encoder in listings["encoders"]:
         help_output = await _query_ffmpeg(executable, "-h", f"encoder={encoder}")
         encoder_options = frozenset(_parse_encoder_options(help_output))
@@ -312,6 +376,6 @@ async def load_ffmpeg_capabilities(executable: str, encoder: str) -> FFmpegCapab
 def clear_ffmpeg_capability_cache() -> None:
     """Clear cached capability snapshots, primarily for configuration changes."""
     _CAPABILITY_CACHE.clear()
-    _HARDWARE_ENCODER_CACHE.clear()
-    _HARDWARE_DECODE_CACHE.clear()
-    _HARDWARE_TRANSFORM_CACHE.clear()
+    _HW_ENCODER_CACHE.clear()
+    _HW_DECODE_CACHE.clear()
+    _HW_TRANSFORM_CACHE.clear()

@@ -30,7 +30,32 @@ class HDRType(StrEnum):
 
 @dataclass(frozen=True)
 class MediaProbe:
-    """Selected stream indexes and metadata probed from a media container."""
+    """Selected stream indexes and metadata probed from a media container.
+
+    Attributes:
+        video_stream_index: The selected video stream index.
+        audio_stream_index: The selected audio stream index.
+        height: The encoded video height in pixels.
+        width: The encoded video width in pixels.
+        sample_aspect_ratio: The source sample aspect ratio.
+        rotation: The normalized clockwise display rotation in degrees.
+        field_order: The FFmpeg field-order identifier.
+        duration: The container duration in seconds.
+        avg_frame_rate: The average video frame rate.
+        r_frame_rate: The base video frame rate.
+        codec: The probed FFmpeg video codec name.
+        profile: The video codec profile.
+        pixel_format: The source pixel format.
+        bit_depth: The effective source bit depth.
+        color_range: The source color range.
+        color_transfer: The source transfer characteristic.
+        color_primaries: The source color primaries.
+        color_space: The source matrix coefficients.
+        hdr10_plus: Whether HDR10+ dynamic metadata was detected.
+        dovi_profile: The Dolby Vision profile number.
+        dovi_bl_present: Whether a Dolby Vision base layer is present.
+        dovi_bl_signal_compatibility_id: The base-layer compatibility identifier.
+    """
 
     video_stream_index: int | None = None
     audio_stream_index: int | None = None
@@ -58,19 +83,33 @@ class MediaProbe:
 
 @dataclass(frozen=True)
 class HardwareRuntime:
-    """Prepared hardware device and source decode decision."""
+    """Prepared hardware device and source-specific runtime decisions.
+
+    Attributes:
+        device: The selected hardware device identifier.
+        can_decode: Whether the source passed hardware decode probing.
+        can_filter: Whether the required hardware transforms passed probing.
+    """
 
     device: str | None
-    can_decode_source: bool
-    can_filter_source: bool = False
+    can_decode: bool
+    can_filter: bool = False
 
 
 def _normalized_profile(value: str) -> str:
+    """Normalize a codec profile for case-insensitive capability matching."""
     return value.lower().replace(" ", "").replace("_", "").replace("-", "")
 
 
-def is_hardware_decode_candidate(metadata: MediaProbe) -> bool:
-    """Return whether source metadata is safe to verify for hardware decode."""
+def _is_decode_candidate(metadata: MediaProbe) -> bool:
+    """Return whether source metadata is safe to verify for hardware decode.
+
+    Args:
+        metadata: The selected source stream metadata.
+
+    Returns:
+        Whether codec, profile, depth, and pixel format form a supported candidate.
+    """
     codec = (metadata.codec or "").lower()
     profile = metadata.profile
     pixel_format = (metadata.pixel_format or "").lower()
@@ -102,7 +141,14 @@ def is_hardware_decode_candidate(metadata: MediaProbe) -> bool:
 
 
 def classify_hdr(metadata: MediaProbe) -> HDRType:
-    """Classify HDR metadata without guessing from incomplete HDR signals."""
+    """Classify HDR metadata without guessing from incomplete HDR signals.
+
+    Args:
+        metadata: The selected source stream metadata.
+
+    Returns:
+        The HDR subtype inferred from transfer, color, depth, and Dolby Vision data.
+    """
     transfer = (metadata.color_transfer or "").lower()
     is_pq = transfer == "smpte2084"
     is_hlg = transfer == "arib-std-b67"
@@ -116,6 +162,7 @@ def classify_hdr(metadata: MediaProbe) -> HDRType:
     )
 
     if metadata.dovi_profile is not None:
+        # only compatible base layers can be decoded without Dolby Vision processing
         has_compatible_base_layer = metadata.dovi_bl_present is True and (
             metadata.dovi_bl_signal_compatibility_id == 1
             or (
@@ -132,6 +179,7 @@ def classify_hdr(metadata: MediaProbe) -> HDRType:
     if not has_hdr_signal:
         return HDRType.SDR
 
+    # incomplete HDR signaling must not trigger an unsafe tone-map assumption
     if not has_valid_hdr_color:
         return HDRType.UNKNOWN
     if is_pq:
@@ -142,7 +190,14 @@ def classify_hdr(metadata: MediaProbe) -> HDRType:
 
 
 def segment_keyframe_args(context: "TranscodeContext") -> list[str]:
-    """Build timestamp-based closed-GOP options for HLS segment boundaries."""
+    """Build timestamp-based closed-GOP options for HLS segment boundaries.
+
+    Args:
+        context: The runtime transcode context.
+
+    Returns:
+        FFmpeg options for forced keyframes and closed GOP signaling.
+    """
     segment_length = context.options.segment_length
     return [
         "-force_key_frames:0",
@@ -154,7 +209,14 @@ def segment_keyframe_args(context: "TranscodeContext") -> list[str]:
 
 @dataclass
 class TranscodeContext:
-    """Runtime context used to build a transcode command."""
+    """Runtime context used to build a transcode command.
+
+    Attributes:
+        options: The validated user-selected transcode options.
+        metadata: The selected source stream metadata.
+        capabilities: The discovered FFmpeg capability snapshot.
+        hardware: The source-specific hardware preparation result.
+    """
 
     options: TranscodeOptions
     metadata: MediaProbe = field(default_factory=MediaProbe)
@@ -163,6 +225,7 @@ class TranscodeContext:
 
     @property
     def source_framerate(self) -> Fraction | None:
+        """Return a positive average source frame rate when available."""
         value = self.metadata.avg_frame_rate
         return value if value is not None and value > 0 else None
 
@@ -185,38 +248,46 @@ class TranscodeContext:
 
     @property
     def source_pixel_format(self) -> str | None:
+        """Return the probed source pixel format."""
         return self.metadata.pixel_format
 
     @property
     def source_height(self) -> int | None:
+        """Return the encoded source height in pixels."""
         return self.metadata.height
 
     @property
     def source_width(self) -> int | None:
+        """Return the encoded source width in pixels."""
         return self.metadata.width
 
     @property
     def source_sar(self) -> tuple[int, int]:
+        """Return the source sample aspect ratio with a square-pixel default."""
         return self.metadata.sample_aspect_ratio or (1, 1)
 
     @property
     def rotation(self) -> int:
+        """Return the normalized clockwise source rotation in degrees."""
         return self.metadata.rotation or 0
 
     @property
     def display_width(self) -> Fraction | None:
+        """Return the displayed width after sample aspect ratio and rotation."""
         width = self.source_width
         height = self.source_height
         if width is None or height is None:
             return None
         numerator, denominator = self.source_sar
         display_width = Fraction(width * numerator, denominator)
+        # quarter-turn rotation swaps the display axes
         if self.rotation in {90, 270}:
             return Fraction(height)
         return display_width
 
     @property
     def display_height(self) -> Fraction | None:
+        """Return the displayed height after sample aspect ratio and rotation."""
         width = self.source_width
         height = self.source_height
         if width is None or height is None:
@@ -227,7 +298,8 @@ class TranscodeContext:
         return Fraction(height)
 
     @property
-    def needs_resolution_scale(self) -> bool:
+    def needs_downscale(self) -> bool:
+        """Return whether displayed height exceeds the requested limit."""
         max_height = self.options.max_height
         if max_height is None:
             return False
@@ -235,23 +307,28 @@ class TranscodeContext:
         return display_height is None or display_height > max_height
 
     @property
-    def needs_sar_normalization(self) -> bool:
+    def needs_square_pixels(self) -> bool:
+        """Return whether output must be converted to square pixels."""
         return self.source_sar != (1, 1)
 
     @property
     def needs_scale(self) -> bool:
-        return self.needs_resolution_scale or self.needs_sar_normalization
+        """Return whether resolution or sample aspect ratio requires scaling."""
+        return self.needs_downscale or self.needs_square_pixels
 
     @property
     def needs_rotation(self) -> bool:
+        """Return whether source display rotation requires a transform."""
         return self.rotation in {90, 180, 270}
 
     @property
     def is_interlaced(self) -> bool:
+        """Return whether source metadata identifies interlaced fields."""
         return self.metadata.field_order in {"tt", "tb", "bb", "bt"}
 
     @property
     def field_parity(self) -> str | None:
+        """Return the FFmpeg deinterlace parity for the source field order."""
         if self.metadata.field_order in {"tt", "tb"}:
             return "tff"
         if self.metadata.field_order in {"bb", "bt"}:
@@ -260,6 +337,7 @@ class TranscodeContext:
 
     @property
     def scale_height(self) -> str | None:
+        """Return an even output height expression or fixed pixel value."""
         max_height = self.options.max_height
         if not self.needs_scale:
             return None
@@ -271,11 +349,13 @@ class TranscodeContext:
         target = display_height
         if max_height is not None:
             target = min(target, Fraction(max_height))
+        # chroma-subsampled output requires an even height
         aligned = max(int(target) // 2 * 2, 2)
         return str(aligned)
 
     @property
     def scale_width(self) -> str | None:
+        """Return a 16-pixel-aligned output width expression or value."""
         height = self.scale_height
         if height is None:
             return None
@@ -284,15 +364,18 @@ class TranscodeContext:
         if display_width is None or display_height is None:
             return f"max(trunc(iw*{height}/ih/16)*16,16)"
         target = display_width * int(height) / display_height
+        # align output width to a 16-pixel boundary
         aligned = max(int(target) // 16 * 16, 16)
         return str(aligned)
 
     @property
     def hdr_type(self) -> HDRType:
+        """Return the classified source HDR subtype."""
         return classify_hdr(self.metadata)
 
     @property
     def is_hdr10(self) -> bool:
+        """Return whether the source carries a PQ-compatible HDR base layer."""
         return self.hdr_type in {
             HDRType.HDR10,
             HDRType.HDR10_PLUS,
@@ -301,10 +384,12 @@ class TranscodeContext:
 
     @property
     def is_hlg(self) -> bool:
+        """Return whether the source uses Hybrid Log-Gamma transfer."""
         return self.hdr_type is HDRType.HLG
 
     @property
     def needs_tonemap(self) -> bool:
+        """Return whether the source must be converted from HDR to SDR."""
         return self.hdr_type in {
             HDRType.HDR10,
             HDRType.HLG,
@@ -314,6 +399,7 @@ class TranscodeContext:
 
     @property
     def encoder_config(self) -> EncoderConfig:
+        """Return the encoder configuration selected by transcode options."""
         return self.options.encoder_config
 
     def supports_filter(self, name: str) -> bool:
@@ -339,29 +425,36 @@ class TranscodeContext:
             )
 
     @property
-    def uses_hardware_decode(self) -> bool:
+    def uses_hw_decode(self) -> bool:
         """Return whether the selected strategy can request hardware decoding."""
         if self.hardware is not None:
-            return self.hardware.can_decode_source
+            return self.hardware.can_decode
         hwaccel = self.encoder_config.hwaccel
         return hwaccel is not None and self.supports_hwaccel(hwaccel)
 
     @property
-    def uses_hardware_filters(self) -> bool:
-        return self.hardware is not None and self.hardware.can_filter_source
+    def uses_hw_filters(self) -> bool:
+        """Return whether source-specific hardware transforms passed probing."""
+        return self.hardware is not None and self.hardware.can_filter
 
     @property
-    def needs_software_geometry(self) -> bool:
+    def needs_cpu_geometry(self) -> bool:
+        """Return whether geometry transforms must run in system memory."""
         return self.needs_scale or (
-            (self.needs_rotation or self.is_interlaced)
-            and not self.uses_hardware_filters
+            (self.needs_rotation or self.is_interlaced) and not self.uses_hw_filters
         )
 
 
-def software_tonemap_filters(
-    context: TranscodeContext, output_format: str
-) -> list[str]:
-    """Build a standard-FFmpeg CPU HDR-to-SDR filter chain."""
+def cpu_tonemap_filters(context: TranscodeContext, output_format: str) -> list[str]:
+    """Build a standard-FFmpeg CPU HDR-to-SDR filter chain.
+
+    Args:
+        context: The runtime transcode context.
+        output_format: The final software pixel format.
+
+    Returns:
+        Ordered filters for linearization, tone mapping, and BT.709 conversion.
+    """
     linear = "zscale=transfer=linear:npl=100"
     width = context.scale_width
     height = context.scale_height
@@ -376,10 +469,18 @@ def software_tonemap_filters(
     ]
 
 
-def software_geometry_filters(
+def cpu_geometry_filters(
     context: TranscodeContext, *, include_scale: bool = True
 ) -> list[str]:
-    """Build ordered system-memory deinterlace, rotation, and scale filters."""
+    """Build ordered system-memory deinterlace, rotation, and scale filters.
+
+    Args:
+        context: The runtime transcode context.
+        include_scale: Whether to append scale and square-pixel normalization.
+
+    Returns:
+        Ordered software geometry filter expressions.
+    """
     filters: list[str] = []
     parity = context.field_parity
     if parity is not None:
@@ -405,8 +506,15 @@ def software_geometry_filters(
     return filters
 
 
-def hardware_rotation_direction(rotation: int) -> str | None:
-    """Map clockwise right-angle rotation to FFmpeg hardware filter direction."""
+def rotation_direction(rotation: int) -> str | None:
+    """Map clockwise rotation to an FFmpeg hardware filter direction.
+
+    Args:
+        rotation: The clockwise rotation in degrees.
+
+    Returns:
+        The hardware-filter direction, or `None` when no rotation is needed.
+    """
     return {90: "clock", 180: "reversal", 270: "cclock"}.get(rotation)
 
 
@@ -433,7 +541,7 @@ async def resolve_vaapi_device() -> str | None:
 class HWAccelStrategy(ABC):
     """Base interface for FFmpeg hardware acceleration strategies."""
 
-    async def resolve_hardware_device(self, context: TranscodeContext) -> str | None:
+    async def resolve_device(self, context: TranscodeContext) -> str | None:
         """Resolve the device used by this hardware strategy."""
         return None
 
@@ -456,32 +564,41 @@ class HWAccelStrategy(ABC):
             "-",
         ]
 
-    def allows_hardware_decode(self, context: TranscodeContext) -> bool:
+    def allows_decode(self, context: TranscodeContext) -> bool:
         """Return whether this strategy may probe hardware source decoding."""
-        return is_hardware_decode_candidate(context.metadata)
+        return _is_decode_candidate(context.metadata)
 
-    def hardware_transform_filters(self, context: TranscodeContext) -> list[str]:
+    def transform_filters(self, context: TranscodeContext) -> list[str]:
         """Build optional source-specific hardware transform filters."""
         return []
 
-    def hardware_transform_filter_names(self, context: TranscodeContext) -> set[str]:
+    def transform_filter_names(self, context: TranscodeContext) -> set[str]:
         """Return advertised filter names required by hardware transforms."""
         return set()
 
-    def hardware_transform_download_format(self, context: TranscodeContext) -> str:
+    def transform_download_format(self, context: TranscodeContext) -> str:
         """Return the software pixel format produced by the transform probe."""
         return "p010le" if context.metadata.bit_depth == 10 else "nv12"
 
-    def keeps_hardware_decode_on_transform_fallback(
-        self, context: TranscodeContext
-    ) -> bool:
+    def keep_decode_on_fallback(self, context: TranscodeContext) -> bool:
         """Return whether CPU filters can consume downloaded hardware decode."""
         return True
 
     async def prepare_hardware(
         self, context: TranscodeContext, media_path: str
     ) -> HardwareRuntime | None:
-        """Validate hardware encoding and choose decoding for one source."""
+        """Validate hardware encoding and choose decoding for one source.
+
+        Args:
+            context: The runtime transcode context.
+            media_path: The source media path used by runtime probes.
+
+        Returns:
+            Source-specific hardware decisions, or `None` for software encoding.
+
+        Raises:
+            RuntimeError: If mandatory encoder, device, or FFmpeg support is absent.
+        """
         strategy = context.options.hwaccel
         if strategy is None:
             return None
@@ -495,7 +612,8 @@ class HWAccelStrategy(ABC):
                 f"capabilities: encoders: {encoder}"
             )
 
-        device = await self.resolve_hardware_device(context)
+        device = await self.resolve_device(context)
+        # encoder probing fails early before source-specific decode decisions
         await require_hardware_encoder(
             capabilities.executable,
             strategy,
@@ -508,7 +626,7 @@ class HWAccelStrategy(ABC):
         if (
             hwaccel is None
             or not context.supports_hwaccel(hwaccel)
-            or not self.allows_hardware_decode(context)
+            or not self.allows_decode(context)
         ):
             return HardwareRuntime(device, False)
 
@@ -522,9 +640,7 @@ class HWAccelStrategy(ABC):
         output_format = context.encoder_config.hwaccel_output_format
         if output_format and "-hwaccel_output_format" not in input_args:
             input_args.extend(["-hwaccel_output_format", output_format])
-        decode_download_format = (
-            "p010le" if context.metadata.bit_depth == 10 else "nv12"
-        )
+        decode_format = "p010le" if context.metadata.bit_depth == 10 else "nv12"
         decode_args = [
             *input_args,
             "-noautorotate",
@@ -538,7 +654,7 @@ class HWAccelStrategy(ABC):
             "-sn",
             "-dn",
             "-vf",
-            f"hwdownload,format={decode_download_format}",
+            f"hwdownload,format={decode_format}",
             "-f",
             "null",
             "-",
@@ -565,24 +681,22 @@ class HWAccelStrategy(ABC):
             return runtime
 
         transform_context = replace(context, hardware=runtime)
-        transform_filters = self.hardware_transform_filters(transform_context)
+        transform_filters = self.transform_filters(transform_context)
         if not transform_filters:
             return runtime
-        required_filters = self.hardware_transform_filter_names(transform_context)
+        required_filters = self.transform_filter_names(transform_context)
+        # missing optional hardware filters fall back to the strategy's CPU path
         if any(not context.supports_filter(name) for name in required_filters):
             return HardwareRuntime(
                 device,
-                can_decode
-                and self.keeps_hardware_decode_on_transform_fallback(context),
+                self.keep_decode_on_fallback(context),
             )
 
         filter_runtime = HardwareRuntime(device, True, True)
         filter_context = replace(context, hardware=filter_runtime)
         input_args = await self.input_args(filter_context)
         signature = ",".join(transform_filters)
-        transform_download_format = self.hardware_transform_download_format(
-            filter_context
-        )
+        transform_format = self.transform_download_format(filter_context)
         transform_args = [
             *input_args,
             "-noautorotate",
@@ -596,7 +710,7 @@ class HWAccelStrategy(ABC):
             "-sn",
             "-dn",
             "-vf",
-            f"{signature},hwdownload,format={transform_download_format}",
+            f"{signature},hwdownload,format={transform_format}",
             "-f",
             "null",
             "-",
@@ -620,7 +734,7 @@ class HWAccelStrategy(ABC):
             )
         return HardwareRuntime(
             device,
-            can_filter or self.keeps_hardware_decode_on_transform_fallback(context),
+            can_filter or self.keep_decode_on_fallback(context),
             can_filter,
         )
 
@@ -633,7 +747,7 @@ class HWAccelStrategy(ABC):
         Returns:
             Whether to keep hardware frames.
         """
-        if context.uses_hardware_filters:
+        if context.uses_hw_filters:
             return True
         return not (
             context.needs_scale or context.needs_rotation or context.is_interlaced
@@ -642,11 +756,11 @@ class HWAccelStrategy(ABC):
     async def input_args(self, context: TranscodeContext) -> list[str]:
         """Build FFmpeg input options for hardware-accelerated decoding.
 
-        The returned arguments are inserted before the input file. When CPU
-        scaling is required, the configured hardware output format is omitted
-        so decoded frames remain accessible to software filters. This method is
-        asynchronous to allow implementations to discover or initialize a
-        hardware device before building the command.
+        The returned arguments are inserted before the input file. Hardware
+        frames remain on-device when the prepared strategy can perform all
+        required transforms; otherwise decoded frames remain accessible to
+        software filters. This method is asynchronous to allow implementations
+        to discover or initialize a hardware device before building the command.
 
         Args:
             context: The runtime transcode context.
@@ -656,7 +770,7 @@ class HWAccelStrategy(ABC):
         """
         cmd: list[str] = []
         config = context.encoder_config
-        if config.hwaccel and context.uses_hardware_decode:
+        if config.hwaccel and context.uses_hw_decode:
             cmd.extend(["-hwaccel", config.hwaccel])
             if config.hwaccel_output_format and self.keep_hardware_frames(context):
                 cmd.extend(["-hwaccel_output_format", config.hwaccel_output_format])
@@ -665,9 +779,8 @@ class HWAccelStrategy(ABC):
     def video_filters(self, context: TranscodeContext) -> list[str]:
         """Build strategy-specific FFmpeg video filter expressions.
 
-        The expressions are appended after any software scaling filter and are
-        joined by the caller to form the value passed to FFmpeg's `-vf`
-        option. The default strategy requires no additional filters.
+        The returned expressions form the complete ordered value passed to
+        FFmpeg's `-vf` option. The default strategy requires no filters.
 
         Args:
             context: The runtime transcode context.

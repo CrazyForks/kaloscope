@@ -1,17 +1,17 @@
 from app.core.transcode.hwaccels.base import (
     HWAccelStrategy,
     TranscodeContext,
-    hardware_rotation_direction,
+    cpu_geometry_filters,
+    cpu_tonemap_filters,
     resolve_vaapi_device,
-    software_geometry_filters,
-    software_tonemap_filters,
+    rotation_direction,
 )
 
 
 class QSV(HWAccelStrategy):
     """Intel Quick Sync Video H.264 encoding strategy."""
 
-    async def resolve_hardware_device(self, context: TranscodeContext) -> str | None:
+    async def resolve_device(self, context: TranscodeContext) -> str | None:
         """Resolve the required VAAPI-backed QSV render node."""
         device = await resolve_vaapi_device()
         if not device:
@@ -46,18 +46,18 @@ class QSV(HWAccelStrategy):
             "-",
         ]
 
-    def allows_hardware_decode(self, context: TranscodeContext) -> bool:
+    def allows_decode(self, context: TranscodeContext) -> bool:
         """Keep HDR sources on CPU decoding."""
-        return not context.needs_tonemap and super().allows_hardware_decode(context)
+        return not context.needs_tonemap and super().allows_decode(context)
 
-    def hardware_transform_filters(self, context: TranscodeContext) -> list[str]:
+    def transform_filters(self, context: TranscodeContext) -> list[str]:
         """Combine eligible SDR transforms in a single QSV VPP filter."""
         if context.needs_tonemap:
             return []
         options: list[str] = []
         if context.is_interlaced:
             options.extend(["deinterlace=advanced", "rate=frame"])
-        direction = hardware_rotation_direction(context.rotation)
+        direction = rotation_direction(context.rotation)
         if direction is not None:
             options.append(f"transpose={direction}")
         if context.needs_scale:
@@ -75,8 +75,9 @@ class QSV(HWAccelStrategy):
             filters.append("setsar=1")
         return filters
 
-    def hardware_transform_filter_names(self, context: TranscodeContext) -> set[str]:
-        if not self.hardware_transform_filters(context):
+    def transform_filter_names(self, context: TranscodeContext) -> set[str]:
+        """Return filter names required by the selected QSV transforms."""
+        if not self.transform_filters(context):
             return set()
         names = {"vpp_qsv"}
         if context.is_interlaced:
@@ -85,14 +86,13 @@ class QSV(HWAccelStrategy):
             names.add("setsar")
         return names
 
-    def hardware_transform_download_format(self, context: TranscodeContext) -> str:
-        if self.hardware_transform_filters(context):
+    def transform_download_format(self, context: TranscodeContext) -> str:
+        """Return the CPU format produced after downloading QSV transforms."""
+        if self.transform_filters(context):
             return "nv12"
-        return super().hardware_transform_download_format(context)
+        return super().transform_download_format(context)
 
-    def keeps_hardware_decode_on_transform_fallback(
-        self, context: TranscodeContext
-    ) -> bool:
+    def keep_decode_on_fallback(self, context: TranscodeContext) -> bool:
         """QSV CPU transforms use the established software decode path."""
         return False
 
@@ -112,7 +112,7 @@ class QSV(HWAccelStrategy):
         qsv_dev = (
             context.hardware.device
             if context.hardware is not None
-            else await self.resolve_hardware_device(context)
+            else await self.resolve_device(context)
         )
         assert qsv_dev is not None
         cmd = [
@@ -121,7 +121,7 @@ class QSV(HWAccelStrategy):
             "-filter_hw_device",
             "qs",
         ]
-        if context.uses_hardware_decode and not context.needs_tonemap:
+        if context.uses_hw_decode and not context.needs_tonemap:
             cmd.extend(
                 [
                     "-hwaccel",
@@ -145,17 +145,20 @@ class QSV(HWAccelStrategy):
             or a QSV VPP format filter for hardware-decoded SDR input.
         """
         if context.needs_tonemap:
-            filters = software_geometry_filters(context, include_scale=False)
-            filters.extend(software_tonemap_filters(context, "nv12"))
+            # standard FFmpeg tone mapping runs in system memory before upload
+            filters = cpu_geometry_filters(context, include_scale=False)
+            filters.extend(cpu_tonemap_filters(context, "nv12"))
             if context.needs_scale:
                 filters.append("setsar=1")
             filters.append("hwupload")
             return filters
-        if context.uses_hardware_filters:
-            return self.hardware_transform_filters(context)
-        if context.needs_software_geometry:
-            return [*software_geometry_filters(context), "format=nv12"]
-        if context.needs_scale or not context.uses_hardware_decode:
+        if context.uses_hw_filters:
+            # successful source probing allows transforms to stay in QSV VPP
+            return self.transform_filters(context)
+        if context.needs_cpu_geometry:
+            # hardware transform fallback also switches decoding to system memory
+            return [*cpu_geometry_filters(context), "format=nv12"]
+        if context.needs_scale or not context.uses_hw_decode:
             return ["format=nv12"]
         return ["vpp_qsv=format=nv12"]
 
@@ -182,9 +185,9 @@ class QSV(HWAccelStrategy):
                 "-b:v",
                 bitrate,
                 "-maxrate",
-                str(bitrate_num + 1) + "k",
+                f"{bitrate_num + 1}k",
                 "-bufsize",
-                str(bitrate_num * 2 * 2) + "k",
+                f"{bitrate_num * 2 * 2}k",
             ]
         )
         if context.supports_encoder_option("mbbrc"):

@@ -40,7 +40,26 @@ class TaskState(StrEnum):
 
 
 class RuntimeTask(TypedDict):
-    """Task metadata stored in the cross-worker runtime mapping."""
+    """Task metadata stored in the cross-worker runtime mapping.
+
+    Attributes:
+        id: The deterministic media-hash and profile identifier.
+        name: The source file name shown in the task list.
+        path: The source media path.
+        hash: The source media hash.
+        state: The current task lifecycle state.
+        duration: The source duration in seconds.
+        pid: The FFmpeg process identifier.
+        process_start_id: The OS-level process start identifier.
+        profile: The transcode profile identifier.
+        quality: The selected quality preset.
+        resolution: The selected resolution limit.
+        hwaccel: The selected hardware acceleration strategy.
+        out_dir: The HLS output directory.
+        started_at: The task start time in ISO 8601 format.
+        finished_at: The terminal time in ISO 8601 format.
+        error_msg: The bounded FFmpeg failure detail.
+    """
 
     id: str
     name: str
@@ -61,7 +80,32 @@ class RuntimeTask(TypedDict):
 
 
 class TaskSnapshot(TypedDict):
-    """API-facing task metadata enriched with HLS output statistics."""
+    """API-facing task metadata enriched with HLS output statistics.
+
+    The process start identifier remains internal, while scanned output
+    directories use `None` for fields that cannot be reconstructed.
+
+    Attributes:
+        id: The deterministic media-hash and profile identifier.
+        name: The task display name.
+        path: The source media path when known.
+        hash: The source media hash.
+        state: The current task lifecycle state.
+        duration: The source duration in seconds when known.
+        pid: The FFmpeg process identifier for a runtime task.
+        profile: The transcode profile identifier.
+        quality: The selected quality preset when known.
+        resolution: The selected resolution limit when known.
+        hwaccel: The selected hardware acceleration strategy when known.
+        started_at: The task start time in ISO 8601 format when known.
+        finished_at: The terminal time in ISO 8601 format when known.
+        error_msg: The bounded FFmpeg failure detail when available.
+        progress: The integer completion percentage when calculable.
+        encoded_duration: The duration represented by completed HLS segments.
+        encoded_segments: The number of completed HLS segments.
+        encoded_size: The total encoded HLS size in bytes.
+        encoded_size_text: The optional human-readable encoded size.
+    """
 
     id: str
     name: str
@@ -116,8 +160,16 @@ def _same_task(current: RuntimeTask, expected: RuntimeTask) -> bool:
 
 
 def _read_process_start_id(pid: int) -> str | None:
-    """Read an OS process start identifier that remains stable for its lifetime."""
+    """Read an OS process start identifier that is stable for its lifetime.
+
+    Args:
+        pid: The process identifier to inspect.
+
+    Returns:
+        A platform-prefixed start identifier, or `None` when unavailable.
+    """
     if sys.platform.startswith("linux"):
+        # field 22 distinguishes process lifetimes that reuse a numeric PID
         try:
             stat = Path(f"/proc/{pid}/stat").read_text(errors="replace")
         except OSError:
@@ -125,6 +177,7 @@ def _read_process_start_id(pid: int) -> str | None:
         suffix = stat.rpartition(")")[2].split()
         return f"linux:{suffix[19]}" if len(suffix) > 19 else None
 
+    # macOS exposes process start time through its standard `ps` implementation
     try:
         result = subprocess.run(
             ["ps", "-o", "lstart=", "-p", str(pid)],
@@ -144,7 +197,14 @@ def _read_process_start_id(pid: int) -> str | None:
 
 
 async def _process_start_id(pid: int) -> str | None:
-    """Read a process start identifier without blocking the event loop."""
+    """Read a process start identifier without blocking the event loop.
+
+    Args:
+        pid: The process identifier to inspect.
+
+    Returns:
+        A platform-prefixed start identifier, or `None` when unavailable.
+    """
     return await asyncio.to_thread(_read_process_start_id, pid)
 
 
@@ -332,6 +392,10 @@ async def stop_tasks(ids: list[str]) -> list[str]:
 
     Returns:
         The IDs of running tasks claimed by the request.
+
+    Raises:
+        RuntimeError: If a task lacks the identity required for safe signaling.
+        OSError: If the operating system rejects a process signal.
     """
     claimed: list[tuple[str, RuntimeTask, RuntimeTask]] = []
     tasks, lock = _task_store()
@@ -357,12 +421,13 @@ async def stop_tasks(ids: list[str]) -> list[str]:
         try:
             pid = stopping["pid"]
             if pid is not None:
-                expected_start_id = stopping.get("process_start_id")
-                if expected_start_id is None:
+                start_id = stopping.get("process_start_id")
+                if start_id is None:
                     raise RuntimeError(
                         f"Cannot safely identify transcode process {pid}"
                     )
-                if await _process_start_id(pid) != expected_start_id:
+                # stale records must never signal a process that reused the PID
+                if await _process_start_id(pid) != start_id:
                     raise ProcessLookupError
                 sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
                 os.kill(pid, sigkill)
