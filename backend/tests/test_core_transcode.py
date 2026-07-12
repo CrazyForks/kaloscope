@@ -1482,6 +1482,342 @@ def test_prepare_hardware_missing_transform_filter_uses_cpu(monkeypatch, tmp_pat
     probe_transform.assert_not_awaited()
 
 
+@pytest.mark.parametrize(
+    (
+        "hwaccel",
+        "device",
+        "input_hwaccel",
+        "output_format",
+        "probe_download",
+        "encoder",
+        "expected_filter",
+    ),
+    [
+        (
+            "nvenc",
+            "0",
+            "cuda",
+            "cuda",
+            "yuv420p",
+            "h264_nvenc",
+            "scale_cuda=w=1280:h=720:format=yuv420p,setsar=1",
+        ),
+        (
+            "vaapi",
+            "/dev/dri/renderD128",
+            "vaapi",
+            "vaapi",
+            "nv12",
+            "h264_vaapi",
+            "scale_vaapi=w=1280:h=720:format=nv12,setsar=1",
+        ),
+        (
+            "qsv",
+            "/dev/dri/renderD128",
+            "qsv",
+            "qsv",
+            "nv12",
+            "h264_qsv",
+            "vpp_qsv=w=1280:h=720:format=nv12,setsar=1",
+        ),
+        (
+            "videotoolbox",
+            None,
+            "videotoolbox",
+            "videotoolbox_vld",
+            "nv12",
+            "h264_videotoolbox",
+            "scale_vt=w=1280:h=720,setsar=1",
+        ),
+    ],
+)
+def test_scaled_transform_success_builds_hardware_frame_command(
+    monkeypatch,
+    tmp_path,
+    hwaccel,
+    device,
+    input_hwaccel,
+    output_format,
+    probe_download,
+    encoder,
+    expected_filter,
+):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"video")
+    strategy = get_hwaccel(hwaccel)
+    monkeypatch.setattr(base_module, "require_hardware_encoder", AsyncMock())
+    monkeypatch.setattr(
+        base_module,
+        "probe_hardware_decode",
+        AsyncMock(return_value=True),
+    )
+    probe_transform = AsyncMock(return_value=True)
+    monkeypatch.setattr(base_module, "probe_hardware_transform", probe_transform)
+    monkeypatch.setattr(
+        strategy,
+        "resolve_hardware_device",
+        AsyncMock(return_value=device),
+    )
+    context = _eligible_hardware_context(hwaccel, resolution="720p")
+    context.metadata = replace(
+        context.metadata,
+        width=1920,
+        height=1080,
+        field_order="progressive",
+    )
+
+    context.hardware = asyncio.run(strategy.prepare_hardware(context, str(media)))
+    cmd = asyncio.run(transcoder._build_hls_cmd(str(media), tmp_path, context))
+
+    assert context.hardware == base_module.HardwareRuntime(device, True, True)
+    transform_args = probe_transform.await_args.args[-1]
+    assert transform_args[transform_args.index("-hwaccel_output_format") + 1] == (
+        output_format
+    )
+    assert transform_args[transform_args.index("-vf") + 1] == (
+        f"{expected_filter},hwdownload,format={probe_download}"
+    )
+    assert cmd[cmd.index("-hwaccel") + 1] == input_hwaccel
+    assert cmd[cmd.index("-hwaccel_output_format") + 1] == output_format
+    assert cmd[cmd.index("-c:v") + 1] == encoder
+    vf = cmd[cmd.index("-vf") + 1]
+    assert vf == expected_filter
+    assert "scale=" not in vf
+    assert "hwdownload" not in vf
+    assert "hwupload" not in vf
+
+
+@pytest.mark.parametrize(
+    ("hwaccel", "device", "expected_download"),
+    [
+        ("nvenc", "0", "yuv420p"),
+        ("vaapi", "/dev/dri/renderD128", "nv12"),
+        ("qsv", "/dev/dri/renderD128", "nv12"),
+        ("videotoolbox", None, "p010le"),
+    ],
+)
+def test_ten_bit_sdr_scale_probe_uses_transform_output_format(
+    monkeypatch,
+    tmp_path,
+    hwaccel,
+    device,
+    expected_download,
+):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"video")
+    strategy = get_hwaccel(hwaccel)
+    monkeypatch.setattr(base_module, "require_hardware_encoder", AsyncMock())
+    monkeypatch.setattr(
+        base_module,
+        "probe_hardware_decode",
+        AsyncMock(return_value=True),
+    )
+    probe_transform = AsyncMock(return_value=True)
+    monkeypatch.setattr(base_module, "probe_hardware_transform", probe_transform)
+    monkeypatch.setattr(
+        strategy,
+        "resolve_hardware_device",
+        AsyncMock(return_value=device),
+    )
+    context = _eligible_hardware_context(hwaccel, resolution="720p")
+    context.metadata = replace(
+        context.metadata,
+        codec="hevc",
+        profile="Main 10",
+        bit_depth=10,
+        pixel_format="p010le",
+        width=1920,
+        height=1080,
+    )
+
+    asyncio.run(strategy.prepare_hardware(context, str(media)))
+
+    transform_args = probe_transform.await_args.args[-1]
+    assert transform_args[transform_args.index("-vf") + 1].endswith(
+        f"hwdownload,format={expected_download}"
+    )
+
+
+@pytest.mark.parametrize("fallback", ["missing_filter", "runtime_failure"])
+@pytest.mark.parametrize(
+    (
+        "hwaccel",
+        "device",
+        "scaler",
+        "expected_hwaccel",
+        "encoder",
+        "expected_filter",
+        "expected_decode",
+    ),
+    [
+        (
+            "nvenc",
+            "0",
+            "scale_cuda",
+            "cuda",
+            "h264_nvenc",
+            "scale=1280:720,setsar=1,format=yuv420p",
+            True,
+        ),
+        (
+            "vaapi",
+            "/dev/dri/renderD128",
+            "scale_vaapi",
+            "vaapi",
+            "h264_vaapi",
+            "scale=1280:720,setsar=1,format=nv12,hwupload",
+            True,
+        ),
+        (
+            "qsv",
+            "/dev/dri/renderD128",
+            "vpp_qsv",
+            None,
+            "h264_qsv",
+            "scale=1280:720,setsar=1,format=nv12",
+            False,
+        ),
+        (
+            "videotoolbox",
+            None,
+            "scale_vt",
+            "videotoolbox",
+            "h264_videotoolbox",
+            "scale=1280:720,setsar=1,format=nv12",
+            True,
+        ),
+    ],
+)
+def test_scaled_transform_fallback_builds_cpu_scale_command(
+    monkeypatch,
+    tmp_path,
+    fallback,
+    hwaccel,
+    device,
+    scaler,
+    expected_hwaccel,
+    encoder,
+    expected_filter,
+    expected_decode,
+):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"video")
+    strategy = get_hwaccel(hwaccel)
+    monkeypatch.setattr(base_module, "require_hardware_encoder", AsyncMock())
+    monkeypatch.setattr(
+        base_module,
+        "probe_hardware_decode",
+        AsyncMock(return_value=True),
+    )
+    probe_transform = AsyncMock(return_value=False)
+    monkeypatch.setattr(base_module, "probe_hardware_transform", probe_transform)
+    monkeypatch.setattr(
+        strategy,
+        "resolve_hardware_device",
+        AsyncMock(return_value=device),
+    )
+    capabilities = _capabilities()
+    if fallback == "missing_filter":
+        capabilities = _capabilities(filters=capabilities.filters - {scaler})
+    context = _eligible_hardware_context(
+        hwaccel,
+        capabilities=capabilities,
+        resolution="720p",
+    )
+    context.metadata = replace(context.metadata, width=1920, height=1080)
+
+    context.hardware = asyncio.run(strategy.prepare_hardware(context, str(media)))
+    cmd = asyncio.run(transcoder._build_hls_cmd(str(media), tmp_path, context))
+
+    assert context.hardware == base_module.HardwareRuntime(
+        device,
+        expected_decode,
+        False,
+    )
+    assert "-hwaccel_output_format" not in cmd
+    if expected_hwaccel is None:
+        assert "-hwaccel" not in cmd
+    else:
+        assert cmd[cmd.index("-hwaccel") + 1] == expected_hwaccel
+    assert cmd[cmd.index("-c:v") + 1] == encoder
+    assert cmd[cmd.index("-vf") + 1] == expected_filter
+    if fallback == "missing_filter":
+        probe_transform.assert_not_awaited()
+    else:
+        probe_transform.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    ("hwaccel", "device", "encoder", "expected_filter"),
+    [
+        (
+            "nvenc",
+            "0",
+            "h264_nvenc",
+            "scale=1280:720,setsar=1,format=yuv420p",
+        ),
+        (
+            "vaapi",
+            "/dev/dri/renderD128",
+            "h264_vaapi",
+            "scale=1280:720,setsar=1,format=nv12,hwupload",
+        ),
+        (
+            "qsv",
+            "/dev/dri/renderD128",
+            "h264_qsv",
+            "scale=1280:720,setsar=1,format=nv12",
+        ),
+        (
+            "videotoolbox",
+            None,
+            "h264_videotoolbox",
+            "scale=1280:720,setsar=1,format=nv12",
+        ),
+    ],
+)
+def test_scaled_unsupported_source_keeps_hardware_encoder(
+    monkeypatch,
+    tmp_path,
+    hwaccel,
+    device,
+    encoder,
+    expected_filter,
+):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"video")
+    strategy = get_hwaccel(hwaccel)
+    monkeypatch.setattr(base_module, "require_hardware_encoder", AsyncMock())
+    probe_decode = AsyncMock(return_value=True)
+    probe_transform = AsyncMock(return_value=True)
+    monkeypatch.setattr(base_module, "probe_hardware_decode", probe_decode)
+    monkeypatch.setattr(base_module, "probe_hardware_transform", probe_transform)
+    monkeypatch.setattr(
+        strategy,
+        "resolve_hardware_device",
+        AsyncMock(return_value=device),
+    )
+    context = _eligible_hardware_context(hwaccel, resolution="720p")
+    context.metadata = replace(
+        context.metadata,
+        codec="vp9",
+        profile="Profile 0",
+        bit_depth=8,
+        pixel_format="yuv420p",
+        width=1920,
+        height=1080,
+    )
+
+    context.hardware = asyncio.run(strategy.prepare_hardware(context, str(media)))
+    cmd = asyncio.run(transcoder._build_hls_cmd(str(media), tmp_path, context))
+
+    assert context.hardware == base_module.HardwareRuntime(device, False, False)
+    probe_decode.assert_not_awaited()
+    probe_transform.assert_not_awaited()
+    assert cmd[cmd.index("-c:v") + 1] == encoder
+    assert cmd[cmd.index("-vf") + 1] == expected_filter
+
+
 @pytest.mark.parametrize("fallback", ["missing_filter", "runtime_failure"])
 @pytest.mark.parametrize(
     (
@@ -1748,7 +2084,7 @@ def test_qsv_prepare_hardware_uses_device_once(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize(
     "case",
-    ["unsupported_codec", "missing_hwaccel", "qsv_hdr", "qsv_scale"],
+    ["unsupported_codec", "missing_hwaccel", "qsv_hdr"],
 )
 def test_prepare_hardware_skips_ineligible_decode(monkeypatch, tmp_path, case):
     media = tmp_path / "input.mkv"
@@ -1789,7 +2125,7 @@ def test_prepare_hardware_skips_ineligible_decode(monkeypatch, tmp_path, case):
             "nvenc",
             capabilities=_capabilities(hwaccels=()),
         )
-    elif case == "qsv_hdr":
+    else:
         context = TranscodeContext(
             options=TranscodeOptions(hwaccel="qsv"),
             metadata=MediaProbe(
@@ -1804,8 +2140,6 @@ def test_prepare_hardware_skips_ineligible_decode(monkeypatch, tmp_path, case):
             ),
             capabilities=_capabilities(),
         )
-    else:
-        context = _eligible_hardware_context("qsv", resolution="720p")
 
     runtime = asyncio.run(
         get_hwaccel(context.options.hwaccel).prepare_hardware(
@@ -2693,6 +3027,177 @@ def test_hardware_geometry_filters(hwaccel, device, rotation, field_order, expec
 
 
 @pytest.mark.parametrize(
+    ("hwaccel", "device", "expected"),
+    [
+        (
+            "nvenc",
+            "0",
+            [
+                "scale_cuda=w=1280:h=720:format=yuv420p",
+                "setsar=1",
+            ],
+        ),
+        (
+            "vaapi",
+            "/dev/dri/renderD128",
+            [
+                "scale_vaapi=w=1280:h=720:format=nv12",
+                "setsar=1",
+            ],
+        ),
+        (
+            "qsv",
+            "/dev/dri/renderD128",
+            [
+                "vpp_qsv=w=1280:h=720:format=nv12",
+                "setsar=1",
+            ],
+        ),
+        (
+            "videotoolbox",
+            None,
+            [
+                "scale_vt=w=1280:h=720",
+                "setsar=1",
+            ],
+        ),
+    ],
+)
+def test_hardware_scale_filters(hwaccel, device, expected):
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel=hwaccel, resolution="720p"),
+        metadata=MediaProbe(
+            width=1920,
+            height=1080,
+            field_order="progressive",
+            pixel_format="yuv420p",
+        ),
+        capabilities=_capabilities(),
+        hardware=base_module.HardwareRuntime(device, True, True),
+    )
+
+    assert get_hwaccel(hwaccel).video_filters(context) == expected
+
+
+@pytest.mark.parametrize(
+    ("hwaccel", "device", "rotation", "field_order", "expected"),
+    [
+        (
+            "nvenc",
+            "0",
+            0,
+            "tt",
+            [
+                "yadif_cuda=mode=send_frame:parity=tff:deint=all",
+                "setfield=prog",
+                "scale_cuda=w=1280:h=720:format=yuv420p",
+                "setsar=1",
+            ],
+        ),
+        (
+            "vaapi",
+            "/dev/dri/renderD128",
+            90,
+            "tt",
+            [
+                "deinterlace_vaapi=rate=frame:auto=0",
+                "setfield=prog",
+                "transpose_vaapi=dir=clock",
+                "scale_vaapi=w=592:h=1080:format=nv12",
+                "setsar=1",
+            ],
+        ),
+        (
+            "qsv",
+            "/dev/dri/renderD128",
+            270,
+            "bb",
+            [
+                (
+                    "vpp_qsv=deinterlace=advanced:rate=frame:transpose=cclock:"
+                    "w=592:h=1080:format=nv12"
+                ),
+                "setfield=prog",
+                "setsar=1",
+            ],
+        ),
+        (
+            "videotoolbox",
+            None,
+            90,
+            "progressive",
+            [
+                "transpose_vt=dir=clock",
+                "scale_vt=w=592:h=1080",
+                "setsar=1",
+            ],
+        ),
+    ],
+)
+def test_scaled_hardware_geometry_filters(
+    hwaccel,
+    device,
+    rotation,
+    field_order,
+    expected,
+):
+    context = TranscodeContext(
+        options=TranscodeOptions(
+            hwaccel=hwaccel,
+            resolution="720p" if hwaccel == "nvenc" else "1080p",
+        ),
+        metadata=MediaProbe(
+            width=1920,
+            height=1080,
+            rotation=rotation,
+            field_order=field_order,
+            pixel_format="yuv420p",
+        ),
+        capabilities=_capabilities(),
+        hardware=base_module.HardwareRuntime(device, True, True),
+    )
+
+    assert get_hwaccel(hwaccel).video_filters(context) == expected
+
+
+@pytest.mark.parametrize(
+    ("hwaccel", "device", "expected_scale"),
+    [
+        ("nvenc", "0", "scale_cuda=w=768:h=576:format=yuv420p"),
+        (
+            "vaapi",
+            "/dev/dri/renderD128",
+            "scale_vaapi=w=768:h=576:format=nv12",
+        ),
+        (
+            "qsv",
+            "/dev/dri/renderD128",
+            "vpp_qsv=w=768:h=576:format=nv12",
+        ),
+        ("videotoolbox", None, "scale_vt=w=768:h=576"),
+    ],
+)
+def test_hardware_scale_normalizes_sar(hwaccel, device, expected_scale):
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel=hwaccel),
+        metadata=MediaProbe(
+            width=720,
+            height=576,
+            sample_aspect_ratio=(16, 15),
+            field_order="progressive",
+            pixel_format="yuv420p",
+        ),
+        capabilities=_capabilities(),
+        hardware=base_module.HardwareRuntime(device, True, True),
+    )
+
+    assert get_hwaccel(hwaccel).video_filters(context) == [
+        expected_scale,
+        "setsar=1",
+    ]
+
+
+@pytest.mark.parametrize(
     ("hwaccel", "device", "expected_tail"),
     [
         ("nvenc", "0", ["format=yuv420p"]),
@@ -2779,7 +3284,18 @@ def test_qsv_args(monkeypatch):
         "-hwaccel_output_format",
         "qsv",
     ]
-    assert "-hwaccel" not in asyncio.run(strategy.input_args(scaled_context))
+    assert asyncio.run(strategy.input_args(scaled_context)) == [
+        "-init_hw_device",
+        f"qsv=qs:hw,child_device={device},child_device_type=vaapi",
+        "-filter_hw_device",
+        "qs",
+        "-hwaccel",
+        "qsv",
+        "-hwaccel_device",
+        "qs",
+        "-hwaccel_output_format",
+        "qsv",
+    ]
     assert strategy.video_filters(context) == ["vpp_qsv=format=nv12"]
     assert strategy.video_filters(scaled_context) == [
         "scale=1280:720",
@@ -3054,6 +3570,11 @@ def test_vaapi_auto_rate_control(quality, bitrate, bufsize):
 
 def test_vaapi_hdr10_filters(monkeypatch):
     context = _hdr_context(hwaccel="vaapi", resolution="720p")
+    context.hardware = base_module.HardwareRuntime(
+        "/dev/dri/renderD128",
+        True,
+        True,
+    )
     strategy = get_hwaccel("vaapi")
     monkeypatch.setattr(
         vaapi_module,
@@ -3070,7 +3591,50 @@ def test_vaapi_hdr10_filters(monkeypatch):
         "vaapi",
     ]
     assert strategy.video_filters(context) == [
-        f"scale_vaapi=w='{context.scale_width}':h='{context.scale_height}'",
+        f"scale_vaapi=w={context.scale_width}:h={context.scale_height}",
+        "setsar=1",
+        "tonemap_vaapi=format=nv12:p=bt709:t=bt709:m=bt709",
+    ]
+
+
+def test_vaapi_scaled_hdr10_probe_preserves_p010(monkeypatch, tmp_path):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"video")
+    device = "/dev/dri/renderD128"
+    strategy = get_hwaccel("vaapi")
+    monkeypatch.setattr(base_module, "require_hardware_encoder", AsyncMock())
+    monkeypatch.setattr(
+        base_module,
+        "probe_hardware_decode",
+        AsyncMock(return_value=True),
+    )
+    probe_transform = AsyncMock(return_value=True)
+    monkeypatch.setattr(base_module, "probe_hardware_transform", probe_transform)
+    monkeypatch.setattr(
+        strategy,
+        "resolve_hardware_device",
+        AsyncMock(return_value=device),
+    )
+    context = _hdr_context(
+        hwaccel="vaapi",
+        resolution="720p",
+        capabilities=_capabilities(),
+    )
+    context.metadata = replace(
+        context.metadata,
+        codec="hevc",
+        profile="Main 10",
+    )
+
+    context.hardware = asyncio.run(strategy.prepare_hardware(context, str(media)))
+
+    assert context.hardware == base_module.HardwareRuntime(device, True, True)
+    transform_args = probe_transform.await_args.args[-1]
+    assert transform_args[transform_args.index("-vf") + 1] == (
+        "scale_vaapi=w=1280:h=720,setsar=1,hwdownload,format=p010le"
+    )
+    assert strategy.video_filters(context) == [
+        "scale_vaapi=w=1280:h=720",
         "setsar=1",
         "tonemap_vaapi=format=nv12:p=bt709:t=bt709:m=bt709",
     ]
@@ -3297,7 +3861,7 @@ def test_videotoolbox_hdr_filters(transfer):
             "/dev/dri/renderD128",
             [
                 "transpose_vaapi=dir=clock",
-                "scale_vaapi=w='592':h='1080'",
+                "scale_vaapi=w=592:h=1080",
                 "setsar=1",
                 "tonemap_vaapi=format=nv12:p=bt709:t=bt709:m=bt709",
             ],

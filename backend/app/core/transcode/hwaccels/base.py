@@ -431,6 +431,10 @@ class HWAccelStrategy(ABC):
         """Return advertised filter names required by hardware transforms."""
         return set()
 
+    def hardware_transform_download_format(self, context: TranscodeContext) -> str:
+        """Return the software pixel format produced by the transform probe."""
+        return "p010le" if context.metadata.bit_depth == 10 else "nv12"
+
     def keeps_hardware_decode_on_transform_fallback(
         self, context: TranscodeContext
     ) -> bool:
@@ -481,7 +485,9 @@ class HWAccelStrategy(ABC):
         output_format = context.encoder_config.hwaccel_output_format
         if output_format and "-hwaccel_output_format" not in input_args:
             input_args.extend(["-hwaccel_output_format", output_format])
-        download_format = "p010le" if context.metadata.bit_depth == 10 else "nv12"
+        decode_download_format = (
+            "p010le" if context.metadata.bit_depth == 10 else "nv12"
+        )
         decode_args = [
             *input_args,
             "-noautorotate",
@@ -495,7 +501,7 @@ class HWAccelStrategy(ABC):
             "-sn",
             "-dn",
             "-vf",
-            f"hwdownload,format={download_format}",
+            f"hwdownload,format={decode_download_format}",
             "-f",
             "null",
             "-",
@@ -537,6 +543,9 @@ class HWAccelStrategy(ABC):
         filter_context = replace(context, hardware=filter_runtime)
         input_args = await self.input_args(filter_context)
         signature = ",".join(transform_filters)
+        transform_download_format = self.hardware_transform_download_format(
+            filter_context
+        )
         transform_args = [
             *input_args,
             "-noautorotate",
@@ -550,7 +559,7 @@ class HWAccelStrategy(ABC):
             "-sn",
             "-dn",
             "-vf",
-            f"{signature},hwdownload,format={download_format}",
+            f"{signature},hwdownload,format={transform_download_format}",
             "-f",
             "null",
             "-",
@@ -587,11 +596,11 @@ class HWAccelStrategy(ABC):
         Returns:
             Whether to keep hardware frames.
         """
-        if (context.needs_rotation or context.is_interlaced) and not (
-            context.uses_hardware_filters
-        ):
-            return False
-        return not context.needs_scale
+        if context.uses_hardware_filters:
+            return True
+        return not (
+            context.needs_scale or context.needs_rotation or context.is_interlaced
+        )
 
     async def input_args(self, context: TranscodeContext) -> list[str]:
         """Build FFmpeg input options for hardware-accelerated decoding.

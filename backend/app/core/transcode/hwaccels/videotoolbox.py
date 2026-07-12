@@ -12,27 +12,39 @@ class VideoToolbox(HWAccelStrategy):
 
     def keep_hardware_frames(self, context: TranscodeContext) -> bool:
         """Keep HDR frames on VideoToolbox even when scaling is required."""
-        if context.is_interlaced or context.needs_sar_normalization:
+        if context.is_interlaced:
             return False
-        if context.needs_rotation and not context.uses_hardware_filters:
+        if (
+            context.needs_sar_normalization or context.needs_rotation
+        ) and not context.uses_hardware_filters:
             return False
         return context.needs_tonemap or super().keep_hardware_frames(context)
 
     def hardware_transform_filters(self, context: TranscodeContext) -> list[str]:
-        """Rotate progressive square-pixel VideoToolbox frames on-device."""
-        if (
-            context.is_interlaced
-            or context.needs_sar_normalization
-            or (context.needs_resolution_scale and not context.needs_tonemap)
+        """Build eligible VideoToolbox rotation and SDR scale filters."""
+        if context.is_interlaced or (
+            context.needs_tonemap and context.needs_sar_normalization
         ):
             return []
+        filters: list[str] = []
         direction = hardware_rotation_direction(context.rotation)
-        if direction is None:
-            return []
-        return [f"transpose_vt=dir={direction}"]
+        if direction is not None:
+            filters.append(f"transpose_vt=dir={direction}")
+        if context.needs_scale and not context.needs_tonemap:
+            width = context.scale_width
+            height = context.scale_height
+            assert width is not None and height is not None
+            filters.extend([f"scale_vt=w={width}:h={height}", "setsar=1"])
+        return filters
 
     def hardware_transform_filter_names(self, context: TranscodeContext) -> set[str]:
-        return {"transpose_vt"} if self.hardware_transform_filters(context) else set()
+        filters = self.hardware_transform_filters(context)
+        names: set[str] = set()
+        if any(value.startswith("transpose_vt") for value in filters):
+            names.add("transpose_vt")
+        if any(value.startswith("scale_vt") for value in filters):
+            names.update({"scale_vt", "setsar"})
+        return names
 
     def video_filters(self, context: TranscodeContext) -> list[str]:
         """Normalize non-YUV420P VideoToolbox frames to NV12."""
@@ -41,11 +53,16 @@ class VideoToolbox(HWAccelStrategy):
             if context.uses_hardware_filters
             else []
         )
-        cpu_geometry = (
-            context.is_interlaced
-            or context.needs_sar_normalization
-            or (context.needs_rotation and not context.uses_hardware_filters)
-            or (context.needs_resolution_scale and not context.needs_tonemap)
+        direct_hdr_scale = (
+            context.needs_tonemap
+            and context.needs_resolution_scale
+            and not context.needs_sar_normalization
+            and not context.needs_rotation
+        )
+        cpu_geometry = context.is_interlaced or (
+            (context.needs_scale or context.needs_rotation)
+            and not context.uses_hardware_filters
+            and not direct_hdr_scale
         )
         if cpu_geometry:
             if context.needs_tonemap:

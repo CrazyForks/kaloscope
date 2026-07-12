@@ -49,16 +49,12 @@ class QSV(HWAccelStrategy):
         ]
 
     def allows_hardware_decode(self, context: TranscodeContext) -> bool:
-        """Keep HDR and software-scaled sources on CPU decoding."""
-        return (
-            not context.needs_tonemap
-            and not context.needs_scale
-            and super().allows_hardware_decode(context)
-        )
+        """Keep HDR sources on CPU decoding."""
+        return not context.needs_tonemap and super().allows_hardware_decode(context)
 
     def hardware_transform_filters(self, context: TranscodeContext) -> list[str]:
         """Combine eligible SDR transforms in a single QSV VPP filter."""
-        if context.needs_tonemap or context.needs_scale:
+        if context.needs_tonemap:
             return []
         options: list[str] = []
         if context.is_interlaced:
@@ -66,12 +62,19 @@ class QSV(HWAccelStrategy):
         direction = hardware_rotation_direction(context.rotation)
         if direction is not None:
             options.append(f"transpose={direction}")
+        if context.needs_scale:
+            width = context.scale_width
+            height = context.scale_height
+            assert width is not None and height is not None
+            options.extend([f"w={width}", f"h={height}"])
         if not options:
             return []
         options.append("format=nv12")
         filters = [f"vpp_qsv={':'.join(options)}"]
         if context.is_interlaced:
             filters.append("setfield=prog")
+        if context.needs_scale:
+            filters.append("setsar=1")
         return filters
 
     def hardware_transform_filter_names(self, context: TranscodeContext) -> set[str]:
@@ -80,7 +83,14 @@ class QSV(HWAccelStrategy):
         names = {"vpp_qsv"}
         if context.is_interlaced:
             names.add("setfield")
+        if context.needs_scale:
+            names.add("setsar")
         return names
+
+    def hardware_transform_download_format(self, context: TranscodeContext) -> str:
+        if self.hardware_transform_filters(context):
+            return "nv12"
+        return super().hardware_transform_download_format(context)
 
     def keeps_hardware_decode_on_transform_fallback(
         self, context: TranscodeContext
@@ -113,11 +123,7 @@ class QSV(HWAccelStrategy):
             "-filter_hw_device",
             "qs",
         ]
-        if (
-            context.uses_hardware_decode
-            and not context.needs_tonemap
-            and not context.needs_scale
-        ):
+        if context.uses_hardware_decode and not context.needs_tonemap:
             cmd.extend(
                 [
                     "-hwaccel",
