@@ -1,6 +1,8 @@
 import asyncio
 import os
 import signal
+import subprocess
+import sys
 import threading
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -47,6 +49,7 @@ class RuntimeTask(TypedDict):
     state: TaskState
     duration: float | None
     pid: int | None
+    process_start_id: str | None
     profile: str
     quality: QualityLevel
     resolution: ResolutionLimit
@@ -108,8 +111,41 @@ def _same_task(current: RuntimeTask, expected: RuntimeTask) -> bool:
     Returns:
         `True` when both records identify the same ffmpeg process run.
     """
-    keys = ("started_at", "pid", "out_dir")
+    keys = ("started_at", "pid", "process_start_id", "out_dir")
     return all(current.get(key) == expected.get(key) for key in keys)
+
+
+def _read_process_start_id(pid: int) -> str | None:
+    """Read an OS process start identifier that remains stable for its lifetime."""
+    if sys.platform.startswith("linux"):
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text(errors="replace")
+        except OSError:
+            return None
+        suffix = stat.rpartition(")")[2].split()
+        return f"linux:{suffix[19]}" if len(suffix) > 19 else None
+
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "lstart=", "-p", str(pid)],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=2,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    started_at = " ".join(result.stdout.split())
+    return (
+        f"{sys.platform}:{started_at}"
+        if result.returncode == 0 and started_at
+        else None
+    )
+
+
+async def _process_start_id(pid: int) -> str | None:
+    """Read a process start identifier without blocking the event loop."""
+    return await asyncio.to_thread(_read_process_start_id, pid)
 
 
 async def register_task(
@@ -134,6 +170,7 @@ async def register_task(
         The registered task ID.
     """
     task_id = f"{media_hash}:{options.profile}"
+    process_start_id = await _process_start_id(proc.pid)
     task: RuntimeTask = {
         "id": task_id,
         "name": Path(media_path).name,
@@ -142,6 +179,7 @@ async def register_task(
         "state": TaskState.RUNNING,
         "duration": duration,
         "pid": proc.pid,
+        "process_start_id": process_start_id,
         "profile": options.profile,
         "quality": options.quality,
         "resolution": options.resolution,
@@ -319,6 +357,13 @@ async def stop_tasks(ids: list[str]) -> list[str]:
         try:
             pid = stopping["pid"]
             if pid is not None:
+                expected_start_id = stopping.get("process_start_id")
+                if expected_start_id is None:
+                    raise RuntimeError(
+                        f"Cannot safely identify transcode process {pid}"
+                    )
+                if await _process_start_id(pid) != expected_start_id:
+                    raise ProcessLookupError
                 sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
                 os.kill(pid, sigkill)
         except ProcessLookupError:

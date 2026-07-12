@@ -626,6 +626,7 @@ def _runtime_task(out_dir, state=tasks.TaskState.RUNNING):
         "state": state,
         "duration": 60.0,
         "pid": 123,
+        "process_start_id": "original-process",
         "profile": "profile",
         "quality": "medium",
         "resolution": "original",
@@ -635,6 +636,60 @@ def _runtime_task(out_dir, state=tasks.TaskState.RUNNING):
         "finished_at": None,
         "error_msg": None,
     }
+
+
+def test_register_stores_process_start_id(monkeypatch, tmp_path):
+    store = {}
+    process_start_id = AsyncMock(return_value="process-start-id")
+    proc = SimpleNamespace(pid=123)
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+    monkeypatch.setattr(tasks, "_process_start_id", process_start_id)
+
+    task_id = asyncio.run(
+        tasks.register_task(
+            "/media/input.mkv",
+            "hash",
+            TranscodeOptions(),
+            tmp_path,
+            proc,
+            60.0,
+        )
+    )
+
+    assert store[task_id]["process_start_id"] == "process-start-id"
+    process_start_id.assert_awaited_once_with(123)
+
+
+def test_reads_linux_process_start_id(monkeypatch):
+    fields = ["S", *(str(field) for field in range(4, 23))]
+    stat = f"123 (ffmpeg worker) {' '.join(fields)}"
+
+    monkeypatch.setattr(tasks.sys, "platform", "linux")
+    monkeypatch.setattr(tasks.Path, "read_text", lambda *_args, **_kwargs: stat)
+
+    assert tasks._read_process_start_id(123) == "linux:22"
+
+
+def test_reads_macos_process_start_id(monkeypatch):
+    run = Mock(
+        return_value=SimpleNamespace(
+            returncode=0,
+            stdout="Sun Jul 12 12:34:56 2026\n",
+        )
+    )
+
+    monkeypatch.setattr(tasks.sys, "platform", "darwin")
+    monkeypatch.setattr(tasks.subprocess, "run", run)
+
+    assert tasks._read_process_start_id(123) == ("darwin:Sun Jul 12 12:34:56 2026")
+    run.assert_called_once_with(
+        ["ps", "-o", "lstart=", "-p", "123"],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=2,
+    )
 
 
 @pytest.mark.parametrize(
@@ -5035,6 +5090,7 @@ def test_stop_releases_lock(monkeypatch, tmp_path):
             "out_dir": str(tmp_path),
             "started_at": "2026-01-01",
             "pid": 123,
+            "process_start_id": "original-process",
         }
     }
 
@@ -5042,6 +5098,9 @@ def test_stop_releases_lock(monkeypatch, tmp_path):
         assert lock.locked is False
 
     monkeypatch.setattr(tasks, "_task_store", lambda: (store, lock))
+    monkeypatch.setattr(
+        tasks, "_process_start_id", AsyncMock(return_value="original-process")
+    )
     monkeypatch.setattr(tasks.os, "kill", kill)
 
     result = asyncio.run(tasks.stop_tasks(["task"]))
@@ -5168,6 +5227,9 @@ def test_stop_missing(monkeypatch, tmp_path, complete, expected):
     remove = Mock()
 
     monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+    monkeypatch.setattr(
+        tasks, "_process_start_id", AsyncMock(return_value="original-process")
+    )
     monkeypatch.setattr(tasks.os, "kill", Mock(side_effect=ProcessLookupError))
     monkeypatch.setattr(tasks, "is_complete", Mock(return_value=complete))
     monkeypatch.setattr(tasks, "remove_endlist", remove)
@@ -5183,10 +5245,52 @@ def test_stop_missing(monkeypatch, tmp_path, complete, expected):
         remove.assert_called_once_with(str(tmp_path))
 
 
+def test_stop_does_not_signal_reused_pid(monkeypatch, tmp_path):
+    store = {"task": _runtime_task(tmp_path)}
+    kill = Mock()
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+    monkeypatch.setattr(
+        tasks,
+        "_process_start_id",
+        AsyncMock(return_value="replacement-process"),
+        raising=False,
+    )
+    monkeypatch.setattr(tasks.os, "kill", kill)
+    monkeypatch.setattr(tasks, "is_complete", Mock(return_value=False))
+    monkeypatch.setattr(tasks, "remove_endlist", Mock())
+
+    result = asyncio.run(tasks.stop_tasks(["task"]))
+
+    assert result == ["task"]
+    assert store["task"]["state"] == tasks.TaskState.STOPPED
+    assert store["task"]["finished_at"] is not None
+    kill.assert_not_called()
+
+
+def test_stop_refuses_task_without_process_start_id(monkeypatch, tmp_path):
+    task = _runtime_task(tmp_path)
+    task["process_start_id"] = None
+    store = {"task": task}
+    kill = Mock()
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+    monkeypatch.setattr(tasks.os, "kill", kill)
+
+    with pytest.raises(RuntimeError, match="Cannot safely identify"):
+        asyncio.run(tasks.stop_tasks(["task"]))
+
+    assert store["task"]["state"] == tasks.TaskState.RUNNING
+    kill.assert_not_called()
+
+
 def test_stop_rollback(monkeypatch, tmp_path):
     store = {"task": _runtime_task(tmp_path)}
 
     monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+    monkeypatch.setattr(
+        tasks, "_process_start_id", AsyncMock(return_value="original-process")
+    )
     monkeypatch.setattr(tasks.os, "kill", Mock(side_effect=PermissionError))
 
     with pytest.raises(PermissionError):
@@ -5210,6 +5314,9 @@ def test_stop_restores_pending(monkeypatch, tmp_path):
             raise PermissionError
 
     monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+    monkeypatch.setattr(
+        tasks, "_process_start_id", AsyncMock(return_value="original-process")
+    )
     monkeypatch.setattr(tasks.os, "kill", kill)
 
     with pytest.raises(PermissionError):
