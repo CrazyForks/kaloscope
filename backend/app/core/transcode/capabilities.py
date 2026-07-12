@@ -46,27 +46,21 @@ class FFmpegCapabilities:
     encoder_options: frozenset[str]
 
     def supports_encoder(self, name: str) -> bool:
-        """Return whether FFmpeg advertises an encoder."""
         return name in self.encoders
 
     def supports_filter(self, name: str) -> bool:
-        """Return whether FFmpeg advertises a filter."""
         return name in self.filters
 
     def supports_hwaccel(self, name: str) -> bool:
-        """Return whether FFmpeg advertises a hardware acceleration method."""
         return name in self.hwaccels
 
     def supports_bsf(self, name: str) -> bool:
-        """Return whether FFmpeg advertises a bitstream filter."""
         return name in self.bsfs
 
     def supports_muxer(self, name: str) -> bool:
-        """Return whether FFmpeg advertises an output muxer."""
         return name in self.muxers
 
     def supports_encoder_option(self, name: str) -> bool:
-        """Return whether the selected encoder advertises a private option."""
         return name in self.encoder_options
 
 

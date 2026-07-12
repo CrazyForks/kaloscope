@@ -119,43 +119,6 @@ def _same_task(current: RuntimeTask, expected: RuntimeTask) -> bool:
     return all(current.get(key) == expected.get(key) for key in keys)
 
 
-def _read_process_start_id(pid: int) -> str | None:
-    """Read an OS process start identifier that is stable for its lifetime.
-
-    Args:
-        pid: The process identifier to inspect.
-
-    Returns:
-        A platform-prefixed start identifier, or `None` when unavailable.
-    """
-    if sys.platform.startswith("linux"):
-        # field 22 distinguishes process lifetimes that reuse a numeric PID
-        try:
-            stat = Path(f"/proc/{pid}/stat").read_text(errors="replace")
-        except OSError:
-            return None
-        suffix = stat.rpartition(")")[2].split()
-        return f"linux:{suffix[19]}" if len(suffix) > 19 else None
-
-    # macOS exposes process start time through its standard `ps` implementation
-    try:
-        result = subprocess.run(
-            ["ps", "-o", "lstart=", "-p", str(pid)],
-            capture_output=True,
-            check=False,
-            text=True,
-            timeout=2,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    started_at = " ".join(result.stdout.split())
-    return (
-        f"{sys.platform}:{started_at}"
-        if result.returncode == 0 and started_at
-        else None
-    )
-
-
 async def _process_start_id(pid: int) -> str | None:
     """Read a process start identifier without blocking the event loop.
 
@@ -165,7 +128,37 @@ async def _process_start_id(pid: int) -> str | None:
     Returns:
         A platform-prefixed start identifier, or `None` when unavailable.
     """
-    return await asyncio.to_thread(_read_process_start_id, pid)
+
+    def _read() -> str | None:
+        """Read the platform-specific process start identifier."""
+        if sys.platform.startswith("linux"):
+            # field 22 distinguishes process lifetimes that reuse a numeric PID
+            try:
+                stat = Path(f"/proc/{pid}/stat").read_text(errors="replace")
+            except OSError:
+                return None
+            suffix = stat.rpartition(")")[2].split()
+            return f"linux:{suffix[19]}" if len(suffix) > 19 else None
+
+        # macOS exposes process start time through its standard `ps` implementation
+        try:
+            result = subprocess.run(
+                ["ps", "-o", "lstart=", "-p", str(pid)],
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=2,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        started_at = " ".join(result.stdout.split())
+        return (
+            f"{sys.platform}:{started_at}"
+            if result.returncode == 0 and started_at
+            else None
+        )
+
+    return await asyncio.to_thread(_read)
 
 
 async def register_task(

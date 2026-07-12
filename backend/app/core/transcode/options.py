@@ -95,27 +95,22 @@ class TranscodeOptions:
 
     @property
     def encoder_config(self) -> EncoderConfig:
-        """Return the encoder configuration for the selected strategy."""
         return ENCODER_CONFIG[self.hwaccel]
 
     @property
     def encoder(self) -> str:
-        """Return the selected FFmpeg video encoder name."""
         return self.encoder_config.encoder
 
     @property
     def crf(self) -> int:
-        """Return the software encoder CRF for the selected quality."""
         return QUALITY_CRF[self.quality]
 
     @property
     def bitrate(self) -> str:
-        """Return the hardware encoder bitrate for the selected quality."""
         return HW_BITRATE[self.quality]
 
     @property
     def max_height(self) -> int | None:
-        """Return the maximum output height, or `None` for original resolution."""
         return RESOLUTION_MAX_HEIGHT[self.resolution]
 
     @property

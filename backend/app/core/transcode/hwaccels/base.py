@@ -30,32 +30,7 @@ class HDRType(StrEnum):
 
 @dataclass(frozen=True)
 class MediaProbe:
-    """Selected stream indexes and metadata probed from a media container.
-
-    Attributes:
-        video_stream_index: The selected video stream index.
-        audio_stream_index: The selected audio stream index.
-        height: The encoded video height in pixels.
-        width: The encoded video width in pixels.
-        sample_aspect_ratio: The source sample aspect ratio.
-        rotation: The normalized clockwise display rotation in degrees.
-        field_order: The FFmpeg field-order identifier.
-        duration: The container duration in seconds.
-        avg_frame_rate: The average video frame rate.
-        r_frame_rate: The base video frame rate.
-        codec: The probed FFmpeg video codec name.
-        profile: The video codec profile.
-        pixel_format: The source pixel format.
-        bit_depth: The effective source bit depth.
-        color_range: The source color range.
-        color_transfer: The source transfer characteristic.
-        color_primaries: The source color primaries.
-        color_space: The source matrix coefficients.
-        hdr10_plus: Whether HDR10+ dynamic metadata was detected.
-        dovi_profile: The Dolby Vision profile number.
-        dovi_bl_present: Whether a Dolby Vision base layer is present.
-        dovi_bl_signal_compatibility_id: The base-layer compatibility identifier.
-    """
+    """Selected stream indexes and metadata probed from a media container."""
 
     video_stream_index: int | None = None
     audio_stream_index: int | None = None

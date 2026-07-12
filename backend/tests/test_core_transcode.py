@@ -662,7 +662,8 @@ def test_reads_linux_process_start_id(monkeypatch):
     monkeypatch.setattr(tasks.sys, "platform", "linux")
     monkeypatch.setattr(tasks.Path, "read_text", lambda *_args, **_kwargs: stat)
 
-    assert tasks._read_process_start_id(123) == "linux:22"
+    assert not hasattr(tasks, "_read_process_start_id")
+    assert asyncio.run(tasks._process_start_id(123)) == "linux:22"
 
 
 def test_reads_macos_process_start_id(monkeypatch):
@@ -676,7 +677,9 @@ def test_reads_macos_process_start_id(monkeypatch):
     monkeypatch.setattr(tasks.sys, "platform", "darwin")
     monkeypatch.setattr(tasks.subprocess, "run", run)
 
-    assert tasks._read_process_start_id(123) == ("darwin:Sun Jul 12 12:34:56 2026")
+    assert asyncio.run(tasks._process_start_id(123)) == (
+        "darwin:Sun Jul 12 12:34:56 2026"
+    )
     run.assert_called_once_with(
         ["ps", "-o", "lstart=", "-p", "123"],
         capture_output=True,
