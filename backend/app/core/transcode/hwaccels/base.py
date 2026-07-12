@@ -2,6 +2,7 @@ import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from fractions import Fraction
 from pathlib import Path
 
 from sanic.log import logger
@@ -9,6 +10,7 @@ from sanic.log import logger
 from app.core.transcode.capabilities import (
     FFmpegCapabilities,
     probe_hardware_decode,
+    probe_hardware_transform,
     require_hardware_encoder,
 )
 from app.core.transcode.options import EncoderConfig, TranscodeOptions
@@ -33,6 +35,10 @@ class MediaProbe:
     video_stream_index: int | None = None
     audio_stream_index: int | None = None
     height: int | None = None
+    width: int | None = None
+    sample_aspect_ratio: tuple[int, int] | None = None
+    rotation: int | None = None
+    field_order: str | None = None
     duration: float | None = None
     framerate: float | None = None
     codec: str | None = None
@@ -55,6 +61,7 @@ class HardwareRuntime:
 
     device: str | None
     can_decode_source: bool
+    can_filter_source: bool = False
 
 
 def _normalized_profile(value: str) -> str:
@@ -156,25 +163,100 @@ class TranscodeContext:
         return self.metadata.height
 
     @property
-    def needs_scale(self) -> bool:
+    def source_width(self) -> int | None:
+        return self.metadata.width
+
+    @property
+    def source_sar(self) -> tuple[int, int]:
+        return self.metadata.sample_aspect_ratio or (1, 1)
+
+    @property
+    def rotation(self) -> int:
+        return self.metadata.rotation or 0
+
+    @property
+    def display_width(self) -> Fraction | None:
+        width = self.source_width
+        height = self.source_height
+        if width is None or height is None:
+            return None
+        numerator, denominator = self.source_sar
+        display_width = Fraction(width * numerator, denominator)
+        if self.rotation in {90, 270}:
+            return Fraction(height)
+        return display_width
+
+    @property
+    def display_height(self) -> Fraction | None:
+        width = self.source_width
+        height = self.source_height
+        if width is None or height is None:
+            return None
+        numerator, denominator = self.source_sar
+        if self.rotation in {90, 270}:
+            return Fraction(width * numerator, denominator)
+        return Fraction(height)
+
+    @property
+    def needs_resolution_scale(self) -> bool:
         max_height = self.options.max_height
         if max_height is None:
             return False
-        return self.source_height is None or self.source_height > max_height
+        display_height = self.display_height
+        return display_height is None or display_height > max_height
+
+    @property
+    def needs_sar_normalization(self) -> bool:
+        return self.source_sar != (1, 1)
+
+    @property
+    def needs_scale(self) -> bool:
+        return self.needs_resolution_scale or self.needs_sar_normalization
+
+    @property
+    def needs_rotation(self) -> bool:
+        return self.rotation in {90, 180, 270}
+
+    @property
+    def is_interlaced(self) -> bool:
+        return self.metadata.field_order in {"tt", "tb", "bb", "bt"}
+
+    @property
+    def field_parity(self) -> str | None:
+        if self.metadata.field_order in {"tt", "tb"}:
+            return "tff"
+        if self.metadata.field_order in {"bb", "bt"}:
+            return "bff"
+        return None
 
     @property
     def scale_height(self) -> str | None:
         max_height = self.options.max_height
-        if not self.needs_scale or max_height is None:
+        if not self.needs_scale:
             return None
-        return f"trunc(min({max_height},ih)/2)*2"
+        display_height = self.display_height
+        if display_height is None:
+            if max_height is None:
+                return None
+            return f"trunc(min({max_height},ih)/2)*2"
+        target = display_height
+        if max_height is not None:
+            target = min(target, Fraction(max_height))
+        aligned = max(int(target) // 2 * 2, 2)
+        return str(aligned)
 
     @property
     def scale_width(self) -> str | None:
         height = self.scale_height
         if height is None:
             return None
-        return f"max(trunc(iw*{height}/ih/16)*16,16)"
+        display_width = self.display_width
+        display_height = self.display_height
+        if display_width is None or display_height is None:
+            return f"max(trunc(iw*{height}/ih/16)*16,16)"
+        target = display_width * int(height) / display_height
+        aligned = max(int(target) // 16 * 16, 16)
+        return str(aligned)
 
     @property
     def hdr_type(self) -> HDRType:
@@ -227,6 +309,17 @@ class TranscodeContext:
         hwaccel = self.encoder_config.hwaccel
         return hwaccel is not None and self.supports_hwaccel(hwaccel)
 
+    @property
+    def uses_hardware_filters(self) -> bool:
+        return self.hardware is not None and self.hardware.can_filter_source
+
+    @property
+    def needs_software_geometry(self) -> bool:
+        return self.needs_scale or (
+            (self.needs_rotation or self.is_interlaced)
+            and not self.uses_hardware_filters
+        )
+
 
 def software_tonemap_filters(
     context: TranscodeContext, output_format: str
@@ -244,6 +337,40 @@ def software_tonemap_filters(
         "zscale=primaries=bt709:transfer=bt709:matrix=bt709:range=tv",
         f"format={output_format}",
     ]
+
+
+def software_geometry_filters(
+    context: TranscodeContext, *, include_scale: bool = True
+) -> list[str]:
+    """Build ordered system-memory deinterlace, rotation, and scale filters."""
+    filters: list[str] = []
+    parity = context.field_parity
+    if parity is not None:
+        filters.extend(
+            [
+                f"bwdif=mode=send_frame:parity={parity}:deint=all",
+                "setfield=prog",
+            ]
+        )
+
+    if context.rotation == 90:
+        filters.append("transpose=clock")
+    elif context.rotation == 180:
+        filters.extend(["transpose=clock", "transpose=clock"])
+    elif context.rotation == 270:
+        filters.append("transpose=cclock")
+
+    if include_scale:
+        width = context.scale_width
+        height = context.scale_height
+        if width is not None and height is not None:
+            filters.extend([f"scale={width}:{height}", "setsar=1"])
+    return filters
+
+
+def hardware_rotation_direction(rotation: int) -> str | None:
+    """Map clockwise right-angle rotation to FFmpeg hardware filter direction."""
+    return {90: "clock", 180: "reversal", 270: "cclock"}.get(rotation)
 
 
 async def resolve_vaapi_device() -> str | None:
@@ -296,6 +423,20 @@ class HWAccelStrategy(ABC):
         """Return whether this strategy may probe hardware source decoding."""
         return is_hardware_decode_candidate(context.metadata)
 
+    def hardware_transform_filters(self, context: TranscodeContext) -> list[str]:
+        """Build optional source-specific hardware transform filters."""
+        return []
+
+    def hardware_transform_filter_names(self, context: TranscodeContext) -> set[str]:
+        """Return advertised filter names required by hardware transforms."""
+        return set()
+
+    def keeps_hardware_decode_on_transform_fallback(
+        self, context: TranscodeContext
+    ) -> bool:
+        """Return whether CPU filters can consume downloaded hardware decode."""
+        return True
+
     async def prepare_hardware(
         self, context: TranscodeContext, media_path: str
     ) -> HardwareRuntime | None:
@@ -343,6 +484,7 @@ class HWAccelStrategy(ABC):
         download_format = "p010le" if context.metadata.bit_depth == 10 else "nv12"
         decode_args = [
             *input_args,
+            "-noautorotate",
             "-i",
             media_path,
             "-map",
@@ -375,7 +517,66 @@ class HWAccelStrategy(ABC):
                 context.metadata.profile,
                 context.metadata.bit_depth,
             )
-        return HardwareRuntime(device, can_decode)
+        runtime = HardwareRuntime(device, can_decode)
+        if not can_decode:
+            return runtime
+
+        transform_context = replace(context, hardware=runtime)
+        transform_filters = self.hardware_transform_filters(transform_context)
+        if not transform_filters:
+            return runtime
+        required_filters = self.hardware_transform_filter_names(transform_context)
+        if any(not context.supports_filter(name) for name in required_filters):
+            return HardwareRuntime(
+                device,
+                can_decode
+                and self.keeps_hardware_decode_on_transform_fallback(context),
+            )
+
+        filter_runtime = HardwareRuntime(device, True, True)
+        filter_context = replace(context, hardware=filter_runtime)
+        input_args = await self.input_args(filter_context)
+        signature = ",".join(transform_filters)
+        transform_args = [
+            *input_args,
+            "-noautorotate",
+            "-i",
+            media_path,
+            "-map",
+            f"0:{stream_index}",
+            "-frames:v",
+            "1",
+            "-an",
+            "-sn",
+            "-dn",
+            "-vf",
+            f"{signature},hwdownload,format={download_format}",
+            "-f",
+            "null",
+            "-",
+        ]
+        can_filter = await probe_hardware_transform(
+            capabilities.executable,
+            strategy,
+            device,
+            media_path,
+            stream_index,
+            signature,
+            transform_args,
+        )
+        if not can_filter:
+            logger.warning(
+                "Hardware transform probe failed for %s rotation=%s "
+                "field_order=%s; using software filters",
+                strategy,
+                context.rotation,
+                context.metadata.field_order,
+            )
+        return HardwareRuntime(
+            device,
+            can_filter or self.keeps_hardware_decode_on_transform_fallback(context),
+            can_filter,
+        )
 
     def keep_hardware_frames(self, context: TranscodeContext) -> bool:
         """Return whether decoding should keep frames in device memory.
@@ -386,6 +587,10 @@ class HWAccelStrategy(ABC):
         Returns:
             Whether to keep hardware frames.
         """
+        if (context.needs_rotation or context.is_interlaced) and not (
+            context.uses_hardware_filters
+        ):
+            return False
         return not context.needs_scale
 
     async def input_args(self, context: TranscodeContext) -> list[str]:

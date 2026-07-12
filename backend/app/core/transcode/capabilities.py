@@ -20,6 +20,9 @@ _LISTING_OPTIONS = {
 _CAPABILITY_CACHE: dict[tuple[str, str], "FFmpegCapabilities"] = {}
 _HARDWARE_ENCODER_CACHE: set[tuple[str, str, str | None]] = set()
 _HARDWARE_DECODE_CACHE: set[tuple[str, str, str | None, str, int, int, int]] = set()
+_HARDWARE_TRANSFORM_CACHE: set[tuple[str, str, str | None, str, int, int, int, str]] = (
+    set()
+)
 
 
 @dataclass(frozen=True)
@@ -244,6 +247,33 @@ async def probe_hardware_decode(
     return success
 
 
+async def probe_hardware_transform(
+    executable: str,
+    strategy: str,
+    device: str | None,
+    media_path: str,
+    stream_index: int,
+    signature: str,
+    args: list[str],
+) -> bool:
+    """Probe a source hardware-filter graph and cache successful file states."""
+    executable = _resolved_executable(executable)
+    decode_key = _decode_cache_key(
+        executable,
+        strategy,
+        device,
+        media_path,
+        stream_index,
+    )
+    key = (*decode_key, signature) if decode_key is not None else None
+    if key is not None and key in _HARDWARE_TRANSFORM_CACHE:
+        return True
+    success, _ = await _run_ffmpeg_probe(executable, args)
+    if success and key is not None:
+        _HARDWARE_TRANSFORM_CACHE.add(key)
+    return success
+
+
 async def load_ffmpeg_capabilities(executable: str, encoder: str) -> FFmpegCapabilities:
     """Discover and cache FFmpeg capabilities for the selected video encoder."""
     executable = _resolved_executable(executable)
@@ -284,3 +314,4 @@ def clear_ffmpeg_capability_cache() -> None:
     _CAPABILITY_CACHE.clear()
     _HARDWARE_ENCODER_CACHE.clear()
     _HARDWARE_DECODE_CACHE.clear()
+    _HARDWARE_TRANSFORM_CACHE.clear()

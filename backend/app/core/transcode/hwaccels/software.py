@@ -1,6 +1,7 @@
 from app.core.transcode.hwaccels.base import (
     HWAccelStrategy,
     TranscodeContext,
+    software_geometry_filters,
     software_tonemap_filters,
 )
 
@@ -11,8 +12,12 @@ class Software(HWAccelStrategy):
     def video_filters(self, context: TranscodeContext) -> list[str]:
         """Tone map HDR input to 8-bit BT.709 in system memory."""
         if context.needs_tonemap:
-            return software_tonemap_filters(context, "yuv420p")
-        return []
+            filters = software_geometry_filters(context, include_scale=False)
+            filters.extend(software_tonemap_filters(context, "yuv420p"))
+            if context.needs_scale:
+                filters.append("setsar=1")
+            return filters
+        return software_geometry_filters(context)
 
     def encoder_args(self, context: TranscodeContext) -> list[str]:
         """Build libx264 CRF options with a VBV bitrate cap.

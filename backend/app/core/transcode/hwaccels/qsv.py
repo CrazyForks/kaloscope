@@ -3,7 +3,9 @@ import math
 from app.core.transcode.hwaccels.base import (
     HWAccelStrategy,
     TranscodeContext,
+    hardware_rotation_direction,
     resolve_vaapi_device,
+    software_geometry_filters,
     software_tonemap_filters,
 )
 
@@ -53,6 +55,38 @@ class QSV(HWAccelStrategy):
             and not context.needs_scale
             and super().allows_hardware_decode(context)
         )
+
+    def hardware_transform_filters(self, context: TranscodeContext) -> list[str]:
+        """Combine eligible SDR transforms in a single QSV VPP filter."""
+        if context.needs_tonemap or context.needs_scale:
+            return []
+        options: list[str] = []
+        if context.is_interlaced:
+            options.extend(["deinterlace=advanced", "rate=frame"])
+        direction = hardware_rotation_direction(context.rotation)
+        if direction is not None:
+            options.append(f"transpose={direction}")
+        if not options:
+            return []
+        options.append("format=nv12")
+        filters = [f"vpp_qsv={':'.join(options)}"]
+        if context.is_interlaced:
+            filters.append("setfield=prog")
+        return filters
+
+    def hardware_transform_filter_names(self, context: TranscodeContext) -> set[str]:
+        if not self.hardware_transform_filters(context):
+            return set()
+        names = {"vpp_qsv"}
+        if context.is_interlaced:
+            names.add("setfield")
+        return names
+
+    def keeps_hardware_decode_on_transform_fallback(
+        self, context: TranscodeContext
+    ) -> bool:
+        """QSV CPU transforms use the established software decode path."""
+        return False
 
     async def input_args(self, context: TranscodeContext) -> list[str]:
         """Initialize QSV through a VAAPI-backed DRM render device.
@@ -107,7 +141,16 @@ class QSV(HWAccelStrategy):
             or a QSV VPP format filter for hardware-decoded SDR input.
         """
         if context.needs_tonemap:
-            return [*software_tonemap_filters(context, "nv12"), "hwupload"]
+            filters = software_geometry_filters(context, include_scale=False)
+            filters.extend(software_tonemap_filters(context, "nv12"))
+            if context.needs_scale:
+                filters.append("setsar=1")
+            filters.append("hwupload")
+            return filters
+        if context.uses_hardware_filters:
+            return self.hardware_transform_filters(context)
+        if context.needs_software_geometry:
+            return [*software_geometry_filters(context), "format=nv12"]
         if context.needs_scale or not context.uses_hardware_decode:
             return ["format=nv12"]
         return ["vpp_qsv=format=nv12"]

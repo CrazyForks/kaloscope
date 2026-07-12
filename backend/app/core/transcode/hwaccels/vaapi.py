@@ -1,7 +1,9 @@
 from app.core.transcode.hwaccels.base import (
     HWAccelStrategy,
     TranscodeContext,
+    hardware_rotation_direction,
     resolve_vaapi_device,
+    software_geometry_filters,
     software_tonemap_filters,
 )
 
@@ -45,10 +47,39 @@ class VAAPI(HWAccelStrategy):
     def keep_hardware_frames(self, context: TranscodeContext) -> bool:
         """Keep HDR10 on VAAPI and expose HLG to the CPU tone mapper."""
         if context.is_hdr10:
-            return True
+            return not (
+                context.needs_sar_normalization
+                or (
+                    (context.needs_rotation or context.is_interlaced)
+                    and not context.uses_hardware_filters
+                )
+            )
         if context.is_hlg:
             return False
         return super().keep_hardware_frames(context)
+
+    def hardware_transform_filters(self, context: TranscodeContext) -> list[str]:
+        """Build VAAPI deinterlace and rotation filters when scaling stays valid."""
+        if context.needs_sar_normalization or context.is_hlg:
+            return []
+        if context.needs_resolution_scale and not context.is_hdr10:
+            return []
+        filters: list[str] = []
+        if context.is_interlaced:
+            filters.extend(["deinterlace_vaapi=rate=frame:auto=0", "setfield=prog"])
+        direction = hardware_rotation_direction(context.rotation)
+        if direction is not None:
+            filters.append(f"transpose_vaapi=dir={direction}")
+        return filters
+
+    def hardware_transform_filter_names(self, context: TranscodeContext) -> set[str]:
+        filters = self.hardware_transform_filters(context)
+        names: set[str] = set()
+        if any(value.startswith("deinterlace_vaapi") for value in filters):
+            names.update({"deinterlace_vaapi", "setfield"})
+        if any(value.startswith("transpose_vaapi") for value in filters):
+            names.add("transpose_vaapi")
+        return names
 
     async def input_args(self, context: TranscodeContext) -> list[str]:
         """Configure VAAPI decoding and select its render device.
@@ -88,21 +119,56 @@ class VAAPI(HWAccelStrategy):
         Returns:
             Hardware or software NV12 conversion filters for VAAPI encoding.
         """
+        hardware_filters = (
+            self.hardware_transform_filters(context)
+            if context.uses_hardware_filters
+            else []
+        )
+        cpu_geometry = (
+            context.needs_sar_normalization
+            or (
+                (context.needs_rotation or context.is_interlaced)
+                and not context.uses_hardware_filters
+            )
+            or (context.needs_resolution_scale and not context.is_hdr10)
+        )
         if context.is_hdr10:
-            filters: list[str] = []
+            if cpu_geometry:
+                return [
+                    *software_geometry_filters(context),
+                    "format=p010",
+                    "hwupload",
+                    "tonemap_vaapi=format=nv12:p=bt709:t=bt709:m=bt709",
+                ]
+            filters = list(hardware_filters)
             if not context.uses_hardware_decode:
                 filters.extend(["format=p010", "hwupload"])
-            if context.needs_scale:
-                filters.append(
-                    f"scale_vaapi=w='{context.scale_width}':h='{context.scale_height}'"
+            if context.needs_resolution_scale:
+                filters.extend(
+                    [
+                        f"scale_vaapi=w='{context.scale_width}':"
+                        f"h='{context.scale_height}'",
+                        "setsar=1",
+                    ]
                 )
             filters.append("tonemap_vaapi=format=nv12:p=bt709:t=bt709:m=bt709")
             return filters
         if context.is_hlg:
-            return [*software_tonemap_filters(context, "nv12"), "hwupload"]
+            filters = software_geometry_filters(context, include_scale=False)
+            filters.extend(software_tonemap_filters(context, "nv12"))
+            if context.needs_scale:
+                filters.append("setsar=1")
+            filters.append("hwupload")
+            return filters
+        if cpu_geometry:
+            return [
+                *software_geometry_filters(context),
+                "format=nv12",
+                "hwupload",
+            ]
         if context.needs_scale or not context.uses_hardware_decode:
-            return ["format=nv12", "hwupload"]
-        return ["scale_vaapi=format=nv12"]
+            return [*hardware_filters, "format=nv12", "hwupload"]
+        return [*hardware_filters, "scale_vaapi=format=nv12"]
 
     def encoder_args(self, context: TranscodeContext) -> list[str]:
         """Build VAAPI bitrate options with automatic rate-control selection.

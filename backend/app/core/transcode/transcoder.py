@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import json
+import math
 import re
 from pathlib import Path
 
@@ -116,6 +117,35 @@ def _pixel_format_bit_depth(pixel_format: str | None) -> int | None:
     return None
 
 
+def _parse_sample_aspect_ratio(value: object) -> tuple[int, int] | None:
+    """Parse and reduce a positive FFprobe sample-aspect-ratio value."""
+    if not isinstance(value, str):
+        return None
+    match = re.fullmatch(r"\s*(\d+)\s*[:/]\s*(\d+)\s*", value)
+    if not match:
+        return None
+    numerator, denominator = (int(part) for part in match.groups())
+    if numerator <= 0 or denominator <= 0:
+        return None
+    divisor = math.gcd(numerator, denominator)
+    return numerator // divisor, denominator // divisor
+
+
+def _parse_rotation(value: object) -> int | None:
+    """Convert FFprobe counter-clockwise rotation to canonical clockwise degrees."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    raw = float(value)
+    if not math.isfinite(raw):
+        return None
+    clockwise = (-raw) % 360
+    for supported in (0, 90, 180, 270):
+        distance = abs(clockwise - supported)
+        if min(distance, 360 - distance) <= 0.1:
+            return supported
+    return round(clockwise)
+
+
 async def _probe_hdr10_plus(media_path: str, stream_index: int) -> bool:
     """Detect HDR10+ dynamic metadata from the selected stream's first frame."""
     try:
@@ -198,10 +228,11 @@ async def _probe_media(media_path: str) -> MediaProbe:
         "-show_entries",
         (
             "format=duration:stream=index,codec_type,codec_name,profile,"
-            "bits_per_sample,bits_per_raw_sample,avg_frame_rate,pix_fmt,height,"
+            "bits_per_sample,bits_per_raw_sample,avg_frame_rate,pix_fmt,width,height,"
+            "sample_aspect_ratio,field_order,"
             "color_range,color_transfer,color_primaries,color_space:"
             "stream_disposition=attached_pic:stream_side_data=side_data_type,"
-            "dv_profile,bl_present_flag,dv_bl_signal_compatibility_id"
+            "rotation,dv_profile,bl_present_flag,dv_bl_signal_compatibility_id"
         ),
         "-of",
         "json",
@@ -246,6 +277,10 @@ async def _probe_media(media_path: str) -> MediaProbe:
     bit_depth = None
     color_range = None
     source_height = None
+    source_width = None
+    sample_aspect_ratio = None
+    rotation = None
+    field_order = None
     color_transfer = None
     color_primaries = None
     color_space = None
@@ -296,6 +331,27 @@ async def _probe_media(media_path: str) -> MediaProbe:
         if isinstance(raw_height, int) and raw_height > 0:
             source_height = raw_height
 
+        raw_width = stream.get("width")
+        if isinstance(raw_width, int) and raw_width > 0:
+            source_width = raw_width
+
+        sample_aspect_ratio = _parse_sample_aspect_ratio(
+            stream.get("sample_aspect_ratio")
+        )
+
+        raw_field_order = stream.get("field_order")
+        if isinstance(raw_field_order, str):
+            normalized_field_order = raw_field_order.lower()
+            if normalized_field_order in {
+                "progressive",
+                "tt",
+                "bb",
+                "tb",
+                "bt",
+                "unknown",
+            }:
+                field_order = normalized_field_order
+
         raw_pixel_format = stream.get("pix_fmt")
         if isinstance(raw_pixel_format, str) and raw_pixel_format:
             pixel_format = raw_pixel_format
@@ -328,16 +384,19 @@ async def _probe_media(media_path: str) -> MediaProbe:
                 if not isinstance(side_data, dict):
                     continue
                 side_data_type = side_data.get("side_data_type")
-                if not isinstance(side_data_type, str) or (
-                    side_data_type.lower() != "dovi configuration record"
-                ):
+                if not isinstance(side_data_type, str):
                     continue
-                dovi_profile = _optional_int(side_data.get("dv_profile"), positive=True)
-                dovi_bl_present = _optional_flag(side_data.get("bl_present_flag"))
-                dovi_bl_signal_compatibility_id = _optional_int(
-                    side_data.get("dv_bl_signal_compatibility_id")
-                )
-                break
+                normalized_type = side_data_type.lower()
+                if normalized_type == "display matrix" and rotation is None:
+                    rotation = _parse_rotation(side_data.get("rotation"))
+                elif normalized_type == "dovi configuration record":
+                    dovi_profile = _optional_int(
+                        side_data.get("dv_profile"), positive=True
+                    )
+                    dovi_bl_present = _optional_flag(side_data.get("bl_present_flag"))
+                    dovi_bl_signal_compatibility_id = _optional_int(
+                        side_data.get("dv_bl_signal_compatibility_id")
+                    )
 
         raw = stream.get("avg_frame_rate")
         if isinstance(raw, str):
@@ -360,6 +419,10 @@ async def _probe_media(media_path: str) -> MediaProbe:
         video_stream_index=video_stream_index,
         audio_stream_index=audio_stream_index,
         height=source_height,
+        width=source_width,
+        sample_aspect_ratio=sample_aspect_ratio,
+        rotation=rotation,
+        field_order=field_order,
         duration=duration,
         framerate=framerate,
         codec=codec,
@@ -428,6 +491,20 @@ def _require_supported_hdr(metadata: MediaProbe) -> None:
         raise RuntimeError("Dolby Vision-only input is not supported")
 
 
+def _require_supported_geometry(
+    metadata: MediaProbe, options: TranscodeOptions
+) -> None:
+    """Reject unsupported rotation or an incomplete required geometry plan."""
+    rotation = metadata.rotation or 0
+    if rotation not in {0, 90, 180, 270}:
+        raise RuntimeError(f"Unsupported video rotation: {rotation} degrees")
+
+    sar = metadata.sample_aspect_ratio or (1, 1)
+    requires_geometry = rotation != 0 or sar != (1, 1) or options.max_height is not None
+    if requires_geometry and (metadata.width is None or metadata.height is None):
+        raise RuntimeError("Video geometry transform requires valid width and height")
+
+
 async def _prepare_hardware(context: TranscodeContext, media_path: str) -> None:
     """Prepare selected hardware before building the real transcode command."""
     from app.core.transcode.hwaccels import get_hwaccel
@@ -486,6 +563,7 @@ async def ensure_transcode(
         metadata = await _probe_media(media_path)
         _require_video_stream(metadata)
         _require_supported_hdr(metadata)
+        _require_supported_geometry(metadata, options)
         capabilities = await load_ffmpeg_capabilities(await _ffmpeg(), options.encoder)
         context = TranscodeContext(
             options=options,
@@ -553,6 +631,7 @@ async def _build_hls_cmd(
     """
     video_stream_index = _require_video_stream(context.metadata)
     _require_supported_hdr(context.metadata)
+    _require_supported_geometry(context.metadata, context.options)
     audio_stream_index = context.metadata.audio_stream_index
 
     executable = (
@@ -571,10 +650,19 @@ async def _build_hls_cmd(
     hwaccel = get_hwaccel(options.hwaccel)
     cmd.extend(await hwaccel.input_args(context))
 
-    cmd.extend(["-i", input_path])
+    cmd.extend(["-display_rotation", "0", "-noautorotate", "-i", input_path])
 
     # strip metadata and chapters that web playback does not use
-    cmd.extend(["-map_metadata", "-1", "-map_chapters", "-1"])
+    cmd.extend(
+        [
+            "-map_metadata",
+            "-1",
+            "-map_chapters",
+            "-1",
+            "-metadata:s:v:0",
+            "rotate=0",
+        ]
+    )
 
     cmd.extend(["-map", f"0:{video_stream_index}"])
     if audio_stream_index is not None:
@@ -582,15 +670,7 @@ async def _build_hls_cmd(
     else:
         cmd.append("-an")
 
-    vf_parts: list[str] = []
-    if context.needs_scale and not context.needs_tonemap:
-        # preserve aspect ratio with a 16-pixel-aligned width and even height
-        target_width = context.scale_width
-        target_height = context.scale_height
-        assert target_width is not None and target_height is not None
-        vf_parts.append(f"scale='{target_width}':'{target_height}'")
-
-    vf_parts.extend(hwaccel.video_filters(context))
+    vf_parts = hwaccel.video_filters(context)
 
     _validate_capabilities(context, vf_parts)
 
@@ -600,6 +680,9 @@ async def _build_hls_cmd(
 
     if vf_parts:
         cmd.extend(["-vf", ",".join(vf_parts)])
+
+    if context.is_interlaced:
+        cmd.extend(["-field_order", "progressive"])
 
     if context.needs_tonemap and (
         context.capabilities is None
