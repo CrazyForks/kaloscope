@@ -428,6 +428,15 @@ def _require_supported_hdr(metadata: MediaProbe) -> None:
         raise RuntimeError("Dolby Vision-only input is not supported")
 
 
+async def _prepare_hardware(context: TranscodeContext, media_path: str) -> None:
+    """Prepare selected hardware before building the real transcode command."""
+    from app.core.transcode.hwaccels import get_hwaccel
+
+    context.hardware = await get_hwaccel(context.options.hwaccel).prepare_hardware(
+        context, media_path
+    )
+
+
 async def ensure_transcode(
     media_path: str, media_hash: str, options: TranscodeOptions
 ) -> tuple[str, str]:
@@ -484,6 +493,7 @@ async def ensure_transcode(
             capabilities=capabilities,
         )
 
+        await _prepare_hardware(context, media_path)
         cmd = await _build_hls_cmd(media_path, out_dir, context)
         logger.info("Starting ffmpeg HLS: %s", " ".join(cmd))
 

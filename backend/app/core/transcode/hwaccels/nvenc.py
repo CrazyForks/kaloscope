@@ -10,6 +10,10 @@ from app.core.transcode.hwaccels.base import (
 class NVENC(HWAccelStrategy):
     """NVIDIA NVENC H.264 encoding strategy."""
 
+    async def resolve_hardware_device(self, context: TranscodeContext) -> str | None:
+        """Use the default CUDA device selected by the current command path."""
+        return "0"
+
     def keep_hardware_frames(self, context: TranscodeContext) -> bool:
         """Return system frames when HDR requires the standard CPU filter."""
         return not context.needs_tonemap and super().keep_hardware_frames(context)

@@ -3,7 +3,7 @@
 import asyncio
 import importlib
 import threading
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from filelock import FileLock
 
+import app.core.transcode.hwaccels.base as base_module
 import app.core.transcode.hwaccels.qsv as qsv_module
 import app.core.transcode.hwaccels.vaapi as vaapi_module
 from app.core.transcode import capabilities as capability_module
@@ -151,6 +152,376 @@ def test_load_ffmpeg_capabilities_caches_success(monkeypatch):
     assert first.encoders == {"libx264", "aac"}
     assert first.encoder_options == {"preset"}
     assert query_mock.await_count == 6
+
+
+class _ProbeStream:
+    def __init__(self, *chunks):
+        self.chunks = list(chunks)
+
+    async def read(self, size):
+        del size
+        return self.chunks.pop(0) if self.chunks else b""
+
+
+class _ProbeProcess:
+    def __init__(self, returncode=0, stderr=()):
+        self.returncode = returncode
+        self.stderr = _ProbeStream(*stderr)
+        self.kill = Mock()
+
+    async def wait(self):
+        return self.returncode
+
+
+def test_run_ffmpeg_probe_success(monkeypatch):
+    proc = _ProbeProcess()
+    create = AsyncMock(return_value=proc)
+    monkeypatch.setattr(
+        capability_module.asyncio,
+        "create_subprocess_exec",
+        create,
+    )
+
+    result = asyncio.run(
+        capability_module._run_ffmpeg_probe(
+            "ffmpeg-test",
+            ["-f", "null", "-"],
+        )
+    )
+
+    assert result == (True, "")
+    assert create.await_args.args[:4] == (
+        "ffmpeg-test",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+    )
+    assert create.await_args.kwargs == {
+        "stdout": asyncio.subprocess.DEVNULL,
+        "stderr": asyncio.subprocess.PIPE,
+    }
+
+
+def test_run_ffmpeg_probe_failure_returns_bounded_stderr(monkeypatch):
+    proc = _ProbeProcess(returncode=1, stderr=(b"x" * 3000,))
+    monkeypatch.setattr(
+        capability_module.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    )
+
+    success, detail = asyncio.run(
+        capability_module._run_ffmpeg_probe("ffmpeg-test", [])
+    )
+
+    assert success is False
+    assert len(detail) == capability_module._RUNTIME_STDERR_LIMIT
+
+
+def test_run_ffmpeg_probe_allows_driver_info_after_zero_exit(monkeypatch):
+    driver_info = b"libva info: va_openDriver() returns 0"
+    proc = _ProbeProcess(stderr=(driver_info,))
+    monkeypatch.setattr(
+        capability_module.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    )
+
+    assert asyncio.run(capability_module._run_ffmpeg_probe("ffmpeg-test", [])) == (
+        True,
+        driver_info.decode(),
+    )
+
+
+def test_run_ffmpeg_probe_start_failure_is_reported(monkeypatch):
+    monkeypatch.setattr(
+        capability_module.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(side_effect=OSError("unavailable")),
+    )
+
+    assert asyncio.run(capability_module._run_ffmpeg_probe("ffmpeg-test", [])) == (
+        False,
+        "unavailable",
+    )
+
+
+def test_run_ffmpeg_probe_timeout_kills_and_reaps(monkeypatch):
+    stopped = asyncio.Event()
+
+    class Process(_ProbeProcess):
+        def __init__(self):
+            super().__init__(returncode=None)
+            self.kill = Mock(side_effect=self._stop)
+
+        def _stop(self):
+            self.returncode = -9
+            stopped.set()
+
+        async def wait(self):
+            await stopped.wait()
+            return self.returncode
+
+    proc = Process()
+    monkeypatch.setattr(
+        capability_module.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    )
+    monkeypatch.setattr(capability_module, "_RUNTIME_PROBE_TIMEOUT", 0.01)
+
+    success, detail = asyncio.run(
+        capability_module._run_ffmpeg_probe("ffmpeg-test", [])
+    )
+
+    assert success is False
+    assert detail == "timed out after 0.0 seconds"
+    proc.kill.assert_called_once_with()
+
+
+def test_run_ffmpeg_probe_cancellation_kills_and_reaps(monkeypatch):
+    started = asyncio.Event()
+    stopped = asyncio.Event()
+
+    class Process(_ProbeProcess):
+        def __init__(self):
+            super().__init__(returncode=None)
+            self.kill = Mock(side_effect=self._stop)
+
+        def _stop(self):
+            self.returncode = -9
+            stopped.set()
+
+        async def wait(self):
+            started.set()
+            await stopped.wait()
+            return self.returncode
+
+        async def communicate(self):
+            started.set()
+            await stopped.wait()
+            return None, b""
+
+    proc = Process()
+    monkeypatch.setattr(
+        capability_module.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    )
+
+    async def cancel_probe():
+        task = asyncio.create_task(
+            capability_module._run_ffmpeg_probe("ffmpeg-test", [])
+        )
+        await started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(cancel_probe())
+
+    proc.kill.assert_called_once_with()
+    assert proc.returncode == -9
+
+
+def test_run_ffmpeg_probe_stalled_reap_remains_bounded(monkeypatch):
+    never = asyncio.Event()
+
+    class Process(_ProbeProcess):
+        def __init__(self):
+            super().__init__(returncode=None)
+
+        async def wait(self):
+            await never.wait()
+
+        async def communicate(self):
+            await never.wait()
+
+    proc = Process()
+    monkeypatch.setattr(
+        capability_module.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    )
+    monkeypatch.setattr(capability_module, "_RUNTIME_PROBE_TIMEOUT", 0.01)
+    monkeypatch.setattr(capability_module, "_RUNTIME_REAP_TIMEOUT", 0.01, raising=False)
+
+    result = asyncio.run(
+        asyncio.wait_for(
+            capability_module._run_ffmpeg_probe("ffmpeg-test", []),
+            timeout=0.1,
+        )
+    )
+
+    assert result == (False, "timed out after 0.0 seconds")
+    proc.kill.assert_called_once_with()
+
+
+def test_stderr_tail_retains_only_bounded_bytes():
+    stream = _ProbeStream(b"a" * 1500, b"b" * 1500)
+
+    result = asyncio.run(capability_module._read_stderr_tail(stream))
+
+    assert result == b"a" * 548 + b"b" * 1500
+
+
+def test_hardware_encoder_probe_caches_success(monkeypatch):
+    probe = AsyncMock(return_value=(True, ""))
+    capability_module.clear_ffmpeg_capability_cache()
+    monkeypatch.setattr(capability_module, "_run_ffmpeg_probe", probe)
+    monkeypatch.setattr(
+        capability_module,
+        "_resolved_executable",
+        lambda value: value,
+    )
+
+    for _ in range(2):
+        asyncio.run(
+            capability_module.require_hardware_encoder(
+                "ffmpeg-test",
+                "vaapi",
+                "h264_vaapi",
+                "/dev/dri/renderD128",
+                [],
+            )
+        )
+
+    probe.assert_awaited_once()
+
+
+def test_hardware_encoder_probe_failure_is_not_cached(monkeypatch):
+    probe = AsyncMock(return_value=(False, "device failed"))
+    capability_module.clear_ffmpeg_capability_cache()
+    monkeypatch.setattr(capability_module, "_run_ffmpeg_probe", probe)
+    monkeypatch.setattr(
+        capability_module,
+        "_resolved_executable",
+        lambda value: value,
+    )
+
+    for _ in range(2):
+        with pytest.raises(RuntimeError, match="h264_vaapi.*device failed"):
+            asyncio.run(
+                capability_module.require_hardware_encoder(
+                    "ffmpeg-test",
+                    "vaapi",
+                    "h264_vaapi",
+                    None,
+                    [],
+                )
+            )
+
+    assert probe.await_count == 2
+
+
+def test_hardware_decode_probe_cache_tracks_file_state(monkeypatch, tmp_path):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"first")
+    probe = AsyncMock(return_value=(True, ""))
+    capability_module.clear_ffmpeg_capability_cache()
+    monkeypatch.setattr(capability_module, "_run_ffmpeg_probe", probe)
+    monkeypatch.setattr(
+        capability_module,
+        "_resolved_executable",
+        lambda value: value,
+    )
+
+    for _ in range(2):
+        assert (
+            asyncio.run(
+                capability_module.probe_hardware_decode(
+                    "ffmpeg-test",
+                    "vaapi",
+                    None,
+                    str(media),
+                    0,
+                    [],
+                )
+            )
+            is True
+        )
+    media.write_bytes(b"changed-size")
+    assert (
+        asyncio.run(
+            capability_module.probe_hardware_decode(
+                "ffmpeg-test",
+                "vaapi",
+                None,
+                str(media),
+                0,
+                [],
+            )
+        )
+        is True
+    )
+
+    assert probe.await_count == 2
+
+
+def test_hardware_decode_probe_failure_is_not_cached(monkeypatch, tmp_path):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"video")
+    probe = AsyncMock(return_value=(False, "decode failed"))
+    capability_module.clear_ffmpeg_capability_cache()
+    monkeypatch.setattr(capability_module, "_run_ffmpeg_probe", probe)
+    monkeypatch.setattr(
+        capability_module,
+        "_resolved_executable",
+        lambda value: value,
+    )
+
+    for _ in range(2):
+        assert (
+            asyncio.run(
+                capability_module.probe_hardware_decode(
+                    "ffmpeg-test",
+                    "vaapi",
+                    None,
+                    str(media),
+                    0,
+                    [],
+                )
+            )
+            is False
+        )
+
+    assert probe.await_count == 2
+
+
+def test_clear_ffmpeg_capability_cache_clears_runtime_successes(monkeypatch, tmp_path):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"video")
+    probe = AsyncMock(return_value=(True, ""))
+    capability_module.clear_ffmpeg_capability_cache()
+    monkeypatch.setattr(capability_module, "_run_ffmpeg_probe", probe)
+    monkeypatch.setattr(
+        capability_module,
+        "_resolved_executable",
+        lambda value: value,
+    )
+
+    async def run_probes():
+        await capability_module.require_hardware_encoder(
+            "ffmpeg-test",
+            "vaapi",
+            "h264_vaapi",
+            None,
+            [],
+        )
+        await capability_module.probe_hardware_decode(
+            "ffmpeg-test",
+            "vaapi",
+            None,
+            str(media),
+            0,
+            [],
+        )
+
+    asyncio.run(run_probes())
+    capability_module.clear_ffmpeg_capability_cache()
+    asyncio.run(run_probes())
+
+    assert probe.await_count == 4
 
 
 class _Lock:
@@ -651,6 +1022,478 @@ def test_transcode_context():
     assert context.scale_height == "trunc(min(720,ih)/2)*2"
     assert context.scale_width == ("max(trunc(iw*trunc(min(720,ih)/2)*2/ih/16)*16,16)")
     assert context.encoder_config is options.encoder_config
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected"),
+    [
+        (
+            MediaProbe(
+                codec="h264",
+                profile="High",
+                bit_depth=8,
+                pixel_format="yuv420p",
+            ),
+            True,
+        ),
+        (
+            MediaProbe(
+                codec="avc",
+                profile="Constrained Baseline",
+                bit_depth=8,
+                pixel_format="nv12",
+            ),
+            True,
+        ),
+        (
+            MediaProbe(
+                codec="hevc",
+                profile="Main",
+                bit_depth=8,
+                pixel_format="yuv420p",
+            ),
+            True,
+        ),
+        (
+            MediaProbe(
+                codec="hevc",
+                profile="Main 10",
+                bit_depth=10,
+                pixel_format="yuv420p10le",
+            ),
+            True,
+        ),
+        (
+            MediaProbe(
+                codec="h264",
+                profile="High 10",
+                bit_depth=10,
+                pixel_format="yuv420p10le",
+            ),
+            False,
+        ),
+        (
+            MediaProbe(
+                codec="hevc",
+                profile="Main 10",
+                bit_depth=12,
+                pixel_format="yuv420p12le",
+            ),
+            False,
+        ),
+        (
+            MediaProbe(
+                codec="hevc",
+                profile="Main 10",
+                bit_depth=10,
+                pixel_format="yuv422p10le",
+            ),
+            False,
+        ),
+        (
+            MediaProbe(
+                codec="hevc",
+                profile="Main 10",
+                bit_depth=10,
+                pixel_format="yuv444p10le",
+            ),
+            False,
+        ),
+        (
+            MediaProbe(
+                codec="vp9",
+                profile="Profile 0",
+                bit_depth=8,
+                pixel_format="yuv420p",
+            ),
+            False,
+        ),
+        (
+            MediaProbe(
+                codec="h264",
+                bit_depth=8,
+                pixel_format="yuv420p",
+            ),
+            False,
+        ),
+        (
+            MediaProbe(
+                codec="h264",
+                profile="High!",
+                bit_depth=8,
+                pixel_format="yuv420p",
+            ),
+            False,
+        ),
+        (
+            MediaProbe(
+                codec="hevc",
+                profile="Main.10",
+                bit_depth=10,
+                pixel_format="p010le",
+            ),
+            False,
+        ),
+    ],
+)
+def test_hardware_decode_candidate(metadata, expected):
+    assert base_module.is_hardware_decode_candidate(metadata) is expected
+
+
+def test_context_uses_prepared_hardware_decode_result():
+    options = TranscodeOptions(hwaccel="vaapi")
+    capabilities = _capabilities(hwaccels=("vaapi",))
+
+    enabled = TranscodeContext(
+        options=options,
+        capabilities=capabilities,
+        hardware=base_module.HardwareRuntime("/dev/dri/renderD128", True),
+    )
+    disabled = TranscodeContext(
+        options=options,
+        capabilities=capabilities,
+        hardware=base_module.HardwareRuntime("/dev/dri/renderD128", False),
+    )
+    unprepared = TranscodeContext(options=options, capabilities=capabilities)
+
+    assert enabled.uses_hardware_decode is True
+    assert disabled.uses_hardware_decode is False
+    assert unprepared.uses_hardware_decode is True
+
+
+def _eligible_hardware_context(hwaccel, *, capabilities=None, resolution="original"):
+    return TranscodeContext(
+        options=TranscodeOptions(hwaccel=hwaccel, resolution=resolution),
+        metadata=MediaProbe(
+            video_stream_index=2,
+            codec="h264",
+            profile="High",
+            bit_depth=8,
+            pixel_format="yuv420p",
+            height=1080,
+        ),
+        capabilities=capabilities or _capabilities(),
+    )
+
+
+def test_software_prepare_hardware_is_noop():
+    context = TranscodeContext(options=TranscodeOptions())
+
+    assert asyncio.run(get_hwaccel(None).prepare_hardware(context, "input.mkv")) is None
+
+
+def test_videotoolbox_prepare_hardware_uses_null_probes(monkeypatch, tmp_path):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"video")
+    require_encoder = AsyncMock()
+    probe_decode = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        base_module,
+        "require_hardware_encoder",
+        require_encoder,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        base_module,
+        "probe_hardware_decode",
+        probe_decode,
+        raising=False,
+    )
+    context = _eligible_hardware_context("videotoolbox")
+
+    runtime = asyncio.run(
+        get_hwaccel("videotoolbox").prepare_hardware(context, str(media))
+    )
+
+    assert runtime == base_module.HardwareRuntime(None, True)
+    encoder_args = require_encoder.await_args.args[-1]
+    assert encoder_args[-2:] == ["null", "-"]
+    assert "h264_videotoolbox" in encoder_args
+    decode_args = probe_decode.await_args.args[-1]
+    assert decode_args[decode_args.index("-map") + 1] == "0:2"
+    assert decode_args[decode_args.index("-vf") + 1] == "hwdownload,format=nv12"
+    assert decode_args[-2:] == ["null", "-"]
+    assert "videotoolbox" in decode_args
+
+
+def test_prepare_hardware_downloads_10_bit_probe_frame(monkeypatch, tmp_path):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"video")
+    monkeypatch.setattr(
+        base_module,
+        "require_hardware_encoder",
+        AsyncMock(),
+        raising=False,
+    )
+    probe_decode = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        base_module,
+        "probe_hardware_decode",
+        probe_decode,
+        raising=False,
+    )
+    context = _eligible_hardware_context("videotoolbox")
+    context.metadata = replace(
+        context.metadata,
+        bit_depth=10,
+        codec="hevc",
+        profile="Main 10",
+        pixel_format="yuv420p10le",
+    )
+
+    asyncio.run(get_hwaccel("videotoolbox").prepare_hardware(context, str(media)))
+
+    decode_args = probe_decode.await_args.args[-1]
+    assert decode_args[decode_args.index("-vf") + 1] == "hwdownload,format=p010le"
+
+
+def test_nvenc_prepare_hardware_decode_failure_keeps_encoder(monkeypatch, tmp_path):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"video")
+    require_encoder = AsyncMock()
+    probe_decode = AsyncMock(return_value=False)
+    monkeypatch.setattr(
+        base_module,
+        "require_hardware_encoder",
+        require_encoder,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        base_module,
+        "probe_hardware_decode",
+        probe_decode,
+        raising=False,
+    )
+    context = _eligible_hardware_context("nvenc")
+
+    runtime = asyncio.run(get_hwaccel("nvenc").prepare_hardware(context, str(media)))
+
+    assert runtime == base_module.HardwareRuntime("0", False)
+    require_encoder.assert_awaited_once()
+    assert "h264_nvenc" in require_encoder.await_args.args[-1]
+    assert "cuda" in probe_decode.await_args.args[-1]
+
+
+@pytest.mark.parametrize(
+    ("hwaccel", "device", "encoder", "expected_filter"),
+    [
+        ("nvenc", "0", "h264_nvenc", "format=yuv420p"),
+        ("qsv", "/dev/dri/renderD128", "h264_qsv", "format=nv12"),
+        (
+            "vaapi",
+            "/dev/dri/renderD128",
+            "h264_vaapi",
+            "format=nv12,hwupload",
+        ),
+        ("videotoolbox", None, "h264_videotoolbox", "format=nv12"),
+    ],
+)
+def test_runtime_decode_failure_builds_software_decode_command(
+    monkeypatch,
+    tmp_path,
+    hwaccel,
+    device,
+    encoder,
+    expected_filter,
+):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"video")
+    strategy = get_hwaccel(hwaccel)
+    require_encoder = AsyncMock()
+    monkeypatch.setattr(
+        base_module,
+        "require_hardware_encoder",
+        require_encoder,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        base_module,
+        "probe_hardware_decode",
+        AsyncMock(return_value=False),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        strategy,
+        "resolve_hardware_device",
+        AsyncMock(return_value=device),
+    )
+    context = _eligible_hardware_context(hwaccel)
+
+    context.hardware = asyncio.run(strategy.prepare_hardware(context, str(media)))
+    cmd = asyncio.run(transcoder._build_hls_cmd(str(media), tmp_path, context))
+
+    assert context.hardware == base_module.HardwareRuntime(device, False)
+    assert "-hwaccel" not in cmd
+    assert cmd[cmd.index("-c:v") + 1] == encoder
+    assert cmd[cmd.index("-vf") + 1] == expected_filter
+    require_encoder.assert_awaited_once()
+
+
+def test_vaapi_prepare_hardware_uses_device_once(monkeypatch, tmp_path):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"video")
+    device = "/dev/dri/renderD128"
+    resolve = AsyncMock(return_value=device)
+    require_encoder = AsyncMock()
+    probe_decode = AsyncMock(return_value=True)
+    monkeypatch.setattr(vaapi_module, "resolve_vaapi_device", resolve)
+    monkeypatch.setattr(
+        base_module,
+        "require_hardware_encoder",
+        require_encoder,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        base_module,
+        "probe_hardware_decode",
+        probe_decode,
+        raising=False,
+    )
+
+    runtime = asyncio.run(
+        get_hwaccel("vaapi").prepare_hardware(
+            _eligible_hardware_context("vaapi"),
+            str(media),
+        )
+    )
+
+    assert runtime == base_module.HardwareRuntime(device, True)
+    resolve.assert_awaited_once()
+    encoder_args = require_encoder.await_args.args[-1]
+    assert encoder_args[:2] == ["-vaapi_device", device]
+    assert encoder_args[encoder_args.index("-vf") + 1] == "format=nv12,hwupload"
+    assert "h264_vaapi" in encoder_args
+    decode_args = probe_decode.await_args.args[-1]
+    assert decode_args[decode_args.index("-vaapi_device") + 1] == device
+    assert "vaapi" in decode_args
+
+
+def test_qsv_prepare_hardware_uses_device_once(monkeypatch, tmp_path):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"video")
+    device = "/dev/dri/renderD128"
+    resolve = AsyncMock(return_value=device)
+    require_encoder = AsyncMock()
+    probe_decode = AsyncMock(return_value=True)
+    monkeypatch.setattr(qsv_module, "resolve_vaapi_device", resolve)
+    monkeypatch.setattr(
+        base_module,
+        "require_hardware_encoder",
+        require_encoder,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        base_module,
+        "probe_hardware_decode",
+        probe_decode,
+        raising=False,
+    )
+
+    runtime = asyncio.run(
+        get_hwaccel("qsv").prepare_hardware(
+            _eligible_hardware_context("qsv"),
+            str(media),
+        )
+    )
+
+    assert runtime == base_module.HardwareRuntime(device, True)
+    resolve.assert_awaited_once()
+    encoder_args = require_encoder.await_args.args[-1]
+    device_arg = f"qsv=qs:hw,child_device={device},child_device_type=vaapi"
+    assert encoder_args[encoder_args.index("-init_hw_device") + 1] == device_arg
+    assert encoder_args[encoder_args.index("-vf") + 1] == "format=nv12,hwupload"
+    assert "h264_qsv" in encoder_args
+    decode_args = probe_decode.await_args.args[-1]
+    assert decode_args[decode_args.index("-init_hw_device") + 1] == device_arg
+    assert "qsv" in decode_args
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["unsupported_codec", "missing_hwaccel", "qsv_hdr", "qsv_scale"],
+)
+def test_prepare_hardware_skips_ineligible_decode(monkeypatch, tmp_path, case):
+    media = tmp_path / "input.mkv"
+    media.write_bytes(b"video")
+    require_encoder = AsyncMock()
+    probe_decode = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        base_module,
+        "require_hardware_encoder",
+        require_encoder,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        base_module,
+        "probe_hardware_decode",
+        probe_decode,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        qsv_module,
+        "resolve_vaapi_device",
+        AsyncMock(return_value="/dev/dri/renderD128"),
+    )
+    if case == "unsupported_codec":
+        context = TranscodeContext(
+            options=TranscodeOptions(hwaccel="nvenc"),
+            metadata=MediaProbe(
+                video_stream_index=0,
+                codec="vp9",
+                profile="Profile 0",
+                bit_depth=8,
+                pixel_format="yuv420p",
+            ),
+            capabilities=_capabilities(),
+        )
+    elif case == "missing_hwaccel":
+        context = _eligible_hardware_context(
+            "nvenc",
+            capabilities=_capabilities(hwaccels=()),
+        )
+    elif case == "qsv_hdr":
+        context = TranscodeContext(
+            options=TranscodeOptions(hwaccel="qsv"),
+            metadata=MediaProbe(
+                video_stream_index=0,
+                codec="hevc",
+                profile="Main 10",
+                bit_depth=10,
+                pixel_format="yuv420p10le",
+                color_transfer="smpte2084",
+                color_primaries="bt2020",
+                color_space="bt2020nc",
+            ),
+            capabilities=_capabilities(),
+        )
+    else:
+        context = _eligible_hardware_context("qsv", resolution="720p")
+
+    runtime = asyncio.run(
+        get_hwaccel(context.options.hwaccel).prepare_hardware(
+            context,
+            str(media),
+        )
+    )
+
+    assert runtime is not None
+    assert runtime.can_decode_source is False
+    require_encoder.assert_awaited_once()
+    probe_decode.assert_not_awaited()
+
+
+def test_prepare_hardware_rejects_missing_encoder_before_device(monkeypatch):
+    context = _eligible_hardware_context(
+        "vaapi",
+        capabilities=_capabilities(encoders=("aac",)),
+    )
+    resolve = AsyncMock(side_effect=AssertionError("device resolved"))
+    monkeypatch.setattr(vaapi_module, "resolve_vaapi_device", resolve)
+
+    with pytest.raises(RuntimeError, match="encoders: h264_vaapi"):
+        asyncio.run(get_hwaccel("vaapi").prepare_hardware(context, "input.mkv"))
+
+    resolve.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
@@ -1985,6 +2828,113 @@ def test_build_hls_cmd_rejects_dovi_only(tmp_path):
 
     with pytest.raises(RuntimeError, match="Dolby Vision-only"):
         asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
+
+
+def test_hardware_preparation_precedes_build_and_start(monkeypatch, tmp_path):
+    events = []
+    lock = object()
+    proc = SimpleNamespace(pid=123, returncode=None, stderr=None)
+    metadata = MediaProbe(
+        video_stream_index=0,
+        duration=60.0,
+        codec="h264",
+        profile="High",
+        bit_depth=8,
+        pixel_format="yuv420p",
+    )
+    options = TranscodeOptions(hwaccel="nvenc")
+
+    async def prepare(context, media_path):
+        events.append("prepare")
+        assert media_path == "input.mkv"
+        context.hardware = base_module.HardwareRuntime("0", False)
+
+    async def build(_media_path, _out_dir, context):
+        events.append("build")
+        assert context.hardware == base_module.HardwareRuntime("0", False)
+        return ["ffmpeg"]
+
+    async def create(*_args, **_kwargs):
+        events.append("start")
+        return proc
+
+    async def register(*_args):
+        events.append("register")
+        return "hash:profile"
+
+    monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
+    monkeypatch.setattr(transcoder, "is_complete", Mock(return_value=False))
+    monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
+    monkeypatch.setattr(transcoder, "cleanup_stale_hls", Mock())
+    monkeypatch.setattr(transcoder, "_probe_media", AsyncMock(return_value=metadata))
+    monkeypatch.setattr(transcoder, "_prepare_hardware", prepare, raising=False)
+    monkeypatch.setattr(transcoder, "_build_hls_cmd", build)
+    monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
+    monkeypatch.setattr(
+        transcoder,
+        "load_ffmpeg_capabilities",
+        AsyncMock(return_value=_capabilities()),
+    )
+    monkeypatch.setattr(transcoder.asyncio, "create_subprocess_exec", create)
+    monkeypatch.setattr(transcoder, "register_task", register)
+    monkeypatch.setattr(transcoder, "_start_monitor", Mock())
+    monkeypatch.setattr(transcoder, "wait_segment", AsyncMock(return_value=True))
+
+    result = asyncio.run(transcoder.ensure_transcode("input.mkv", "hash", options))
+
+    assert result == ("hash", options.profile)
+    assert events == ["prepare", "build", "start", "register"]
+
+
+def test_hardware_preparation_failure_releases_lock(monkeypatch, tmp_path):
+    lock = object()
+    release = Mock()
+    build = AsyncMock(side_effect=AssertionError("command built"))
+    create = AsyncMock(side_effect=AssertionError("transcode process started"))
+    register = AsyncMock(side_effect=AssertionError("task registered"))
+    metadata = MediaProbe(
+        video_stream_index=0,
+        codec="h264",
+        profile="High",
+        bit_depth=8,
+        pixel_format="yuv420p",
+    )
+
+    monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
+    monkeypatch.setattr(transcoder, "is_complete", Mock(return_value=False))
+    monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
+    monkeypatch.setattr(transcoder, "cleanup_stale_hls", Mock())
+    monkeypatch.setattr(transcoder, "_probe_media", AsyncMock(return_value=metadata))
+    monkeypatch.setattr(
+        transcoder,
+        "_prepare_hardware",
+        AsyncMock(side_effect=RuntimeError("encoder unavailable")),
+        raising=False,
+    )
+    monkeypatch.setattr(transcoder, "_build_hls_cmd", build)
+    monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
+    monkeypatch.setattr(
+        transcoder,
+        "load_ffmpeg_capabilities",
+        AsyncMock(return_value=_capabilities()),
+    )
+    monkeypatch.setattr(transcoder.asyncio, "create_subprocess_exec", create)
+    monkeypatch.setattr(transcoder, "register_task", register)
+    monkeypatch.setattr(transcoder, "_release_lock", release)
+
+    with pytest.raises(RuntimeError, match="encoder unavailable"):
+        asyncio.run(
+            transcoder.ensure_transcode(
+                "input.mkv",
+                "hash",
+                TranscodeOptions(hwaccel="nvenc"),
+            )
+        )
+
+    build.assert_not_awaited()
+    create.assert_not_awaited()
+    register.assert_not_awaited()
+    release.assert_called_once_with(lock)
 
 
 @pytest.mark.parametrize(

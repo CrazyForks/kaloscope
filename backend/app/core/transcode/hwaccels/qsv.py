@@ -11,6 +11,49 @@ from app.core.transcode.hwaccels.base import (
 class QSV(HWAccelStrategy):
     """Intel Quick Sync Video H.264 encoding strategy."""
 
+    async def resolve_hardware_device(self, context: TranscodeContext) -> str | None:
+        """Resolve the required VAAPI-backed QSV render node."""
+        device = await resolve_vaapi_device()
+        if not device:
+            raise RuntimeError(
+                "QSV requires a DRM render device, e.g. /dev/dri/renderD128"
+            )
+        return device
+
+    def encoder_probe_args(
+        self, context: TranscodeContext, device: str | None
+    ) -> list[str]:
+        """Build a synthetic VAAPI-backed QSV upload and encode probe."""
+        assert device is not None
+        return [
+            "-init_hw_device",
+            f"qsv=qs:hw,child_device={device},child_device_type=vaapi",
+            "-filter_hw_device",
+            "qs",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=64x64:r=1",
+            "-vf",
+            "format=nv12,hwupload",
+            "-frames:v",
+            "1",
+            "-an",
+            "-c:v",
+            context.options.encoder,
+            "-f",
+            "null",
+            "-",
+        ]
+
+    def allows_hardware_decode(self, context: TranscodeContext) -> bool:
+        """Keep HDR and software-scaled sources on CPU decoding."""
+        return (
+            not context.needs_tonemap
+            and not context.needs_scale
+            and super().allows_hardware_decode(context)
+        )
+
     async def input_args(self, context: TranscodeContext) -> list[str]:
         """Initialize QSV through a VAAPI-backed DRM render device.
 
@@ -24,11 +67,12 @@ class QSV(HWAccelStrategy):
         Raises:
             RuntimeError: If no usable DRM render device is available.
         """
-        qsv_dev = await resolve_vaapi_device()
-        if not qsv_dev:
-            raise RuntimeError(
-                "QSV requires a DRM render device, e.g. /dev/dri/renderD128"
-            )
+        qsv_dev = (
+            context.hardware.device
+            if context.hardware is not None
+            else await self.resolve_hardware_device(context)
+        )
+        assert qsv_dev is not None
         cmd = [
             "-init_hw_device",
             f"qsv=qs:hw,child_device={qsv_dev},child_device_type=vaapi",
@@ -36,7 +80,7 @@ class QSV(HWAccelStrategy):
             "qs",
         ]
         if (
-            context.supports_hwaccel("qsv")
+            context.uses_hardware_decode
             and not context.needs_tonemap
             and not context.needs_scale
         ):

@@ -1,10 +1,16 @@
 import math
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 
-from app.core.transcode.capabilities import FFmpegCapabilities
+from sanic.log import logger
+
+from app.core.transcode.capabilities import (
+    FFmpegCapabilities,
+    probe_hardware_decode,
+    require_hardware_encoder,
+)
 from app.core.transcode.options import EncoderConfig, TranscodeOptions
 
 
@@ -41,6 +47,50 @@ class MediaProbe:
     dovi_profile: int | None = None
     dovi_bl_present: bool | None = None
     dovi_bl_signal_compatibility_id: int | None = None
+
+
+@dataclass(frozen=True)
+class HardwareRuntime:
+    """Prepared hardware device and source decode decision."""
+
+    device: str | None
+    can_decode_source: bool
+
+
+def _normalized_profile(value: str) -> str:
+    return value.lower().replace(" ", "").replace("_", "").replace("-", "")
+
+
+def is_hardware_decode_candidate(metadata: MediaProbe) -> bool:
+    """Return whether source metadata is safe to verify for hardware decode."""
+    codec = (metadata.codec or "").lower()
+    profile = metadata.profile
+    pixel_format = (metadata.pixel_format or "").lower()
+    bit_depth = metadata.bit_depth
+    if not profile or bit_depth is None or not pixel_format:
+        return False
+    normalized_profile = _normalized_profile(profile)
+    if codec in {"h264", "avc"}:
+        return (
+            normalized_profile
+            in {
+                "constrainedbaseline",
+                "baseline",
+                "extended",
+                "main",
+                "high",
+                "progressivehigh",
+                "constrainedhigh",
+            }
+            and bit_depth == 8
+            and pixel_format in {"yuv420p", "yuvj420p", "nv12"}
+        )
+    if codec in {"hevc", "h265"}:
+        if normalized_profile == "main":
+            return bit_depth == 8 and pixel_format in {"yuv420p", "nv12"}
+        if normalized_profile == "main10":
+            return bit_depth == 10 and pixel_format in {"yuv420p10le", "p010le"}
+    return False
 
 
 def classify_hdr(metadata: MediaProbe) -> HDRType:
@@ -90,6 +140,7 @@ class TranscodeContext:
     options: TranscodeOptions
     metadata: MediaProbe = field(default_factory=MediaProbe)
     capabilities: FFmpegCapabilities | None = None
+    hardware: HardwareRuntime | None = None
 
     @property
     def source_framerate(self) -> float:
@@ -171,6 +222,8 @@ class TranscodeContext:
     @property
     def uses_hardware_decode(self) -> bool:
         """Return whether the selected strategy can request hardware decoding."""
+        if self.hardware is not None:
+            return self.hardware.can_decode_source
         hwaccel = self.encoder_config.hwaccel
         return hwaccel is not None and self.supports_hwaccel(hwaccel)
 
@@ -216,6 +269,114 @@ async def resolve_vaapi_device() -> str | None:
 class HWAccelStrategy(ABC):
     """Base interface for FFmpeg hardware acceleration strategies."""
 
+    async def resolve_hardware_device(self, context: TranscodeContext) -> str | None:
+        """Resolve the device used by this hardware strategy."""
+        return None
+
+    def encoder_probe_args(
+        self, context: TranscodeContext, device: str | None
+    ) -> list[str]:
+        """Build a one-frame hardware encoder health probe."""
+        return [
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=64x64:r=1",
+            "-frames:v",
+            "1",
+            "-an",
+            "-c:v",
+            context.options.encoder,
+            "-f",
+            "null",
+            "-",
+        ]
+
+    def allows_hardware_decode(self, context: TranscodeContext) -> bool:
+        """Return whether this strategy may probe hardware source decoding."""
+        return is_hardware_decode_candidate(context.metadata)
+
+    async def prepare_hardware(
+        self, context: TranscodeContext, media_path: str
+    ) -> HardwareRuntime | None:
+        """Validate hardware encoding and choose decoding for one source."""
+        strategy = context.options.hwaccel
+        if strategy is None:
+            return None
+        capabilities = context.capabilities
+        encoder = context.options.encoder
+        if capabilities is None:
+            raise RuntimeError("Hardware preparation requires FFmpeg capabilities")
+        if not capabilities.supports_encoder(encoder):
+            raise RuntimeError(
+                f"FFmpeg '{capabilities.executable}' is missing required "
+                f"capabilities: encoders: {encoder}"
+            )
+
+        device = await self.resolve_hardware_device(context)
+        await require_hardware_encoder(
+            capabilities.executable,
+            strategy,
+            encoder,
+            device,
+            self.encoder_probe_args(context, device),
+        )
+
+        hwaccel = context.encoder_config.hwaccel
+        if (
+            hwaccel is None
+            or not context.supports_hwaccel(hwaccel)
+            or not self.allows_hardware_decode(context)
+        ):
+            return HardwareRuntime(device, False)
+
+        stream_index = context.metadata.video_stream_index
+        assert stream_index is not None
+        probe_context = replace(
+            context,
+            hardware=HardwareRuntime(device, True),
+        )
+        input_args = await self.input_args(probe_context)
+        output_format = context.encoder_config.hwaccel_output_format
+        if output_format and "-hwaccel_output_format" not in input_args:
+            input_args.extend(["-hwaccel_output_format", output_format])
+        download_format = "p010le" if context.metadata.bit_depth == 10 else "nv12"
+        decode_args = [
+            *input_args,
+            "-i",
+            media_path,
+            "-map",
+            f"0:{stream_index}",
+            "-frames:v",
+            "1",
+            "-an",
+            "-sn",
+            "-dn",
+            "-vf",
+            f"hwdownload,format={download_format}",
+            "-f",
+            "null",
+            "-",
+        ]
+        can_decode = await probe_hardware_decode(
+            capabilities.executable,
+            strategy,
+            device,
+            media_path,
+            stream_index,
+            decode_args,
+        )
+        if not can_decode:
+            logger.warning(
+                "Hardware decode probe failed for %s codec=%s profile=%s "
+                "bit_depth=%s; using software decode",
+                strategy,
+                context.metadata.codec,
+                context.metadata.profile,
+                context.metadata.bit_depth,
+            )
+        return HardwareRuntime(device, can_decode)
+
     def keep_hardware_frames(self, context: TranscodeContext) -> bool:
         """Return whether decoding should keep frames in device memory.
 
@@ -244,7 +405,7 @@ class HWAccelStrategy(ABC):
         """
         cmd: list[str] = []
         config = context.encoder_config
-        if config.hwaccel and context.supports_hwaccel(config.hwaccel):
+        if config.hwaccel and context.uses_hardware_decode:
             cmd.extend(["-hwaccel", config.hwaccel])
             if config.hwaccel_output_format and self.keep_hardware_frames(context):
                 cmd.extend(["-hwaccel_output_format", config.hwaccel_output_format])

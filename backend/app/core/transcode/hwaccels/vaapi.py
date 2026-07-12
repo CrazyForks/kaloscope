@@ -9,6 +9,39 @@ from app.core.transcode.hwaccels.base import (
 class VAAPI(HWAccelStrategy):
     """Linux VAAPI H.264 encoding strategy."""
 
+    async def resolve_hardware_device(self, context: TranscodeContext) -> str | None:
+        """Resolve the required VAAPI DRM render node."""
+        device = await resolve_vaapi_device()
+        if not device:
+            raise RuntimeError(
+                "VAAPI requires a DRM render device, e.g. /dev/dri/renderD128"
+            )
+        return device
+
+    def encoder_probe_args(
+        self, context: TranscodeContext, device: str | None
+    ) -> list[str]:
+        """Build a synthetic VAAPI upload and encode probe."""
+        assert device is not None
+        return [
+            "-vaapi_device",
+            device,
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=64x64:r=1",
+            "-vf",
+            "format=nv12,hwupload",
+            "-frames:v",
+            "1",
+            "-an",
+            "-c:v",
+            context.options.encoder,
+            "-f",
+            "null",
+            "-",
+        ]
+
     def keep_hardware_frames(self, context: TranscodeContext) -> bool:
         """Keep HDR10 on VAAPI and expose HLG to the CPU tone mapper."""
         if context.is_hdr10:
@@ -33,11 +66,12 @@ class VAAPI(HWAccelStrategy):
         Raises:
             RuntimeError: If no usable DRM render device is available.
         """
-        vaapi_dev = await resolve_vaapi_device()
-        if not vaapi_dev:
-            raise RuntimeError(
-                "VAAPI requires a DRM render device, e.g. /dev/dri/renderD128"
-            )
+        vaapi_dev = (
+            context.hardware.device
+            if context.hardware is not None
+            else await self.resolve_hardware_device(context)
+        )
+        assert vaapi_dev is not None
         cmd = await super().input_args(context)
         cmd.extend(["-vaapi_device", vaapi_dev])
         return cmd

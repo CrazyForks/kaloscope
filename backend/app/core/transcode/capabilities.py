@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _CAPABILITY_TIMEOUT = 10.0
+_RUNTIME_PROBE_TIMEOUT = 10.0
+_RUNTIME_REAP_TIMEOUT = 1.0
+_RUNTIME_STDERR_LIMIT = 2048
 _LISTING_OPTIONS = {
     "encoders": "-encoders",
     "filters": "-filters",
@@ -15,6 +18,8 @@ _LISTING_OPTIONS = {
 }
 
 _CAPABILITY_CACHE: dict[tuple[str, str], "FFmpegCapabilities"] = {}
+_HARDWARE_ENCODER_CACHE: set[tuple[str, str, str | None]] = set()
+_HARDWARE_DECODE_CACHE: set[tuple[str, str, str | None, str, int, int, int]] = set()
 
 
 @dataclass(frozen=True)
@@ -112,11 +117,131 @@ async def _query_ffmpeg(executable: str, *args: str) -> str:
     return (stdout + stderr).decode(errors="replace")
 
 
+async def _read_stderr_tail(stream: asyncio.StreamReader) -> bytes:
+    """Drain stderr while retaining only a bounded byte tail."""
+    tail = bytearray()
+    while chunk := await stream.read(4096):
+        tail.extend(chunk)
+        overflow = len(tail) - _RUNTIME_STDERR_LIMIT
+        if overflow > 0:
+            del tail[:overflow]
+    return bytes(tail)
+
+
+async def _kill_and_reap_probe(proc: asyncio.subprocess.Process) -> None:
+    """Best-effort terminate and reap one probe within a fixed bound."""
+    if proc.returncode is None:
+        with contextlib.suppress(ProcessLookupError):
+            proc.kill()
+    with contextlib.suppress(TimeoutError):
+        await asyncio.wait_for(proc.wait(), timeout=_RUNTIME_REAP_TIMEOUT)
+
+
+async def _run_ffmpeg_probe(executable: str, args: list[str]) -> tuple[bool, str]:
+    """Run one bounded FFmpeg runtime probe without creating output files."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            executable,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            *args,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except OSError as exc:
+        return False, str(exc)
+    assert proc.stderr is not None
+    try:
+        _, stderr = await asyncio.wait_for(
+            asyncio.gather(proc.wait(), _read_stderr_tail(proc.stderr)),
+            timeout=_RUNTIME_PROBE_TIMEOUT,
+        )
+    except TimeoutError:
+        await _kill_and_reap_probe(proc)
+        return False, f"timed out after {_RUNTIME_PROBE_TIMEOUT:.1f} seconds"
+    except BaseException:
+        await _kill_and_reap_probe(proc)
+        raise
+    detail = stderr.decode(errors="replace").strip()
+    return proc.returncode == 0, detail
+
+
 def _resolved_executable(executable: str) -> str:
     resolved = shutil.which(executable)
     if resolved:
         return str(Path(resolved).resolve())
     return executable
+
+
+async def require_hardware_encoder(
+    executable: str,
+    strategy: str,
+    encoder: str,
+    device: str | None,
+    args: list[str],
+) -> None:
+    """Require one hardware encoder/device combination to encode a frame."""
+    executable = _resolved_executable(executable)
+    key = (executable, strategy, device)
+    if key in _HARDWARE_ENCODER_CACHE:
+        return
+    success, detail = await _run_ffmpeg_probe(executable, args)
+    if not success:
+        suffix = f": {detail}" if detail else ""
+        raise RuntimeError(
+            f"Hardware encoder '{encoder}' is unavailable for {strategy} "
+            f"on device '{device or 'default'}'{suffix}"
+        )
+    _HARDWARE_ENCODER_CACHE.add(key)
+
+
+def _decode_cache_key(
+    executable: str,
+    strategy: str,
+    device: str | None,
+    media_path: str,
+    stream_index: int,
+) -> tuple[str, str, str | None, str, int, int, int] | None:
+    path = Path(media_path).resolve()
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return (
+        executable,
+        strategy,
+        device,
+        str(path),
+        stat.st_size,
+        stat.st_mtime_ns,
+        stream_index,
+    )
+
+
+async def probe_hardware_decode(
+    executable: str,
+    strategy: str,
+    device: str | None,
+    media_path: str,
+    stream_index: int,
+    args: list[str],
+) -> bool:
+    """Probe source hardware decoding and cache successful file states."""
+    executable = _resolved_executable(executable)
+    key = _decode_cache_key(
+        executable,
+        strategy,
+        device,
+        media_path,
+        stream_index,
+    )
+    if key is not None and key in _HARDWARE_DECODE_CACHE:
+        return True
+    success, _ = await _run_ffmpeg_probe(executable, args)
+    if success and key is not None:
+        _HARDWARE_DECODE_CACHE.add(key)
+    return success
 
 
 async def load_ffmpeg_capabilities(executable: str, encoder: str) -> FFmpegCapabilities:
@@ -157,3 +282,5 @@ async def load_ffmpeg_capabilities(executable: str, encoder: str) -> FFmpegCapab
 def clear_ffmpeg_capability_cache() -> None:
     """Clear cached capability snapshots, primarily for configuration changes."""
     _CAPABILITY_CACHE.clear()
+    _HARDWARE_ENCODER_CACHE.clear()
+    _HARDWARE_DECODE_CACHE.clear()
