@@ -139,7 +139,7 @@ def test_load_ffmpeg_capabilities_caches_success(monkeypatch):
         return outputs[args[0]]
 
     query_mock = AsyncMock(side_effect=query)
-    capability_module.clear_ffmpeg_capability_cache()
+    capability_module._clear_caches()
     monkeypatch.setattr(capability_module, "_resolved_executable", lambda value: value)
     monkeypatch.setattr(capability_module, "_query_ffmpeg", query_mock)
 
@@ -369,7 +369,7 @@ def test_stderr_tail_retains_only_bounded_bytes():
 
 def test_hardware_encoder_probe_caches_success(monkeypatch):
     probe = AsyncMock(return_value=(True, ""))
-    capability_module.clear_ffmpeg_capability_cache()
+    capability_module._clear_caches()
     monkeypatch.setattr(capability_module, "_run_ffmpeg_probe", probe)
     monkeypatch.setattr(
         capability_module,
@@ -393,7 +393,7 @@ def test_hardware_encoder_probe_caches_success(monkeypatch):
 
 def test_hardware_encoder_probe_failure_is_not_cached(monkeypatch):
     probe = AsyncMock(return_value=(False, "device failed"))
-    capability_module.clear_ffmpeg_capability_cache()
+    capability_module._clear_caches()
     monkeypatch.setattr(capability_module, "_run_ffmpeg_probe", probe)
     monkeypatch.setattr(
         capability_module,
@@ -420,7 +420,7 @@ def test_hardware_decode_probe_cache_tracks_file_state(monkeypatch, tmp_path):
     media = tmp_path / "input.mkv"
     media.write_bytes(b"first")
     probe = AsyncMock(return_value=(True, ""))
-    capability_module.clear_ffmpeg_capability_cache()
+    capability_module._clear_caches()
     monkeypatch.setattr(capability_module, "_run_ffmpeg_probe", probe)
     monkeypatch.setattr(
         capability_module,
@@ -464,7 +464,7 @@ def test_hardware_decode_probe_failure_is_not_cached(monkeypatch, tmp_path):
     media = tmp_path / "input.mkv"
     media.write_bytes(b"video")
     probe = AsyncMock(return_value=(False, "decode failed"))
-    capability_module.clear_ffmpeg_capability_cache()
+    capability_module._clear_caches()
     monkeypatch.setattr(capability_module, "_run_ffmpeg_probe", probe)
     monkeypatch.setattr(
         capability_module,
@@ -496,7 +496,7 @@ def test_hardware_transform_probe_cache_tracks_signature_and_file_state(
     media = tmp_path / "input.mkv"
     media.write_bytes(b"first")
     probe = AsyncMock(return_value=(True, ""))
-    capability_module.clear_ffmpeg_capability_cache()
+    capability_module._clear_caches()
     monkeypatch.setattr(capability_module, "_run_ffmpeg_probe", probe)
     monkeypatch.setattr(
         capability_module,
@@ -528,7 +528,7 @@ def test_hardware_transform_probe_failure_is_not_cached(monkeypatch, tmp_path):
     media = tmp_path / "input.mkv"
     media.write_bytes(b"video")
     probe = AsyncMock(return_value=(False, "filter failed"))
-    capability_module.clear_ffmpeg_capability_cache()
+    capability_module._clear_caches()
     monkeypatch.setattr(capability_module, "_run_ffmpeg_probe", probe)
     monkeypatch.setattr(
         capability_module,
@@ -555,11 +555,11 @@ def test_hardware_transform_probe_failure_is_not_cached(monkeypatch, tmp_path):
     assert probe.await_count == 2
 
 
-def test_clear_ffmpeg_capability_cache_clears_runtime_successes(monkeypatch, tmp_path):
+def test_clear_caches_clears_runtime_successes(monkeypatch, tmp_path):
     media = tmp_path / "input.mkv"
     media.write_bytes(b"video")
     probe = AsyncMock(return_value=(True, ""))
-    capability_module.clear_ffmpeg_capability_cache()
+    capability_module._clear_caches()
     monkeypatch.setattr(capability_module, "_run_ffmpeg_probe", probe)
     monkeypatch.setattr(
         capability_module,
@@ -594,7 +594,7 @@ def test_clear_ffmpeg_capability_cache_clears_runtime_successes(monkeypatch, tmp
         )
 
     asyncio.run(run_probes())
-    capability_module.clear_ffmpeg_capability_cache()
+    capability_module._clear_caches()
     asyncio.run(run_probes())
 
     assert probe.await_count == 6

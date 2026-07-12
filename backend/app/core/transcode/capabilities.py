@@ -367,7 +367,7 @@ async def load_ffmpeg_capabilities(executable: str, encoder: str) -> FFmpegCapab
     return capabilities
 
 
-def clear_ffmpeg_capability_cache():
+def _clear_caches():
     """Clear cached capability snapshots, primarily for configuration changes."""
     _CAPABILITY_CACHE.clear()
     _HW_ENCODER_CACHE.clear()
