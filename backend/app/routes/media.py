@@ -10,10 +10,12 @@ from sanic.response import ResponseStream, file_stream
 from sanic_ext import validate
 from tortoise.expressions import Q, RawSQL
 
+from app.core.config import KaloscopeConfig
 from app.core.decorators import authorize
 from app.core.exceptions import (
     BadRequestException,
     ErrorCode,
+    ForbiddenException,
     KaloscopeException,
 )
 from app.core.media.shelver import (
@@ -206,7 +208,10 @@ async def get_item_title(_, query: MediaResource) -> HTTPResponse:
 @validate(query=MediaResource)
 async def probe_media_duration(_, query: MediaResource) -> HTTPResponse:
     """Probe the media file duration via ffprobe."""
-    duration = await probe_duration(query.path)
+    path = query.path
+    if not await MediaItem.filter(path=path).exists():
+        raise ForbiddenException(ErrorCode.PERMISSION_DENIED)
+    duration = await probe_duration(path)
     return json({"duration": duration or 0})
 
 
@@ -217,6 +222,8 @@ async def get_item_stream(
 ) -> HTTPResponse | ResponseStream:
     """Get the media item stream with optional real-time ffmpeg transcoding."""
     path = query.path
+    if not await MediaItem.filter(path=path).exists():
+        raise ForbiddenException(ErrorCode.PERMISSION_DENIED)
     if not await async_os.path.exists(path):
         raise KaloscopeException(ErrorCode.FILE_NOT_EXISTS)
 
@@ -270,8 +277,10 @@ async def serve_hls_file(
     _, hash: str, profile: str, filename: str, ext: str
 ) -> HTTPResponse | ResponseStream:
     """Serve any file from an HLS output directory (M3U8 playlist or TS segment)."""
-    # check if the requested file exists in the output directory
-    file_path = output_dir(hash, profile) / f"{filename}.{ext}"
+    file_path = (output_dir(hash, profile) / f"{filename}.{ext}").resolve()
+    transcoded = Path(KaloscopeConfig.get_workspace("transcoded")).resolve()
+    if not file_path.is_relative_to(transcoded):
+        raise ForbiddenException(ErrorCode.PERMISSION_DENIED)
     if not file_path.is_file():
         raise KaloscopeException(ErrorCode.FILE_NOT_EXISTS)
 
