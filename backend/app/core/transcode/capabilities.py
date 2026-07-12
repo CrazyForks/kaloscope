@@ -144,7 +144,7 @@ async def _read_stderr_tail(stream: asyncio.StreamReader) -> bytes:
     return bytes(tail)
 
 
-async def _kill_and_reap_probe(proc: asyncio.subprocess.Process) -> None:
+async def _kill_and_reap_probe(proc: asyncio.subprocess.Process):
     """Best-effort terminate and reap one probe within a fixed bound."""
     if proc.returncode is None:
         with contextlib.suppress(ProcessLookupError):
@@ -197,7 +197,7 @@ async def require_hardware_encoder(
     encoder: str,
     device: str | None,
     args: list[str],
-) -> None:
+):
     """Require one hardware encoder and device combination to encode a frame.
 
     Args:
@@ -373,7 +373,7 @@ async def load_ffmpeg_capabilities(executable: str, encoder: str) -> FFmpegCapab
     return capabilities
 
 
-def clear_ffmpeg_capability_cache() -> None:
+def clear_ffmpeg_capability_cache():
     """Clear cached capability snapshots, primarily for configuration changes."""
     _CAPABILITY_CACHE.clear()
     _HW_ENCODER_CACHE.clear()

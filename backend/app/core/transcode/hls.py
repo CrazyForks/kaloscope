@@ -312,7 +312,7 @@ def delete_output(
             lock.release()
 
 
-def remove_endlist(out_dir: Path | str | None) -> None:
+def remove_endlist(out_dir: Path | str | None):
     """Remove a completion marker from an interrupted HLS playlist.
 
     Args:

@@ -416,7 +416,7 @@ class TranscodeContext:
             name
         )
 
-    def require_encoder_option(self, name: str) -> None:
+    def require_encoder_option(self, name: str):
         """Reject a selected encoder that lacks a correctness-critical option."""
         if self.capabilities is not None and not self.supports_encoder_option(name):
             raise RuntimeError(

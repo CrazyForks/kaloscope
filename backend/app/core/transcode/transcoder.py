@@ -51,7 +51,7 @@ _EIGHT_BIT_PIXEL_FORMATS = {
 }
 
 
-class FFmpegExitKind(StrEnum):
+class CompletionState(StrEnum):
     """Terminal classification published by an FFmpeg monitor."""
 
     FINISHED = "finished"
@@ -65,30 +65,26 @@ class FFmpegCompletion:
 
     Attributes:
         returncode: The process return code, or `None` when unavailable.
-        kind: The application-level terminal classification.
-        error_detail: A bounded and redacted stderr summary.
+        state: The application-level terminal classification.
+        error: A bounded and redacted stderr summary.
     """
 
     returncode: int | None
-    kind: FFmpegExitKind
-    error_detail: str | None = None
+    state: CompletionState
+    error: str | None = None
 
     @classmethod
     def from_exit(
-        cls, returncode: int | None, error_detail: str | None = None
+        cls, returncode: int | None, error: str | None = None
     ) -> "FFmpegCompletion":
         """Classify a normal process exit code."""
         if returncode == 0:
-            kind = FFmpegExitKind.FINISHED
+            state = CompletionState.FINISHED
         elif returncode == 255:
-            kind = FFmpegExitKind.STOPPED
+            state = CompletionState.STOPPED
         else:
-            kind = FFmpegExitKind.FAILED
-        return cls(returncode, kind, error_detail)
-
-
-class TranscodeStartupError(KaloscopeException):
-    """An API-visible FFmpeg failure before the first HLS segment."""
+            state = CompletionState.FAILED
+        return cls(returncode, state, error)
 
 
 def _stderr_detail(data: bytes, redactions: dict[str, str] | None = None) -> str | None:
@@ -570,15 +566,13 @@ def _require_video_stream(metadata: MediaProbe) -> int:
     return metadata.video_stream_index
 
 
-def _require_supported_hdr(metadata: MediaProbe) -> None:
+def _require_supported_hdr(metadata: MediaProbe):
     """Reject HDR formats that cannot be decoded through a compatible base layer."""
     if classify_hdr(metadata) is HDRType.DOVI_ONLY:
         raise RuntimeError("Dolby Vision-only input is not supported")
 
 
-def _require_supported_geometry(
-    metadata: MediaProbe, options: TranscodeOptions
-) -> None:
+def _require_supported_geometry(metadata: MediaProbe, options: TranscodeOptions):
     """Reject unsupported rotation or an incomplete required geometry plan."""
     rotation = metadata.rotation or 0
     if rotation not in {0, 90, 180, 270}:
@@ -590,7 +584,7 @@ def _require_supported_geometry(
         raise RuntimeError("Video geometry transform requires valid width and height")
 
 
-async def _prepare_hardware(context: TranscodeContext, media_path: str) -> None:
+async def _prepare_hardware(context: TranscodeContext, media_path: str):
     """Prepare selected hardware before building the real transcode command."""
     from app.core.transcode.hwaccels import get_hwaccel
 
@@ -691,13 +685,10 @@ async def ensure_transcode(
         if not await wait_segment(m3u8_path, proc=proc):
             if proc.returncode is not None:
                 result = await asyncio.shield(completion)
-                message = (
-                    f"ffmpeg exited with code {result.returncode} before "
-                    "generating the first HLS segment"
-                )
-                if result.error_detail:
-                    message = f"{message}: {result.error_detail}"
-                raise TranscodeStartupError(message)
+                message = f"FFmpeg failed with code {result.returncode}"
+                if result.error:
+                    message = f"{message}: {result.error}"
+                raise KaloscopeException(message)
             raise RuntimeError("HLS first segment was not ready in time")
 
     except Exception:
@@ -729,10 +720,12 @@ async def _build_hls_cmd(
     Returns:
         A list of command-line arguments ready for `asyncio.create_subprocess_exec`.
     """
-    video_index = _require_video_stream(context.metadata)
-    _require_supported_hdr(context.metadata)
-    _require_supported_geometry(context.metadata, context.options)
-    audio_index = context.metadata.audio_stream_index
+    metadata = context.metadata
+    video_index = _require_video_stream(metadata)
+    audio_index = metadata.audio_stream_index
+
+    _require_supported_hdr(metadata)
+    _require_supported_geometry(metadata, context.options)
 
     executable = (
         context.capabilities.executable
@@ -853,7 +846,7 @@ async def _build_hls_cmd(
     return cmd
 
 
-def _validate_capabilities(context: TranscodeContext, video_filters: list[str]) -> None:
+def _validate_capabilities(context: TranscodeContext, video_filters: list[str]):
     """Reject capabilities that remain mandatory in the generated command."""
     capabilities = context.capabilities
     if capabilities is None:
@@ -917,7 +910,7 @@ def _release_lock(lock: FileLock):
         lock.release()
 
 
-async def _terminate_ffmpeg(proc: asyncio.subprocess.Process) -> None:
+async def _terminate_ffmpeg(proc: asyncio.subprocess.Process):
     """Stop an unmonitored ffmpeg process without masking setup errors.
 
     Sends a graceful termination request first, then kills the process if it
@@ -979,30 +972,30 @@ async def _monitor_ffmpeg(
             pass
         await proc.wait()
 
-        error_detail = None
+        error = None
         # treat exit 255 as an application-requested stop
         if proc.returncode not in (0, 255) and stderr_data:
-            error_detail = _stderr_detail(bytes(stderr_data), redactions)
+            error = _stderr_detail(bytes(stderr_data), redactions)
 
-        result = FFmpegCompletion.from_exit(proc.returncode, error_detail)
+        result = FFmpegCompletion.from_exit(proc.returncode, error)
         if completion is not None and not completion.done():
             completion.set_result(result)
 
-        if result.kind is FFmpegExitKind.FAILED:
+        if result.state is CompletionState.FAILED:
             logger.error(
                 "ffmpeg HLS exited with code %s for task '%s': %s",
                 proc.returncode,
                 task_id or proc.pid,
-                error_detail or "",
+                error or "",
             )
 
         if task_id:
-            await finish_task(task_id, proc.returncode, error_detail)
+            await finish_task(task_id, proc.returncode, error)
     except asyncio.CancelledError:
         await _terminate_ffmpeg(proc)
         result = FFmpegCompletion(
             proc.returncode,
-            FFmpegExitKind.STOPPED,
+            CompletionState.STOPPED,
         )
         if completion is not None and not completion.done():
             completion.set_result(result)
@@ -1044,12 +1037,12 @@ def _start_monitor(
         asyncio.get_running_loop().create_future()
     )
 
-    def _done(task: asyncio.Task[FFmpegCompletion]) -> None:
+    def _done(task: asyncio.Task[FFmpegCompletion]):
         """Remove a completed monitor and consume its exception."""
         _MONITOR_TASKS.discard(task)
         if task.cancelled():
             if not completion.done():
-                completion.set_result(FFmpegCompletion(None, FFmpegExitKind.STOPPED))
+                completion.set_result(FFmpegCompletion(None, CompletionState.STOPPED))
             return
         try:
             result = task.result()
@@ -1058,7 +1051,7 @@ def _start_monitor(
                 completion.set_result(
                     FFmpegCompletion(
                         getattr(proc, "returncode", None),
-                        FFmpegExitKind.FAILED,
+                        CompletionState.FAILED,
                     )
                 )
             logger.error(
@@ -1086,7 +1079,7 @@ def _start_monitor(
     return completion
 
 
-async def shutdown_monitors() -> None:
+async def shutdown_monitors():
     """Cancel and wait for all ffmpeg monitor tasks in this worker."""
     monitors = tuple(_MONITOR_TASKS)
     if not monitors:

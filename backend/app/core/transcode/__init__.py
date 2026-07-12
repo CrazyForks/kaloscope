@@ -26,7 +26,6 @@ from app.core.transcode.tasks import (
     stop_tasks,
 )
 from app.core.transcode.transcoder import (
-    TranscodeStartupError,
     ensure_transcode,
     probe_duration,
     probe_framerate,
@@ -41,7 +40,6 @@ __all__ = [
     "TaskSnapshot",
     "TaskState",
     "TranscodeOptions",
-    "TranscodeStartupError",
     "TranscodeStats",
     "delete_output",
     "delete_tasks",

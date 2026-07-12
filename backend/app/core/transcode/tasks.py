@@ -40,26 +40,7 @@ class TaskState(StrEnum):
 
 
 class RuntimeTask(TypedDict):
-    """Task metadata stored in the cross-worker runtime mapping.
-
-    Attributes:
-        id: The deterministic media-hash and profile identifier.
-        name: The source file name shown in the task list.
-        path: The source media path.
-        hash: The source media hash.
-        state: The current task lifecycle state.
-        duration: The source duration in seconds.
-        pid: The FFmpeg process identifier.
-        process_start_id: The OS-level process start identifier.
-        profile: The transcode profile identifier.
-        quality: The selected quality preset.
-        resolution: The selected resolution limit.
-        hwaccel: The selected hardware acceleration strategy.
-        out_dir: The HLS output directory.
-        started_at: The task start time in ISO 8601 format.
-        finished_at: The terminal time in ISO 8601 format.
-        error_msg: The bounded FFmpeg failure detail.
-    """
+    """Task metadata stored in the cross-worker runtime mapping."""
 
     id: str
     name: str
@@ -84,27 +65,6 @@ class TaskSnapshot(TypedDict):
 
     The process start identifier remains internal, while scanned output
     directories use `None` for fields that cannot be reconstructed.
-
-    Attributes:
-        id: The deterministic media-hash and profile identifier.
-        name: The task display name.
-        path: The source media path when known.
-        hash: The source media hash.
-        state: The current task lifecycle state.
-        duration: The source duration in seconds when known.
-        pid: The FFmpeg process identifier for a runtime task.
-        profile: The transcode profile identifier.
-        quality: The selected quality preset when known.
-        resolution: The selected resolution limit when known.
-        hwaccel: The selected hardware acceleration strategy when known.
-        started_at: The task start time in ISO 8601 format when known.
-        finished_at: The terminal time in ISO 8601 format when known.
-        error_msg: The bounded FFmpeg failure detail when available.
-        progress: The integer completion percentage when calculable.
-        encoded_duration: The duration represented by completed HLS segments.
-        encoded_segments: The number of completed HLS segments.
-        encoded_size: The total encoded HLS size in bytes.
-        encoded_size_text: The optional human-readable encoded size.
     """
 
     id: str
@@ -260,7 +220,7 @@ async def register_task(
 
 async def finish_task(
     task_id: str, returncode: int | None, error_msg: str | None = None
-) -> None:
+):
     """Update a registered ffmpeg task to its terminal state.
 
     Args:
@@ -421,14 +381,16 @@ async def stop_tasks(ids: list[str]) -> list[str]:
         try:
             pid = stopping["pid"]
             if pid is not None:
-                start_id = stopping.get("process_start_id")
-                if start_id is None:
-                    raise RuntimeError(
-                        f"Cannot safely identify transcode process {pid}"
-                    )
-                # stale records must never signal a process that reused the PID
-                if await _process_start_id(pid) != start_id:
-                    raise ProcessLookupError
+                # native Windows lacks the start identity required for this guard
+                if sys.platform != "win32":
+                    start_id = stopping.get("process_start_id")
+                    if start_id is None:
+                        raise RuntimeError(
+                            f"Cannot safely identify transcode process {pid}"
+                        )
+                    # stale records must never signal a process that reused the PID
+                    if await _process_start_id(pid) != start_id:
+                        raise ProcessLookupError
                 sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
                 os.kill(pid, sigkill)
         except ProcessLookupError:

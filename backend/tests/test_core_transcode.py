@@ -61,12 +61,6 @@ def test_task_exports():
     assert all(getattr(package, name) is getattr(tasks, name) for name in names)
 
 
-def test_transcoder_error_exports():
-    package = importlib.import_module("app.core.transcode")
-
-    assert package.TranscodeStartupError is transcoder.TranscodeStartupError
-
-
 def test_task_types():
     package = importlib.import_module("app.core.transcode")
 
@@ -4621,7 +4615,7 @@ def test_shutdown_stops_monitors(monkeypatch):
     task, completion, proc, lock = asyncio.run(run())
 
     assert task.cancelled()
-    assert completion.result().kind == "stopped"
+    assert completion.result().state == "stopped"
     assert not transcoder._MONITOR_TASKS
     proc.terminate.assert_called_once_with()
     finish.assert_awaited_once_with("task", 255)
@@ -4652,8 +4646,8 @@ def test_monitor_errors_logged(monkeypatch):
     task, completion = asyncio.run(run())
 
     assert task not in transcoder._MONITOR_TASKS
-    assert completion.result().kind == "failed"
-    assert completion.result().error_detail is None
+    assert completion.result().state == "failed"
+    assert completion.result().error is None
     error.assert_called_once()
 
 
@@ -4698,8 +4692,8 @@ def test_ffmpeg_completion_classifies_exit(returncode, expected):
     completion = transcoder.FFmpegCompletion.from_exit(returncode, "detail")
 
     assert completion.returncode == returncode
-    assert completion.kind == expected
-    assert completion.error_detail == "detail"
+    assert completion.state == expected
+    assert completion.error == "detail"
 
 
 def test_monitor_tail(monkeypatch):
@@ -4800,11 +4794,11 @@ def test_monitor_discards_stderr_older_than_raw_tail(monkeypatch):
         )
     )
 
-    assert result.error_detail is not None
-    assert "old root cause" not in result.error_detail
-    assert "latest failure" in result.error_detail
-    assert len(result.error_detail.encode()) <= 8 * 1024
-    assert len(result.error_detail.splitlines()) <= 24
+    assert result.error is not None
+    assert "old root cause" not in result.error
+    assert "latest failure" in result.error
+    assert len(result.error.encode()) <= 8 * 1024
+    assert len(result.error.splitlines()) <= 24
 
 
 def test_monitor_completion_precedes_logging_failure(monkeypatch):
@@ -4908,9 +4902,9 @@ def test_startup_failure_returns_ffmpeg_detail(monkeypatch, tmp_path):
     with pytest.raises(KaloscopeException) as caught:
         asyncio.run(run())
 
-    assert isinstance(caught.value, transcoder.TranscodeStartupError)
+    assert type(caught.value) is KaloscopeException
     message = str(caught.value)
-    assert "ffmpeg exited with code 1" in message
+    assert "FFmpeg failed with code 1" in message
     assert "Cannot create compression session" in message
     assert source not in message
     assert Path(source).name not in message
@@ -5282,6 +5276,27 @@ def test_stop_refuses_task_without_process_start_id(monkeypatch, tmp_path):
 
     assert store["task"]["state"] == tasks.TaskState.RUNNING
     kill.assert_not_called()
+
+
+def test_stop_windows_skips_process_identity_check(monkeypatch, tmp_path):
+    task = _runtime_task(tmp_path)
+    task["process_start_id"] = None
+    store = {"task": task}
+    process_start_id = AsyncMock()
+    kill = Mock()
+
+    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
+    monkeypatch.setattr(tasks, "_process_start_id", process_start_id)
+    monkeypatch.setattr(tasks.sys, "platform", "win32")
+    monkeypatch.delattr(tasks.signal, "SIGKILL")
+    monkeypatch.setattr(tasks.os, "kill", kill)
+
+    result = asyncio.run(tasks.stop_tasks(["task"]))
+
+    assert result == ["task"]
+    assert store["task"]["state"] == tasks.TaskState.STOPPING
+    process_start_id.assert_not_awaited()
+    kill.assert_called_once_with(123, tasks.signal.SIGTERM)
 
 
 def test_stop_rollback(monkeypatch, tmp_path):
