@@ -641,6 +641,15 @@
         }
       }
 
+      &.xgplayer-switch-loading {
+        .xgplayer-start {
+          display: none;
+        }
+        .xgplayer-loading {
+          display: block;
+        }
+      }
+
       &.xgplayer-nostart {
         .xg-top-bar {
           display: flex !important;

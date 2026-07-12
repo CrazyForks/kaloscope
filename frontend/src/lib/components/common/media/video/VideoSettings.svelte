@@ -262,6 +262,7 @@
   let rotateDegree: number = $state(0);
   let definitions: Definition[] = $state([]);
   let definition: string = $state('');
+  let playbackMode: PlaybackMode = 'direct';
 
   // the modal dialog instance
   let modal: Modal;
@@ -269,6 +270,8 @@
   let tabId: string = $state('video');
   // whether the player is in rotate fullscreen mode
   let rotateFullscreen: boolean = $state(false);
+  // identifies the latest playback switch so stale media events cannot clear its loading UI
+  let playbackSwitchId = 0;
 
   // the danmaku metadata matched with the current video
   let danmakuMeta: DanmakuMeta | null = $state(null);
@@ -320,7 +323,8 @@
     // playback mode
     if (localMedia && $video !== null) {
       const url = player?.config.url;
-      $video.playbackMode = isTranscodedStream(url) ? 'transcode' : 'direct';
+      playbackMode = isTranscodedStream(url) ? 'transcode' : 'direct';
+      $video.playbackMode = playbackMode;
     }
     // playback rate
     changePressRate();
@@ -370,6 +374,7 @@
     if (!player || !localMedia) {
       return;
     }
+    playbackMode = mode;
     const url = player.config.url as string;
     const isTranscoded = isTranscodedStream(url);
     if ((mode === 'transcode' && isTranscoded) || (mode === 'direct' && !isTranscoded)) {
@@ -382,6 +387,17 @@
     // switch the URL
     const newUrl = mode === 'transcode' ? url + '&transcode=true' : url.replace('&transcode=true', '');
     changeDefinition(newUrl);
+  }
+
+  /** Apply the active playback mode to a chapter stream URL. */
+  export function resolveChapterUrl(url: string): string {
+    if (!url.startsWith(MEDIA_STREAM_PREFIX)) {
+      return url;
+    }
+    if (playbackMode === 'transcode') {
+      return isTranscodedStream(url) ? url : `${url}&transcode=true`;
+    }
+    return url.replace('&transcode=true', '');
   }
 
   /**
@@ -401,6 +417,25 @@
     player.registerPlugin(HLS);
   }
 
+  /** Show loading while a transcoded stream is being prepared and switched. */
+  export function showSwitchLoading() {
+    if (!player) {
+      return;
+    }
+    const switchId = ++playbackSwitchId;
+    player.addClass('xgplayer-switch-loading');
+
+    const restore = () => {
+      if (switchId !== playbackSwitchId) {
+        return;
+      }
+      player?.removeClass('xgplayer-switch-loading');
+    };
+    player.once(Events.PLAYING, restore);
+    player.once(Events.AUTOPLAY_PREVENTED, restore);
+    player.once(Events.ERROR, restore);
+  }
+
   /**
    * Change the video definition.
    *
@@ -410,15 +445,27 @@
     if (!player) {
       return;
     }
-    const duration = await probeDuration(url);
 
     // handle transcoded HLS streams
     if (isTranscodedStream(url) && typeof url === 'string') {
       prepareTranscodePlayback();
-      player.playNext({ url, customDuration: duration });
+      // Start the new playback pipeline immediately, just like a chapter
+      // switch. Waiting for the probe first leaves xgplayer in the old paused
+      // state, so neither its waiting event nor loading plugin can activate.
+      player.playNext({ url });
+      showSwitchLoading();
       definition = url;
+
+      // The full duration is only metadata for the controls. Probe it in
+      // parallel and apply it only if this stream is still current.
+      const duration = await probeDuration(url);
+      if (player?.config.url === url && duration !== undefined) {
+        player.setConfig({ customDuration: duration });
+      }
       return;
     }
+
+    const duration = await probeDuration(url);
 
     // handle DASH streams
     if (player.config.videoType === 'dash' && typeof url === 'string') {
