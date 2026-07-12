@@ -862,6 +862,36 @@ def _hdr_context(
     )
 
 
+def _qsv_hdr_metadata(hdr_type: HDRType) -> MediaProbe:
+    metadata = {
+        HDRType.HDR10: MediaProbe(
+            bit_depth=10,
+            color_transfer="smpte2084",
+            color_primaries="bt2020",
+            color_space="bt2020nc",
+        ),
+        HDRType.HLG: MediaProbe(
+            bit_depth=10,
+            color_transfer="arib-std-b67",
+            color_primaries="bt2020",
+            color_space="bt2020nc",
+        ),
+        HDRType.HDR10_PLUS: MediaProbe(
+            bit_depth=10,
+            color_transfer="smpte2084",
+            color_primaries="bt2020",
+            color_space="bt2020nc",
+            hdr10_plus=True,
+        ),
+        HDRType.DOVI_COMPATIBLE: MediaProbe(
+            dovi_profile=8,
+            dovi_bl_present=True,
+            dovi_bl_signal_compatibility_id=1,
+        ),
+    }
+    return metadata[hdr_type]
+
+
 @pytest.mark.parametrize("transfer", ["smpte2084", "arib-std-b67"])
 def test_software_hdr_filters(transfer):
     context = _hdr_context(transfer=transfer)
@@ -1150,32 +1180,33 @@ def test_qsv_args(monkeypatch):
     ]
 
 
-@pytest.mark.parametrize("transfer", ["smpte2084", "arib-std-b67"])
-def test_qsv_hdr_filters(monkeypatch, transfer):
-    context = _hdr_context(hwaccel="qsv", resolution="720p", transfer=transfer)
-    strategy = get_hwaccel("qsv")
+@pytest.mark.parametrize(
+    "hdr_type",
+    [
+        HDRType.HDR10,
+        HDRType.HLG,
+        HDRType.HDR10_PLUS,
+        HDRType.DOVI_COMPATIBLE,
+    ],
+)
+def test_qsv_hdr_disables_hardware_decode(monkeypatch, hdr_type):
+    device = "/dev/dri/renderD128"
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="qsv"),
+        metadata=_qsv_hdr_metadata(hdr_type),
+        capabilities=_capabilities(),
+    )
     monkeypatch.setattr(
         qsv_module,
         "resolve_vaapi_device",
-        AsyncMock(return_value="/dev/dri/renderD128"),
+        AsyncMock(return_value=device),
     )
 
-    args = asyncio.run(strategy.input_args(context))
-
-    assert args[-6:] == [
-        "-hwaccel",
-        "qsv",
-        "-hwaccel_device",
+    assert asyncio.run(get_hwaccel("qsv").input_args(context)) == [
+        "-init_hw_device",
+        f"qsv=qs:hw,child_device={device},child_device_type=vaapi",
+        "-filter_hw_device",
         "qs",
-        "-hwaccel_output_format",
-        "qsv",
-    ]
-    assert strategy.video_filters(context) == [
-        (
-            "vpp_qsv=tonemap=1:format=nv12:out_color_matrix=bt709:"
-            "out_color_primaries=bt709:out_color_transfer=bt709:"
-            f"w='{context.scale_width}':h='{context.scale_height}'"
-        )
     ]
 
 
@@ -1196,10 +1227,66 @@ def test_qsv_falls_back_to_software_decoding(monkeypatch):
     assert strategy.video_filters(context) == ["format=nv12"]
 
 
-def test_qsv_hdr_fallback_uploads_for_vpp(monkeypatch):
-    context = _hdr_context(
-        hwaccel="qsv",
-        capabilities=_capabilities(hwaccels=()),
+@pytest.mark.parametrize(
+    "hdr_type",
+    [
+        HDRType.HDR10,
+        HDRType.HLG,
+        HDRType.HDR10_PLUS,
+        HDRType.DOVI_COMPATIBLE,
+    ],
+)
+def test_qsv_hdr_filters_use_software_tonemap(hdr_type):
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="qsv"),
+        metadata=_qsv_hdr_metadata(hdr_type),
+        capabilities=_capabilities(),
+    )
+
+    assert get_hwaccel("qsv").video_filters(context) == [
+        "zscale=transfer=linear:npl=100",
+        "format=gbrpf32le",
+        "tonemap=hable:desat=0",
+        "zscale=primaries=bt709:transfer=bt709:matrix=bt709:range=tv",
+        "format=nv12",
+        "hwupload",
+    ]
+
+
+def test_qsv_scaled_hdr_keeps_scaling_in_zscale():
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="qsv", resolution="720p"),
+        metadata=MediaProbe(
+            height=2160,
+            bit_depth=10,
+            color_transfer="smpte2084",
+            color_primaries="bt2020",
+            color_space="bt2020nc",
+        ),
+        capabilities=_capabilities(),
+    )
+
+    filters = get_hwaccel("qsv").video_filters(context)
+
+    assert filters[0] == (
+        "zscale=transfer=linear:npl=100:"
+        f"w='{context.scale_width}':h='{context.scale_height}'"
+    )
+    assert filters[-2:] == ["format=nv12", "hwupload"]
+    assert all(not value.startswith("vpp_qsv") for value in filters)
+
+
+def test_qsv_hdr_command_does_not_require_vpp_qsv(monkeypatch, tmp_path):
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="qsv"),
+        metadata=MediaProbe(
+            video_stream_index=0,
+            bit_depth=10,
+            color_transfer="smpte2084",
+            color_primaries="bt2020",
+            color_space="bt2020nc",
+        ),
+        capabilities=_capabilities(filters=("format", "hwupload", "tonemap", "zscale")),
     )
     monkeypatch.setattr(
         qsv_module,
@@ -1207,11 +1294,56 @@ def test_qsv_hdr_fallback_uploads_for_vpp(monkeypatch):
         AsyncMock(return_value="/dev/dri/renderD128"),
     )
 
-    args = asyncio.run(get_hwaccel("qsv").input_args(context))
-    filters = get_hwaccel("qsv").video_filters(context)
+    cmd = asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
+    vf = cmd[cmd.index("-vf") + 1]
 
-    assert "-hwaccel" not in args
-    assert filters[:2] == ["format=p010le", "hwupload"]
+    assert "vpp_qsv" not in vf
+    assert vf.endswith("format=nv12,hwupload")
+
+
+@pytest.mark.parametrize("missing", ["format", "hwupload", "tonemap", "zscale"])
+def test_qsv_hdr_command_requires_cpu_tonemap_filters(monkeypatch, tmp_path, missing):
+    filters = {"format", "hwupload", "tonemap", "zscale"} - {missing}
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="qsv"),
+        metadata=MediaProbe(
+            video_stream_index=0,
+            bit_depth=10,
+            color_transfer="smpte2084",
+            color_primaries="bt2020",
+            color_space="bt2020nc",
+        ),
+        capabilities=_capabilities(filters=filters),
+    )
+    monkeypatch.setattr(
+        qsv_module,
+        "resolve_vaapi_device",
+        AsyncMock(return_value="/dev/dri/renderD128"),
+    )
+
+    with pytest.raises(RuntimeError, match=rf"filters: {missing}"):
+        asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
+
+
+def test_qsv_sdr_command_does_not_require_tonemap_filters(monkeypatch, tmp_path):
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="qsv"),
+        metadata=MediaProbe(
+            video_stream_index=0,
+            bit_depth=8,
+            color_transfer="bt709",
+        ),
+        capabilities=_capabilities(filters=("vpp_qsv",)),
+    )
+    monkeypatch.setattr(
+        qsv_module,
+        "resolve_vaapi_device",
+        AsyncMock(return_value="/dev/dri/renderD128"),
+    )
+
+    cmd = asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
+
+    assert cmd[cmd.index("-vf") + 1] == "vpp_qsv=format=nv12"
 
 
 def test_qsv_device(monkeypatch):

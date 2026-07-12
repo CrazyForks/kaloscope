@@ -4,6 +4,7 @@ from app.core.transcode.hwaccels.base import (
     HWAccelStrategy,
     TranscodeContext,
     resolve_vaapi_device,
+    software_tonemap_filters,
 )
 
 
@@ -17,7 +18,8 @@ class QSV(HWAccelStrategy):
             context: The runtime transcode context.
 
         Returns:
-            FFmpeg device initialization and hardware decoding options.
+            Device initialization plus hardware decoding options for eligible
+            SDR input. HDR decoding remains in system memory for CPU tone mapping.
 
         Raises:
             RuntimeError: If no usable DRM render device is available.
@@ -33,8 +35,10 @@ class QSV(HWAccelStrategy):
             "-filter_hw_device",
             "qs",
         ]
-        if context.supports_hwaccel("qsv") and (
-            context.needs_tonemap or not context.needs_scale
+        if (
+            context.supports_hwaccel("qsv")
+            and not context.needs_tonemap
+            and not context.needs_scale
         ):
             cmd.extend(
                 [
@@ -55,20 +59,11 @@ class QSV(HWAccelStrategy):
             context: The runtime transcode context.
 
         Returns:
-            A software format filter or QSV VPP filter.
+            CPU HDR tone mapping followed by upload, a software format filter,
+            or a QSV VPP format filter for hardware-decoded SDR input.
         """
         if context.needs_tonemap:
-            filters: list[str] = []
-            if not context.uses_hardware_decode:
-                filters.extend(["format=p010le", "hwupload"])
-            value = (
-                "vpp_qsv=tonemap=1:format=nv12:out_color_matrix=bt709:"
-                "out_color_primaries=bt709:out_color_transfer=bt709"
-            )
-            if context.needs_scale:
-                value += f":w='{context.scale_width}':h='{context.scale_height}'"
-            filters.append(value)
-            return filters
+            return [*software_tonemap_filters(context, "nv12"), "hwupload"]
         if context.needs_scale or not context.uses_hardware_decode:
             return ["format=nv12"]
         return ["vpp_qsv=format=nv12"]
