@@ -1,10 +1,23 @@
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 
 from app.core.transcode.capabilities import FFmpegCapabilities
 from app.core.transcode.options import EncoderConfig, TranscodeOptions
+
+
+class HDRType(StrEnum):
+    """HDR subtype inferred from explicit media metadata."""
+
+    SDR = "sdr"
+    HDR10 = "hdr10"
+    HLG = "hlg"
+    HDR10_PLUS = "hdr10_plus"
+    DOVI_COMPATIBLE = "dovi_compatible"
+    DOVI_ONLY = "dovi_only"
+    UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True)
@@ -16,10 +29,52 @@ class MediaProbe:
     height: int | None = None
     duration: float | None = None
     framerate: float | None = None
+    codec: str | None = None
+    profile: str | None = None
     pixel_format: str | None = None
+    bit_depth: int | None = None
+    color_range: str | None = None
     color_transfer: str | None = None
     color_primaries: str | None = None
     color_space: str | None = None
+    hdr10_plus: bool = False
+    dovi_profile: int | None = None
+    dovi_bl_present: bool | None = None
+    dovi_bl_signal_compatibility_id: int | None = None
+
+
+def classify_hdr(metadata: MediaProbe) -> HDRType:
+    """Classify HDR metadata without guessing from incomplete HDR signals."""
+    if metadata.dovi_profile is not None:
+        if (
+            metadata.dovi_bl_present is True
+            and metadata.dovi_bl_signal_compatibility_id == 1
+        ):
+            return HDRType.DOVI_COMPATIBLE
+        return HDRType.DOVI_ONLY
+
+    transfer = (metadata.color_transfer or "").lower()
+    is_pq = transfer == "smpte2084"
+    is_hlg = transfer == "arib-std-b67"
+    has_hdr_signal = is_pq or is_hlg or metadata.hdr10_plus
+    if not has_hdr_signal:
+        return HDRType.SDR
+
+    primaries = (metadata.color_primaries or "").lower()
+    color_space = (metadata.color_space or "").lower()
+    is_valid_hdr = (
+        metadata.bit_depth is not None
+        and metadata.bit_depth >= 10
+        and primaries == "bt2020"
+        and color_space in {"bt2020nc", "bt2020_ncl", "bt2020c", "bt2020_cl"}
+    )
+    if not is_valid_hdr:
+        return HDRType.UNKNOWN
+    if is_pq:
+        return HDRType.HDR10_PLUS if metadata.hdr10_plus else HDRType.HDR10
+    if is_hlg and not metadata.hdr10_plus:
+        return HDRType.HLG
+    return HDRType.UNKNOWN
 
 
 @dataclass
@@ -65,18 +120,29 @@ class TranscodeContext:
         return f"max(trunc(iw*{height}/ih/16)*16,16)"
 
     @property
+    def hdr_type(self) -> HDRType:
+        return classify_hdr(self.metadata)
+
+    @property
     def is_hdr10(self) -> bool:
-        transfer = self.metadata.color_transfer
-        return transfer is not None and transfer.lower() == "smpte2084"
+        return self.hdr_type in {
+            HDRType.HDR10,
+            HDRType.HDR10_PLUS,
+            HDRType.DOVI_COMPATIBLE,
+        }
 
     @property
     def is_hlg(self) -> bool:
-        transfer = self.metadata.color_transfer
-        return transfer is not None and transfer.lower() == "arib-std-b67"
+        return self.hdr_type is HDRType.HLG
 
     @property
     def needs_tonemap(self) -> bool:
-        return self.is_hdr10 or self.is_hlg
+        return self.hdr_type in {
+            HDRType.HDR10,
+            HDRType.HLG,
+            HDRType.HDR10_PLUS,
+            HDRType.DOVI_COMPATIBLE,
+        }
 
     @property
     def encoder_config(self) -> EncoderConfig:

@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import json
+import re
 from pathlib import Path
 
 from filelock import FileLock
@@ -14,7 +15,12 @@ from app.core.transcode.hls import (
     output_dir,
     wait_segment,
 )
-from app.core.transcode.hwaccels.base import MediaProbe, TranscodeContext
+from app.core.transcode.hwaccels.base import (
+    HDRType,
+    MediaProbe,
+    TranscodeContext,
+    classify_hdr,
+)
 from app.core.transcode.options import TranscodeOptions
 from app.core.transcode.tasks import finish_task, register_task
 
@@ -25,6 +31,17 @@ _STDERR_CHUNK_SIZE = 8192
 _STDERR_TAIL_SIZE = 500
 
 _MONITOR_TASKS: set[asyncio.Task[None]] = set()
+
+_EIGHT_BIT_PIXEL_FORMATS = {
+    "nv12",
+    "nv21",
+    "yuv420p",
+    "yuv422p",
+    "yuv444p",
+    "yuvj420p",
+    "yuvj422p",
+    "yuvj444p",
+}
 
 
 async def _ffmpeg() -> str:
@@ -55,6 +72,111 @@ async def _ffprobe() -> str:
     return "ffprobe"
 
 
+def _optional_int(value: object, *, positive: bool = False) -> int | None:
+    """Parse an integer field while rejecting booleans and invalid values."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = int(value.strip())
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed < 0 or (positive and parsed == 0):
+        return None
+    return parsed
+
+
+def _optional_flag(value: object) -> bool | None:
+    """Parse an ffprobe 0/1 flag while preserving a missing value."""
+    parsed = _optional_int(value)
+    if parsed == 0:
+        return False
+    if parsed == 1:
+        return True
+    return None
+
+
+def _pixel_format_bit_depth(pixel_format: str | None) -> int | None:
+    """Infer component bit depth from a known FFmpeg pixel-format name."""
+    if not pixel_format:
+        return None
+    name = pixel_format.lower()
+    if name in _EIGHT_BIT_PIXEL_FORMATS:
+        return 8
+    planar_match = re.search(r"(?:p|gray)(9|10|12|14|16)(?:le|be)?$", name)
+    if planar_match:
+        return int(planar_match.group(1))
+    packed_match = re.fullmatch(r"p0(10|12|16)(?:le|be)?", name)
+    if packed_match:
+        return int(packed_match.group(1))
+    return None
+
+
+async def _probe_hdr10_plus(media_path: str, stream_index: int) -> bool:
+    """Detect HDR10+ dynamic metadata from the selected stream's first frame."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            await _ffprobe(),
+            "-v",
+            "quiet",
+            "-select_streams",
+            str(stream_index),
+            "-read_intervals",
+            "%+#1",
+            "-show_frames",
+            "-show_entries",
+            "frame=stream_index:frame_side_data=side_data_type",
+            "-of",
+            "json",
+            media_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except OSError:
+        return False
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=_PROBE_TIMEOUT)
+    except TimeoutError:
+        if proc.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+        await proc.communicate()
+        return False
+    if proc.returncode != 0:
+        return False
+    try:
+        data = json.loads(stdout.decode())
+    except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+        return False
+    if not isinstance(data, dict):
+        return False
+
+    frames = data.get("frames")
+    if not isinstance(frames, list):
+        return False
+    expected_type = "hdr dynamic metadata smpte2094-40 (hdr10+)"
+    for frame in frames:
+        if not isinstance(frame, dict):
+            continue
+        side_data_list = frame.get("side_data_list")
+        if not isinstance(side_data_list, list):
+            continue
+        for side_data in side_data_list:
+            if not isinstance(side_data, dict):
+                continue
+            side_data_type = side_data.get("side_data_type")
+            if (
+                isinstance(side_data_type, str)
+                and side_data_type.lower() == expected_type
+            ):
+                return True
+    return False
+
+
 async def _probe_media(media_path: str) -> MediaProbe:
     """Probe the container and select its primary video and audio streams.
 
@@ -75,9 +197,11 @@ async def _probe_media(media_path: str) -> MediaProbe:
         "quiet",
         "-show_entries",
         (
-            "format=duration:stream=index,codec_type,avg_frame_rate,pix_fmt,"
-            "height,color_transfer,color_primaries,color_space:"
-            "stream_disposition=attached_pic"
+            "format=duration:stream=index,codec_type,codec_name,profile,"
+            "bits_per_sample,bits_per_raw_sample,avg_frame_rate,pix_fmt,height,"
+            "color_range,color_transfer,color_primaries,color_space:"
+            "stream_disposition=attached_pic:stream_side_data=side_data_type,"
+            "dv_profile,bl_present_flag,dv_bl_signal_compatibility_id"
         ),
         "-of",
         "json",
@@ -116,13 +240,21 @@ async def _probe_media(media_path: str) -> MediaProbe:
                 duration = float(raw_duration)
 
     framerate = None
+    codec = None
+    profile = None
     pixel_format = None
+    bit_depth = None
+    color_range = None
     source_height = None
     color_transfer = None
     color_primaries = None
     color_space = None
     video_stream_index = None
     audio_stream_index = None
+    dovi_profile = None
+    dovi_bl_present = None
+    dovi_bl_signal_compatibility_id = None
+    hdr10_plus = False
     video_stream = None
     streams = data.get("streams")
     if isinstance(streams, list):
@@ -152,6 +284,14 @@ async def _probe_media(media_path: str) -> MediaProbe:
 
     if video_stream is not None:
         stream = video_stream
+        raw_codec = stream.get("codec_name")
+        if isinstance(raw_codec, str) and raw_codec:
+            codec = raw_codec
+
+        raw_profile = stream.get("profile")
+        if isinstance(raw_profile, str) and raw_profile:
+            profile = raw_profile
+
         raw_height = stream.get("height")
         if isinstance(raw_height, int) and raw_height > 0:
             source_height = raw_height
@@ -159,6 +299,16 @@ async def _probe_media(media_path: str) -> MediaProbe:
         raw_pixel_format = stream.get("pix_fmt")
         if isinstance(raw_pixel_format, str) and raw_pixel_format:
             pixel_format = raw_pixel_format
+
+        bit_depth = (
+            _optional_int(stream.get("bits_per_raw_sample"), positive=True)
+            or _optional_int(stream.get("bits_per_sample"), positive=True)
+            or _pixel_format_bit_depth(pixel_format)
+        )
+
+        raw_color_range = stream.get("color_range")
+        if isinstance(raw_color_range, str) and raw_color_range:
+            color_range = raw_color_range
 
         raw_color_transfer = stream.get("color_transfer")
         if isinstance(raw_color_transfer, str) and raw_color_transfer:
@@ -172,6 +322,23 @@ async def _probe_media(media_path: str) -> MediaProbe:
         if isinstance(raw_color_space, str) and raw_color_space:
             color_space = raw_color_space
 
+        side_data_list = stream.get("side_data_list")
+        if isinstance(side_data_list, list):
+            for side_data in side_data_list:
+                if not isinstance(side_data, dict):
+                    continue
+                side_data_type = side_data.get("side_data_type")
+                if not isinstance(side_data_type, str) or (
+                    side_data_type.lower() != "dovi configuration record"
+                ):
+                    continue
+                dovi_profile = _optional_int(side_data.get("dv_profile"), positive=True)
+                dovi_bl_present = _optional_flag(side_data.get("bl_present_flag"))
+                dovi_bl_signal_compatibility_id = _optional_int(
+                    side_data.get("dv_bl_signal_compatibility_id")
+                )
+                break
+
         raw = stream.get("avg_frame_rate")
         if isinstance(raw, str):
             try:
@@ -181,16 +348,32 @@ async def _probe_media(media_path: str) -> MediaProbe:
                     framerate = value
             except (ValueError, TypeError, ZeroDivisionError):
                 pass
+        if (
+            video_stream_index is not None
+            and bit_depth is not None
+            and bit_depth >= 10
+            and color_transfer is not None
+            and color_transfer.lower() == "smpte2084"
+        ):
+            hdr10_plus = await _probe_hdr10_plus(media_path, video_stream_index)
     return MediaProbe(
         video_stream_index=video_stream_index,
         audio_stream_index=audio_stream_index,
         height=source_height,
         duration=duration,
         framerate=framerate,
+        codec=codec,
+        profile=profile,
         pixel_format=pixel_format,
+        bit_depth=bit_depth,
+        color_range=color_range,
         color_transfer=color_transfer,
         color_primaries=color_primaries,
         color_space=color_space,
+        hdr10_plus=hdr10_plus,
+        dovi_profile=dovi_profile,
+        dovi_bl_present=dovi_bl_present,
+        dovi_bl_signal_compatibility_id=dovi_bl_signal_compatibility_id,
     )
 
 
@@ -237,6 +420,12 @@ def _require_video_stream(metadata: MediaProbe) -> int:
     if metadata.video_stream_index is None:
         raise RuntimeError("Input has no transcodable video stream")
     return metadata.video_stream_index
+
+
+def _require_supported_hdr(metadata: MediaProbe) -> None:
+    """Reject HDR formats that cannot be decoded through a compatible base layer."""
+    if classify_hdr(metadata) is HDRType.DOVI_ONLY:
+        raise RuntimeError("Dolby Vision-only input is not supported")
 
 
 async def ensure_transcode(
@@ -287,6 +476,7 @@ async def ensure_transcode(
 
         metadata = await _probe_media(media_path)
         _require_video_stream(metadata)
+        _require_supported_hdr(metadata)
         capabilities = await load_ffmpeg_capabilities(await _ffmpeg(), options.encoder)
         context = TranscodeContext(
             options=options,
@@ -352,6 +542,7 @@ async def _build_hls_cmd(
         A list of command-line arguments ready for `asyncio.create_subprocess_exec`.
     """
     video_stream_index = _require_video_stream(context.metadata)
+    _require_supported_hdr(context.metadata)
     audio_stream_index = context.metadata.audio_stream_index
 
     executable = (

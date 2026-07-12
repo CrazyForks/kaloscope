@@ -18,7 +18,12 @@ from app.core.transcode import capabilities as capability_module
 from app.core.transcode import hls, tasks, transcoder
 from app.core.transcode.capabilities import FFmpegCapabilities
 from app.core.transcode.hwaccels import get_hwaccel
-from app.core.transcode.hwaccels.base import MediaProbe, TranscodeContext
+from app.core.transcode.hwaccels.base import (
+    HDRType,
+    MediaProbe,
+    TranscodeContext,
+    classify_hdr,
+)
 from app.core.transcode.options import TranscodeOptions
 
 
@@ -346,7 +351,7 @@ def test_wait_exited(tmp_path):
 
 
 def test_probe_media(monkeypatch):
-    proc = SimpleNamespace(
+    probe_proc = SimpleNamespace(
         returncode=0,
         communicate=AsyncMock(
             return_value=(
@@ -354,17 +359,34 @@ def test_probe_media(monkeypatch):
                 b'"disposition":{"attached_pic":1},"height":600},'
                 b'{"index":1,"codec_type":"audio"},'
                 b'{"index":2,"codec_type":"video",'
+                b'"codec_name":"hevc","profile":"Main 10",'
+                b'"bits_per_raw_sample":"10","bits_per_sample":0,'
                 b'"disposition":{"attached_pic":0},'
                 b'"avg_frame_rate":"30000/1001",'
                 b'"pix_fmt":"yuv420p10le","height":1080,'
+                b'"color_range":"tv",'
                 b'"color_transfer":"smpte2084","color_primaries":"bt2020",'
-                b'"color_space":"bt2020nc"}],'
+                b'"color_space":"bt2020nc",'
+                b'"side_data_list":[{"side_data_type":"DOVI configuration record",'
+                b'"dv_profile":8,"bl_present_flag":1,'
+                b'"dv_bl_signal_compatibility_id":1}]}],'
                 b'"format":{"duration":"60.5"}}',
                 b"",
             )
         ),
     )
-    create = AsyncMock(return_value=proc)
+    frame_proc = SimpleNamespace(
+        returncode=0,
+        communicate=AsyncMock(
+            return_value=(
+                b'{"frames":[{"side_data_list":['
+                b'{"side_data_type":"HDR Dynamic Metadata SMPTE2094-40 '
+                b'(HDR10+)"}]}]}',
+                b"",
+            )
+        ),
+    )
+    create = AsyncMock(side_effect=[probe_proc, frame_proc])
 
     monkeypatch.setattr(transcoder, "_ffprobe", AsyncMock(return_value="ffprobe"))
     monkeypatch.setattr(transcoder.asyncio, "create_subprocess_exec", create)
@@ -381,18 +403,179 @@ def test_probe_media(monkeypatch):
         color_transfer="smpte2084",
         color_primaries="bt2020",
         color_space="bt2020nc",
+        codec="hevc",
+        profile="Main 10",
+        bit_depth=10,
+        color_range="tv",
+        dovi_profile=8,
+        dovi_bl_present=True,
+        dovi_bl_signal_compatibility_id=1,
+        hdr10_plus=True,
     )
-    create.assert_awaited_once()
-    await_args = create.await_args
+    assert create.await_count == 2
+    await_args = create.await_args_list[0]
     assert await_args is not None
     args = await_args.args
     assert (
-        "format=duration:stream=index,codec_type,avg_frame_rate,pix_fmt,height,"
-        "color_transfer,color_primaries,color_space:"
-        "stream_disposition=attached_pic"
+        "format=duration:stream=index,codec_type,codec_name,profile,"
+        "bits_per_sample,bits_per_raw_sample,avg_frame_rate,pix_fmt,height,"
+        "color_range,color_transfer,color_primaries,color_space:"
+        "stream_disposition=attached_pic:stream_side_data=side_data_type,"
+        "dv_profile,bl_present_flag,dv_bl_signal_compatibility_id"
     ) in args
     assert "-select_streams" not in args
     assert "json" in args
+
+    frame_args = create.await_args_list[1].args
+    assert frame_args[frame_args.index("-select_streams") + 1] == "2"
+    assert frame_args[frame_args.index("-read_intervals") + 1] == "%+#1"
+    assert "-show_frames" in frame_args
+    assert (
+        frame_args[frame_args.index("-show_entries") + 1]
+        == "frame=stream_index:frame_side_data=side_data_type"
+    )
+
+
+@pytest.mark.parametrize(
+    ("pixel_format", "expected"),
+    [
+        ("yuv420p", 8),
+        ("nv12", 8),
+        ("yuv420p10le", 10),
+        ("p010le", 10),
+        ("p012le", 12),
+        ("unknown", None),
+        (None, None),
+    ],
+)
+def test_pixel_format_bit_depth(pixel_format, expected):
+    assert transcoder._pixel_format_bit_depth(pixel_format) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw_fields", "expected"),
+    [
+        ('"bits_per_raw_sample":"12","bits_per_sample":10', 12),
+        ('"bits_per_raw_sample":"0","bits_per_sample":10', 10),
+        ('"bits_per_raw_sample":"N/A","pix_fmt":"p010le"', 10),
+    ],
+)
+def test_probe_media_bit_depth_precedence(monkeypatch, raw_fields, expected):
+    stdout = (
+        '{"streams":[{"index":0,"codec_type":"video",'
+        f"{raw_fields}" + '}],"format":{"duration":"1"}}'
+    ).encode()
+    proc = SimpleNamespace(
+        returncode=0,
+        communicate=AsyncMock(return_value=(stdout, b"")),
+    )
+    monkeypatch.setattr(transcoder, "_ffprobe", AsyncMock(return_value="ffprobe"))
+    monkeypatch.setattr(
+        transcoder.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    )
+
+    assert asyncio.run(transcoder._probe_media("input.mkv")).bit_depth == expected
+
+
+def test_probe_hdr10_plus_detects_dynamic_metadata(monkeypatch):
+    proc = SimpleNamespace(
+        returncode=0,
+        communicate=AsyncMock(
+            return_value=(
+                b'{"frames":[{"side_data_list":['
+                b'{"side_data_type":"HDR Dynamic Metadata SMPTE2094-40 '
+                b'(HDR10+)"}]}]}',
+                b"",
+            )
+        ),
+    )
+    create = AsyncMock(return_value=proc)
+    monkeypatch.setattr(transcoder, "_ffprobe", AsyncMock(return_value="ffprobe"))
+    monkeypatch.setattr(transcoder.asyncio, "create_subprocess_exec", create)
+
+    assert asyncio.run(transcoder._probe_hdr10_plus("input.mkv", 2)) is True
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stdout"),
+    [
+        (1, b""),
+        (0, b'{"frames":[{"side_data_list":[]}]}'),
+        (0, b"invalid"),
+    ],
+)
+def test_probe_hdr10_plus_returns_false_without_metadata(
+    monkeypatch, returncode, stdout
+):
+    proc = SimpleNamespace(
+        returncode=returncode,
+        communicate=AsyncMock(return_value=(stdout, b"")),
+    )
+    monkeypatch.setattr(transcoder, "_ffprobe", AsyncMock(return_value="ffprobe"))
+    monkeypatch.setattr(
+        transcoder.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    )
+
+    assert asyncio.run(transcoder._probe_hdr10_plus("input.mkv", 2)) is False
+
+
+def test_probe_hdr10_plus_timeout_kills_and_reaps(monkeypatch):
+    proc = SimpleNamespace(
+        returncode=None,
+        kill=Mock(),
+        communicate=AsyncMock(side_effect=[TimeoutError, (b"", b"")]),
+    )
+    monkeypatch.setattr(transcoder, "_ffprobe", AsyncMock(return_value="ffprobe"))
+    monkeypatch.setattr(
+        transcoder.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    )
+
+    assert asyncio.run(transcoder._probe_hdr10_plus("input.mkv", 2)) is False
+    proc.kill.assert_called_once_with()
+    assert proc.communicate.await_count == 2
+
+
+def test_probe_hdr10_plus_start_failure_is_optional(monkeypatch):
+    monkeypatch.setattr(transcoder, "_ffprobe", AsyncMock(return_value="ffprobe"))
+    monkeypatch.setattr(
+        transcoder.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(side_effect=OSError("unavailable")),
+    )
+
+    assert asyncio.run(transcoder._probe_hdr10_plus("input.mkv", 2)) is False
+
+
+def test_probe_media_skips_hdr10_plus_for_non_pq_candidate(monkeypatch):
+    proc = SimpleNamespace(
+        returncode=0,
+        communicate=AsyncMock(
+            return_value=(
+                b'{"streams":[{"index":0,"codec_type":"video",'
+                b'"bits_per_raw_sample":"8","color_transfer":"bt709"}]}',
+                b"",
+            )
+        ),
+    )
+    hdr10_plus_probe = AsyncMock(return_value=True)
+    monkeypatch.setattr(transcoder, "_ffprobe", AsyncMock(return_value="ffprobe"))
+    monkeypatch.setattr(
+        transcoder.asyncio,
+        "create_subprocess_exec",
+        AsyncMock(return_value=proc),
+    )
+    monkeypatch.setattr(transcoder, "_probe_hdr10_plus", hdr10_plus_probe)
+
+    result = asyncio.run(transcoder._probe_media("input.mkv"))
+
+    assert result.hdr10_plus is False
+    hdr10_plus_probe.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
@@ -471,22 +654,120 @@ def test_transcode_context():
 
 
 @pytest.mark.parametrize(
-    ("transfer", "is_hdr10", "is_hlg", "needs_tonemap"),
+    ("metadata", "expected"),
     [
-        ("smpte2084", True, False, True),
-        ("SMPTE2084", True, False, True),
-        ("arib-std-b67", False, True, True),
-        ("ARIB-STD-B67", False, True, True),
-        ("bt709", False, False, False),
-        (None, False, False, False),
+        (MediaProbe(bit_depth=8, color_transfer="bt709"), HDRType.SDR),
+        (
+            MediaProbe(
+                bit_depth=10,
+                color_transfer="SMPTE2084",
+                color_primaries="BT2020",
+                color_space="BT2020NC",
+            ),
+            HDRType.HDR10,
+        ),
+        (
+            MediaProbe(
+                bit_depth=10,
+                color_transfer="arib-std-b67",
+                color_primaries="bt2020",
+                color_space="bt2020_ncl",
+            ),
+            HDRType.HLG,
+        ),
+        (
+            MediaProbe(
+                bit_depth=10,
+                color_transfer="smpte2084",
+                color_primaries="bt2020",
+                color_space="bt2020nc",
+                hdr10_plus=True,
+            ),
+            HDRType.HDR10_PLUS,
+        ),
+        (
+            MediaProbe(
+                dovi_profile=8,
+                dovi_bl_present=True,
+                dovi_bl_signal_compatibility_id=1,
+            ),
+            HDRType.DOVI_COMPATIBLE,
+        ),
+        (
+            MediaProbe(
+                dovi_profile=5,
+                dovi_bl_present=True,
+                dovi_bl_signal_compatibility_id=0,
+            ),
+            HDRType.DOVI_ONLY,
+        ),
+        (
+            MediaProbe(
+                bit_depth=8,
+                color_transfer="smpte2084",
+                color_primaries="bt2020",
+                color_space="bt2020nc",
+            ),
+            HDRType.UNKNOWN,
+        ),
+        (
+            MediaProbe(bit_depth=10, color_transfer="smpte2084"),
+            HDRType.UNKNOWN,
+        ),
     ],
 )
-def test_context_detects_hdr(transfer, is_hdr10, is_hlg, needs_tonemap):
+def test_classify_hdr(metadata, expected):
+    assert classify_hdr(metadata) is expected
+
+
+@pytest.mark.parametrize(
+    ("hdr_type", "is_hdr10", "is_hlg", "needs_tonemap"),
+    [
+        (HDRType.SDR, False, False, False),
+        (HDRType.HDR10, True, False, True),
+        (HDRType.HLG, False, True, True),
+        (HDRType.HDR10_PLUS, True, False, True),
+        (HDRType.DOVI_COMPATIBLE, True, False, True),
+        (HDRType.DOVI_ONLY, False, False, False),
+        (HDRType.UNKNOWN, False, False, False),
+    ],
+)
+def test_context_detects_hdr(hdr_type, is_hdr10, is_hlg, needs_tonemap):
+    metadata_by_type = {
+        HDRType.SDR: MediaProbe(bit_depth=8, color_transfer="bt709"),
+        HDRType.HDR10: MediaProbe(
+            bit_depth=10,
+            color_transfer="smpte2084",
+            color_primaries="bt2020",
+            color_space="bt2020nc",
+        ),
+        HDRType.HLG: MediaProbe(
+            bit_depth=10,
+            color_transfer="arib-std-b67",
+            color_primaries="bt2020",
+            color_space="bt2020nc",
+        ),
+        HDRType.HDR10_PLUS: MediaProbe(
+            bit_depth=10,
+            color_transfer="smpte2084",
+            color_primaries="bt2020",
+            color_space="bt2020nc",
+            hdr10_plus=True,
+        ),
+        HDRType.DOVI_COMPATIBLE: MediaProbe(
+            dovi_profile=8,
+            dovi_bl_present=True,
+            dovi_bl_signal_compatibility_id=1,
+        ),
+        HDRType.DOVI_ONLY: MediaProbe(dovi_profile=5),
+        HDRType.UNKNOWN: MediaProbe(bit_depth=8, color_transfer="smpte2084"),
+    }
     context = TranscodeContext(
         options=TranscodeOptions(),
-        metadata=MediaProbe(color_transfer=transfer),
+        metadata=metadata_by_type[hdr_type],
     )
 
+    assert context.hdr_type is hdr_type
     assert context.is_hdr10 is is_hdr10
     assert context.is_hlg is is_hlg
     assert context.needs_tonemap is needs_tonemap
@@ -571,6 +852,7 @@ def _hdr_context(
             audio_stream_index=1,
             framerate=24.0,
             pixel_format="yuv420p10le",
+            bit_depth=10,
             height=2160,
             color_transfer=transfer,
             color_primaries="bt2020",
@@ -1396,6 +1678,53 @@ def test_no_video_rejected_before_capability_discovery(monkeypatch, tmp_path):
     release.assert_called_once_with(lock)
 
 
+def test_dovi_only_rejected_before_capability_discovery(monkeypatch, tmp_path):
+    lock = object()
+    release = Mock()
+    load = AsyncMock(side_effect=AssertionError("capabilities queried"))
+    create = AsyncMock(side_effect=AssertionError("transcode process started"))
+    metadata = MediaProbe(
+        video_stream_index=0,
+        dovi_profile=5,
+        dovi_bl_present=True,
+        dovi_bl_signal_compatibility_id=0,
+    )
+
+    monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
+    monkeypatch.setattr(transcoder, "is_complete", Mock(return_value=False))
+    monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
+    monkeypatch.setattr(transcoder, "cleanup_stale_hls", Mock())
+    monkeypatch.setattr(transcoder, "_probe_media", AsyncMock(return_value=metadata))
+    monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
+    monkeypatch.setattr(transcoder, "load_ffmpeg_capabilities", load)
+    monkeypatch.setattr(transcoder.asyncio, "create_subprocess_exec", create)
+    monkeypatch.setattr(transcoder, "_release_lock", release)
+
+    with pytest.raises(RuntimeError, match="Dolby Vision-only"):
+        asyncio.run(
+            transcoder.ensure_transcode("input.mkv", "hash", TranscodeOptions())
+        )
+
+    load.assert_not_awaited()
+    create.assert_not_awaited()
+    release.assert_called_once_with(lock)
+
+
+def test_build_hls_cmd_rejects_dovi_only(tmp_path):
+    context = TranscodeContext(
+        options=TranscodeOptions(),
+        metadata=MediaProbe(
+            video_stream_index=0,
+            dovi_profile=5,
+            dovi_bl_present=True,
+            dovi_bl_signal_compatibility_id=0,
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="Dolby Vision-only"):
+        asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
+
+
 @pytest.mark.parametrize(
     ("framerate", "expected_framerate"),
     [(24.0, 24.0), (None, 30.0)],
@@ -1409,6 +1738,7 @@ def test_ensure_builds_context(monkeypatch, tmp_path, framerate, expected_framer
         duration=60.0,
         framerate=framerate,
         pixel_format="yuv420p10le",
+        bit_depth=10,
         height=1080,
         color_transfer="smpte2084",
         color_primaries="bt2020",
