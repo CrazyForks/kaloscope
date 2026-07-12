@@ -1,5 +1,3 @@
-import math
-
 from app.core.transcode.hwaccels.base import (
     HWAccelStrategy,
     TranscodeContext,
@@ -173,6 +171,7 @@ class QSV(HWAccelStrategy):
         Returns:
             FFmpeg QSV rate-control and buffer options.
         """
+        context.require_encoder_option("forced_idr")
         bitrate = context.options.bitrate
         bitrate_num = int(bitrate[:-1])
         args: list[str] = []
@@ -192,21 +191,5 @@ class QSV(HWAccelStrategy):
             args.extend(["-mbbrc", "1"])
         if context.supports_encoder_option("rc_init_occupancy"):
             args.extend(["-rc_init_occupancy", str(bitrate_num * 2 * 1000)])
+        args.extend(["-forced_idr", "1"])
         return args
-
-    def keyframe_args(self, context: TranscodeContext) -> list[str]:
-        """Build a fixed GOP approximating one HLS segment.
-
-        Args:
-            context: The runtime transcode context.
-
-        Returns:
-            FFmpeg options for fixed GOP and minimum keyframe intervals.
-        """
-        gop = math.ceil(context.source_framerate * context.options.segment_length)
-        return [
-            "-g:v:0",
-            str(gop),
-            "-keyint_min:v:0",
-            str(gop),
-        ]

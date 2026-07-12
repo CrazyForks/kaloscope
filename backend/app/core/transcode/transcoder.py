@@ -3,6 +3,7 @@ import contextlib
 import json
 import math
 import re
+from fractions import Fraction
 from pathlib import Path
 
 from filelock import FileLock
@@ -131,6 +132,17 @@ def _parse_sample_aspect_ratio(value: object) -> tuple[int, int] | None:
     return numerator // divisor, denominator // divisor
 
 
+def _parse_frame_rate(value: object) -> Fraction | None:
+    """Parse a positive FFprobe frame-rate rational without losing precision."""
+    if not isinstance(value, str):
+        return None
+    try:
+        rate = Fraction(value.strip())
+    except (ValueError, ZeroDivisionError):
+        return None
+    return rate if rate > 0 else None
+
+
 def _parse_rotation(value: object) -> int | None:
     """Convert FFprobe counter-clockwise rotation to canonical clockwise degrees."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -228,7 +240,8 @@ async def _probe_media(media_path: str) -> MediaProbe:
         "-show_entries",
         (
             "format=duration:stream=index,codec_type,codec_name,profile,"
-            "bits_per_sample,bits_per_raw_sample,avg_frame_rate,pix_fmt,width,height,"
+            "bits_per_sample,bits_per_raw_sample,avg_frame_rate,r_frame_rate,"
+            "pix_fmt,width,height,"
             "sample_aspect_ratio,field_order,"
             "color_range,color_transfer,color_primaries,color_space:"
             "stream_disposition=attached_pic:stream_side_data=side_data_type,"
@@ -270,7 +283,8 @@ async def _probe_media(media_path: str) -> MediaProbe:
             with contextlib.suppress(ValueError, TypeError):
                 duration = float(raw_duration)
 
-    framerate = None
+    avg_frame_rate = None
+    r_frame_rate = None
     codec = None
     profile = None
     pixel_format = None
@@ -398,15 +412,8 @@ async def _probe_media(media_path: str) -> MediaProbe:
                         side_data.get("dv_bl_signal_compatibility_id")
                     )
 
-        raw = stream.get("avg_frame_rate")
-        if isinstance(raw, str):
-            try:
-                num, _, den = raw.partition("/")
-                value = float(num) / float(den) if den else float(num)
-                if value > 0:
-                    framerate = value
-            except (ValueError, TypeError, ZeroDivisionError):
-                pass
+        avg_frame_rate = _parse_frame_rate(stream.get("avg_frame_rate"))
+        r_frame_rate = _parse_frame_rate(stream.get("r_frame_rate"))
         if (
             video_stream_index is not None
             and bit_depth is not None
@@ -424,7 +431,8 @@ async def _probe_media(media_path: str) -> MediaProbe:
         rotation=rotation,
         field_order=field_order,
         duration=duration,
-        framerate=framerate,
+        avg_frame_rate=avg_frame_rate,
+        r_frame_rate=r_frame_rate,
         codec=codec,
         profile=profile,
         pixel_format=pixel_format,
@@ -475,7 +483,8 @@ async def probe_framerate(media_path: str) -> float | None:
         OSError: If the ffprobe process cannot be started.
         UnicodeDecodeError: If ffprobe output is not valid UTF-8.
     """
-    return (await _probe_media(media_path)).framerate
+    rate = (await _probe_media(media_path)).avg_frame_rate
+    return float(rate) if rate is not None else None
 
 
 def _require_video_stream(metadata: MediaProbe) -> int:
@@ -733,6 +742,8 @@ async def _build_hls_cmd(
             "event",
             "-hls_segment_type",
             "mpegts",
+            "-hls_flags",
+            "independent_segments",
             "-hls_segment_filename",
             segment_pattern,
             "-start_number",

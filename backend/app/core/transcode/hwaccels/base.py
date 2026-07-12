@@ -40,7 +40,8 @@ class MediaProbe:
     rotation: int | None = None
     field_order: str | None = None
     duration: float | None = None
-    framerate: float | None = None
+    avg_frame_rate: Fraction | None = None
+    r_frame_rate: Fraction | None = None
     codec: str | None = None
     profile: str | None = None
     pixel_format: str | None = None
@@ -140,6 +141,17 @@ def classify_hdr(metadata: MediaProbe) -> HDRType:
     return HDRType.UNKNOWN
 
 
+def segment_keyframe_args(context: "TranscodeContext") -> list[str]:
+    """Build timestamp-based closed-GOP options for HLS segment boundaries."""
+    segment_length = context.options.segment_length
+    return [
+        "-force_key_frames:0",
+        (f"expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+{segment_length}))"),
+        "-flags:v:0",
+        "+cgop",
+    ]
+
+
 @dataclass
 class TranscodeContext:
     """Runtime context used to build a transcode command."""
@@ -150,9 +162,26 @@ class TranscodeContext:
     hardware: HardwareRuntime | None = None
 
     @property
-    def source_framerate(self) -> float:
-        value = self.metadata.framerate
-        return value if value is not None and value > 0 else 30.0
+    def source_framerate(self) -> Fraction | None:
+        value = self.metadata.avg_frame_rate
+        return value if value is not None and value > 0 else None
+
+    @property
+    def has_stable_framerate(self) -> bool:
+        """Return whether average and base rates describe the same cadence."""
+        average = self.source_framerate
+        base = self.metadata.r_frame_rate
+        if average is None or base is None or base <= 0:
+            return False
+        return abs(average - base) / base <= Fraction(1, 1000)
+
+    @property
+    def fixed_gop_size(self) -> int | None:
+        """Return a segment-sized GOP only when the source cadence is stable."""
+        framerate = self.source_framerate
+        if not self.has_stable_framerate or framerate is None:
+            return None
+        return math.ceil(framerate * self.options.segment_length)
 
     @property
     def source_pixel_format(self) -> str | None:
@@ -300,6 +329,14 @@ class TranscodeContext:
         return self.capabilities is None or self.capabilities.supports_encoder_option(
             name
         )
+
+    def require_encoder_option(self, name: str) -> None:
+        """Reject a selected encoder that lacks a correctness-critical option."""
+        if self.capabilities is not None and not self.supports_encoder_option(name):
+            raise RuntimeError(
+                f"FFmpeg '{self.capabilities.executable}' is missing required "
+                f"capabilities: encoder options: {name}"
+            )
 
     @property
     def uses_hardware_decode(self) -> bool:
@@ -673,13 +710,15 @@ class HWAccelStrategy(ABC):
         Returns:
             FFmpeg command-line arguments for keyframe and GOP configuration.
         """
-        segment_length = context.options.segment_length
-        gop = math.ceil(context.source_framerate * segment_length)
-        return [
-            "-force_key_frames:0",
-            f"expr:gte(t,n_forced*{segment_length})",
-            "-g:v:0",
-            str(gop),
-            "-keyint_min:v:0",
-            str(gop),
-        ]
+        args = segment_keyframe_args(context)
+        gop = context.fixed_gop_size
+        if gop is not None:
+            args.extend(
+                [
+                    "-g:v:0",
+                    str(gop),
+                    "-keyint_min:v:0",
+                    str(gop),
+                ]
+            )
+        return args

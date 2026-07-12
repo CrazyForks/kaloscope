@@ -1,6 +1,7 @@
 from app.core.transcode.hwaccels.base import (
     HWAccelStrategy,
     TranscodeContext,
+    segment_keyframe_args,
     software_geometry_filters,
     software_tonemap_filters,
 )
@@ -62,8 +63,7 @@ class Software(HWAccelStrategy):
             FFmpeg options for deterministic segment-aligned keyframes.
         """
         return [
-            "-force_key_frames:0",
-            f"expr:gte(t,n_forced*{context.options.segment_length})",
+            *segment_keyframe_args(context),
             # disable scene-change keyframes for deterministic GOPs
             "-sc_threshold:v:0",
             "0",

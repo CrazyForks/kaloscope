@@ -809,6 +809,7 @@ def test_probe_media(monkeypatch):
                 b'"bits_per_raw_sample":"10","bits_per_sample":0,'
                 b'"disposition":{"attached_pic":0},'
                 b'"avg_frame_rate":"30000/1001",'
+                b'"r_frame_rate":"30000/1001",'
                 b'"pix_fmt":"yuv420p10le","width":1920,"height":1080,'
                 b'"sample_aspect_ratio":"4:3","field_order":"tt",'
                 b'"color_range":"tv",'
@@ -845,7 +846,8 @@ def test_probe_media(monkeypatch):
         video_stream_index=2,
         audio_stream_index=1,
         duration=60.5,
-        framerate=pytest.approx(30000 / 1001),
+        avg_frame_rate=Fraction(30000, 1001),
+        r_frame_rate=Fraction(30000, 1001),
         pixel_format="yuv420p10le",
         width=1920,
         height=1080,
@@ -870,7 +872,8 @@ def test_probe_media(monkeypatch):
     args = await_args.args
     assert (
         "format=duration:stream=index,codec_type,codec_name,profile,"
-        "bits_per_sample,bits_per_raw_sample,avg_frame_rate,pix_fmt,width,height,"
+        "bits_per_sample,bits_per_raw_sample,avg_frame_rate,r_frame_rate,"
+        "pix_fmt,width,height,"
         "sample_aspect_ratio,field_order,"
         "color_range,color_transfer,color_primaries,color_space:"
         "stream_disposition=attached_pic:stream_side_data=side_data_type,"
@@ -919,6 +922,24 @@ def test_pixel_format_bit_depth(pixel_format, expected):
 )
 def test_parse_sample_aspect_ratio(value, expected):
     assert transcoder._parse_sample_aspect_ratio(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("30000/1001", Fraction(30000, 1001)),
+        ("50/2", Fraction(25, 1)),
+        ("25", Fraction(25, 1)),
+        ("0/0", None),
+        ("0/1", None),
+        ("-24/1", None),
+        ("bad", None),
+        (None, None),
+        (24, None),
+    ],
+)
+def test_parse_frame_rate(value, expected):
+    assert transcoder._parse_frame_rate(value) == expected
 
 
 @pytest.mark.parametrize(
@@ -1078,7 +1099,7 @@ def test_probe_media_skips_hdr10_plus_for_non_pq_candidate(monkeypatch):
             0,
             b'{"streams":[{"index":0,"codec_type":"video",'
             b'"avg_frame_rate":"24/1"}],"format":{"duration":"bad"}}',
-            MediaProbe(video_stream_index=0, framerate=24.0),
+            MediaProbe(video_stream_index=0, avg_frame_rate=Fraction(24, 1)),
         ),
     ],
 )
@@ -1096,6 +1117,20 @@ def test_probe_media_invalid(monkeypatch, returncode, stdout, expected):
     )
 
     assert asyncio.run(transcoder._probe_media("input.mkv")) == expected
+
+
+@pytest.mark.parametrize(
+    ("rate", "expected"),
+    [(Fraction(30000, 1001), 30000 / 1001), (None, None)],
+)
+def test_probe_framerate_converts_average_at_api_boundary(monkeypatch, rate, expected):
+    monkeypatch.setattr(
+        transcoder,
+        "_probe_media",
+        AsyncMock(return_value=MediaProbe(avg_frame_rate=rate)),
+    )
+
+    assert asyncio.run(transcoder.probe_framerate("input.mkv")) == expected
 
 
 def test_probe_timeout(monkeypatch):
@@ -1124,7 +1159,8 @@ def test_transcode_context():
         resolution="720p",
     )
     metadata = MediaProbe(
-        framerate=23.5,
+        avg_frame_rate=Fraction(47, 2),
+        r_frame_rate=Fraction(47, 2),
         pixel_format="yuv420p10le",
         width=1920,
         height=1080,
@@ -1133,7 +1169,9 @@ def test_transcode_context():
 
     assert context.options is options
     assert context.metadata is metadata
-    assert context.source_framerate == 23.5
+    assert context.source_framerate == Fraction(47, 2)
+    assert context.has_stable_framerate is True
+    assert context.fixed_gop_size == 141
     assert context.source_pixel_format == "yuv420p10le"
     assert context.source_height == 1080
     assert options.segment_length == 6
@@ -1142,6 +1180,33 @@ def test_transcode_context():
     assert context.scale_height == "720"
     assert context.scale_width == "1280"
     assert context.encoder_config is options.encoder_config
+
+
+@pytest.mark.parametrize(
+    ("avg_frame_rate", "r_frame_rate", "expected_stable", "expected_gop"),
+    [
+        (Fraction(24000, 1001), Fraction(24), True, 144),
+        (Fraction(30000, 1001), Fraction(30000, 1001), True, 180),
+        (Fraction(3003, 125), Fraction(24), True, 145),
+        (Fraction(961, 40), Fraction(24), False, None),
+        (Fraction(6075, 271), Fraction(15), False, None),
+        (Fraction(24), None, False, None),
+        (None, Fraction(24), False, None),
+    ],
+)
+def test_transcode_context_frame_rate_stability(
+    avg_frame_rate, r_frame_rate, expected_stable, expected_gop
+):
+    context = TranscodeContext(
+        options=TranscodeOptions(),
+        metadata=MediaProbe(
+            avg_frame_rate=avg_frame_rate,
+            r_frame_rate=r_frame_rate,
+        ),
+    )
+
+    assert context.has_stable_framerate is expected_stable
+    assert context.fixed_gop_size == expected_gop
 
 
 @pytest.mark.parametrize(
@@ -2584,6 +2649,8 @@ def _capabilities(
     ),
     encoder_options=(
         "crf",
+        "forced-idr",
+        "forced_idr",
         "mbbrc",
         "preset",
         "prio_speed",
@@ -2617,7 +2684,8 @@ def _hdr_context(
         metadata=MediaProbe(
             video_stream_index=0,
             audio_stream_index=1,
-            framerate=24.0,
+            avg_frame_rate=Fraction(24),
+            r_frame_rate=Fraction(24),
             pixel_format="yuv420p10le",
             bit_depth=10,
             width=3840,
@@ -2768,7 +2836,18 @@ def test_software_cmd(monkeypatch, tmp_path):
     assert cmd[cmd.index("-crf") + 1] == "23"
     assert cmd[cmd.index("-hls_time") + 1] == "6"
     assert "-level" not in cmd
-    assert "-hls_flags" not in cmd
+    assert cmd[cmd.index("-hls_flags") + 1] == "independent_segments"
+    keyframe_index = cmd.index("-force_key_frames:0")
+    assert cmd[keyframe_index : keyframe_index + 8] == [
+        "-force_key_frames:0",
+        "expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+6))",
+        "-flags:v:0",
+        "+cgop",
+        "-sc_threshold:v:0",
+        "0",
+        "-c:a",
+        "aac",
+    ]
     assert "-vf" not in cmd
 
 
@@ -2913,7 +2992,11 @@ def test_nvenc_args():
     options = TranscodeOptions(hwaccel="nvenc", quality="high")
     context = TranscodeContext(
         options=options,
-        metadata=MediaProbe(framerate=23.5, pixel_format="yuv420p"),
+        metadata=MediaProbe(
+            avg_frame_rate=Fraction(47, 2),
+            r_frame_rate=Fraction(47, 2),
+            pixel_format="yuv420p",
+        ),
     )
 
     assert asyncio.run(strategy.input_args(context)) == [
@@ -2955,8 +3038,14 @@ def test_nvenc_args():
         "6000k",
         "-bufsize",
         "12000k",
+        "-forced-idr",
+        "1",
     ]
     assert strategy.keyframe_args(context) == [
+        "-force_key_frames:0",
+        "expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+6))",
+        "-flags:v:0",
+        "+cgop",
         "-g:v:0",
         "141",
         "-keyint_min:v:0",
@@ -3261,7 +3350,10 @@ def test_qsv_args(monkeypatch):
     strategy = get_hwaccel("qsv")
     context = TranscodeContext(
         options=TranscodeOptions(hwaccel="qsv"),
-        metadata=MediaProbe(framerate=25.0),
+        metadata=MediaProbe(
+            avg_frame_rate=Fraction(25),
+            r_frame_rate=Fraction(25),
+        ),
     )
     scaled_context = TranscodeContext(
         options=TranscodeOptions(hwaccel="qsv", resolution="720p"),
@@ -3315,8 +3407,14 @@ def test_qsv_args(monkeypatch):
         "1",
         "-rc_init_occupancy",
         "6000000",
+        "-forced_idr",
+        "1",
     ]
     assert strategy.keyframe_args(context) == [
+        "-force_key_frames:0",
+        "expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+6))",
+        "-flags:v:0",
+        "+cgop",
         "-g:v:0",
         "150",
         "-keyint_min:v:0",
@@ -3541,7 +3639,9 @@ def test_vaapi_args(monkeypatch):
     ]
     assert strategy.keyframe_args(context) == [
         "-force_key_frames:0",
-        "expr:gte(t,n_forced*6)",
+        "expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+6))",
+        "-flags:v:0",
+        "+cgop",
     ]
 
 
@@ -3708,7 +3808,11 @@ def test_videotoolbox_args():
     options = TranscodeOptions(hwaccel="videotoolbox", quality="low")
     context = TranscodeContext(
         options=options,
-        metadata=MediaProbe(pixel_format="yuv420p"),
+        metadata=MediaProbe(
+            avg_frame_rate=Fraction(24),
+            r_frame_rate=Fraction(24),
+            pixel_format="yuv420p",
+        ),
     )
 
     assert asyncio.run(strategy.input_args(context)) == [
@@ -3763,12 +3867,54 @@ def test_videotoolbox_args():
     ]
     assert strategy.keyframe_args(context) == [
         "-force_key_frames:0",
-        "expr:gte(t,n_forced*6)",
+        "expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+6))",
+        "-flags:v:0",
+        "+cgop",
         "-g:v:0",
-        "180",
+        "144",
         "-keyint_min:v:0",
-        "180",
+        "144",
     ]
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        MediaProbe(),
+        MediaProbe(
+            avg_frame_rate=Fraction(6075, 271),
+            r_frame_rate=Fraction(15),
+        ),
+    ],
+)
+def test_fixed_gop_is_omitted_without_stable_frame_rate(metadata):
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel="nvenc"),
+        metadata=metadata,
+    )
+
+    args = get_hwaccel("nvenc").keyframe_args(context)
+
+    assert args == [
+        "-force_key_frames:0",
+        "expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+6))",
+        "-flags:v:0",
+        "+cgop",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("hwaccel", "option"),
+    [("nvenc", "forced-idr"), ("qsv", "forced_idr")],
+)
+def test_independent_hardware_segments_require_forced_idr(hwaccel, option):
+    context = TranscodeContext(
+        options=TranscodeOptions(hwaccel=hwaccel),
+        capabilities=_capabilities(encoder_options=()),
+    )
+
+    with pytest.raises(RuntimeError, match=rf"encoder options: {option}"):
+        get_hwaccel(hwaccel).encoder_args(context)
 
 
 def test_videotoolbox_sdr_normalization_uses_standard_scale_vt():
@@ -3809,19 +3955,23 @@ def test_videotoolbox_hdr_fallback_uses_software_tonemap():
 
 
 @pytest.mark.parametrize(
-    ("hwaccel", "missing"),
+    ("hwaccel", "available", "missing"),
     [
-        (None, {"-preset", "-crf", "-profile:v"}),
-        ("nvenc", {"-preset"}),
-        ("qsv", {"-preset", "-mbbrc", "-rc_init_occupancy"}),
-        ("vaapi", {"-rc_mode", "-qp"}),
-        ("videotoolbox", {"-prio_speed"}),
+        (None, (), {"-preset", "-crf", "-profile:v"}),
+        ("nvenc", ("forced-idr",), {"-preset"}),
+        (
+            "qsv",
+            ("forced_idr",),
+            {"-preset", "-mbbrc", "-rc_init_occupancy"},
+        ),
+        ("vaapi", (), {"-rc_mode", "-qp"}),
+        ("videotoolbox", (), {"-prio_speed"}),
     ],
 )
-def test_encoder_args_omit_unavailable_private_options(hwaccel, missing):
+def test_encoder_args_omit_unavailable_private_options(hwaccel, available, missing):
     context = TranscodeContext(
         options=TranscodeOptions(hwaccel=hwaccel),
-        capabilities=_capabilities(encoder_options=()),
+        capabilities=_capabilities(encoder_options=available),
     )
 
     args = get_hwaccel(hwaccel).encoder_args(context)
@@ -4281,17 +4431,20 @@ def test_hardware_preparation_failure_releases_lock(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("framerate", "expected_framerate"),
-    [(24.0, 24.0), (None, 30.0)],
+    ("avg_frame_rate", "expected_framerate"),
+    [(Fraction(24), Fraction(24)), (None, None)],
 )
-def test_ensure_builds_context(monkeypatch, tmp_path, framerate, expected_framerate):
+def test_ensure_builds_context(
+    monkeypatch, tmp_path, avg_frame_rate, expected_framerate
+):
     lock = object()
     proc = SimpleNamespace(pid=123, returncode=None, stderr=None)
     metadata = MediaProbe(
         video_stream_index=0,
         audio_stream_index=1,
         duration=60.0,
-        framerate=framerate,
+        avg_frame_rate=avg_frame_rate,
+        r_frame_rate=avg_frame_rate,
         pixel_format="yuv420p10le",
         bit_depth=10,
         height=1080,

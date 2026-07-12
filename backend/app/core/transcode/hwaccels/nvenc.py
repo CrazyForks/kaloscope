@@ -1,5 +1,3 @@
-import math
-
 from app.core.transcode.hwaccels.base import (
     HWAccelStrategy,
     TranscodeContext,
@@ -90,6 +88,7 @@ class NVENC(HWAccelStrategy):
         Returns:
             FFmpeg options for the selected quality preset and bitrate.
         """
+        context.require_encoder_option("forced-idr")
         options = context.options
         bitrate = options.bitrate
         nvenc_preset = (
@@ -108,23 +107,8 @@ class NVENC(HWAccelStrategy):
                 bitrate,
                 "-bufsize",
                 str(int(bitrate[:-1]) * 2) + "k",
+                "-forced-idr",
+                "1",
             ]
         )
         return args
-
-    def keyframe_args(self, context: TranscodeContext) -> list[str]:
-        """Build a fixed GOP approximating one HLS segment.
-
-        Args:
-            context: The runtime transcode context.
-
-        Returns:
-            FFmpeg options for fixed GOP and minimum keyframe intervals.
-        """
-        gop = math.ceil(context.source_framerate * context.options.segment_length)
-        return [
-            "-g:v:0",
-            str(gop),
-            "-keyint_min:v:0",
-            str(gop),
-        ]

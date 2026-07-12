@@ -3,6 +3,7 @@ from app.core.transcode.hwaccels.base import (
     TranscodeContext,
     hardware_rotation_direction,
     resolve_vaapi_device,
+    segment_keyframe_args,
     software_geometry_filters,
     software_tonemap_filters,
 )
@@ -198,7 +199,4 @@ class VAAPI(HWAccelStrategy):
         Returns:
             FFmpeg options that force keyframes at segment boundaries.
         """
-        return [
-            "-force_key_frames:0",
-            f"expr:gte(t,n_forced*{context.options.segment_length})",
-        ]
+        return segment_keyframe_args(context)
