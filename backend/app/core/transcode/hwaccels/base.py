@@ -184,14 +184,7 @@ def segment_keyframe_args(context: "TranscodeContext") -> list[str]:
 
 @dataclass
 class TranscodeContext:
-    """Runtime context used to build a transcode command.
-
-    Attributes:
-        options: The validated user-selected transcode options.
-        metadata: The selected source stream metadata.
-        capabilities: The discovered FFmpeg capability snapshot.
-        hardware: The source-specific hardware preparation result.
-    """
+    """State shared while building a transcode command."""
 
     options: TranscodeOptions
     metadata: MediaProbe = field(default_factory=MediaProbe)
@@ -200,13 +193,13 @@ class TranscodeContext:
 
     @property
     def source_framerate(self) -> Fraction | None:
-        """Return a positive average source frame rate when available."""
+        # positive average source frame rate when available
         value = self.metadata.avg_frame_rate
         return value if value is not None and value > 0 else None
 
     @property
     def has_stable_framerate(self) -> bool:
-        """Return whether average and base rates describe the same cadence."""
+        # whether average and base rates describe the same cadence
         average = self.source_framerate
         base = self.metadata.r_frame_rate
         if average is None or base is None or base <= 0:
@@ -215,7 +208,7 @@ class TranscodeContext:
 
     @property
     def fixed_gop_size(self) -> int | None:
-        """Return a segment-sized GOP only when the source cadence is stable."""
+        # segment-sized GOP when the source cadence is stable
         framerate = self.source_framerate
         if not self.has_stable_framerate or framerate is None:
             return None
@@ -223,32 +216,27 @@ class TranscodeContext:
 
     @property
     def source_pixel_format(self) -> str | None:
-        """Return the probed source pixel format."""
         return self.metadata.pixel_format
 
     @property
     def source_height(self) -> int | None:
-        """Return the encoded source height in pixels."""
         return self.metadata.height
 
     @property
     def source_width(self) -> int | None:
-        """Return the encoded source width in pixels."""
         return self.metadata.width
 
     @property
     def source_sar(self) -> tuple[int, int]:
-        """Return the source sample aspect ratio with a square-pixel default."""
         return self.metadata.sample_aspect_ratio or (1, 1)
 
     @property
     def rotation(self) -> int:
-        """Return the normalized clockwise source rotation in degrees."""
         return self.metadata.rotation or 0
 
     @property
     def display_width(self) -> Fraction | None:
-        """Return the displayed width after sample aspect ratio and rotation."""
+        # displayed width after sample aspect ratio and rotation
         width = self.source_width
         height = self.source_height
         if width is None or height is None:
@@ -262,7 +250,7 @@ class TranscodeContext:
 
     @property
     def display_height(self) -> Fraction | None:
-        """Return the displayed height after sample aspect ratio and rotation."""
+        # displayed height after sample aspect ratio and rotation
         width = self.source_width
         height = self.source_height
         if width is None or height is None:
@@ -274,7 +262,7 @@ class TranscodeContext:
 
     @property
     def needs_downscale(self) -> bool:
-        """Return whether displayed height exceeds the requested limit."""
+        # whether displayed height exceeds the requested limit
         max_height = self.options.max_height
         if max_height is None:
             return False
@@ -283,27 +271,23 @@ class TranscodeContext:
 
     @property
     def needs_square_pixels(self) -> bool:
-        """Return whether output must be converted to square pixels."""
         return self.source_sar != (1, 1)
 
     @property
     def needs_scale(self) -> bool:
-        """Return whether resolution or sample aspect ratio requires scaling."""
         return self.needs_downscale or self.needs_square_pixels
 
     @property
     def needs_rotation(self) -> bool:
-        """Return whether source display rotation requires a transform."""
         return self.rotation in {90, 180, 270}
 
     @property
     def is_interlaced(self) -> bool:
-        """Return whether source metadata identifies interlaced fields."""
         return self.metadata.field_order in {"tt", "tb", "bb", "bt"}
 
     @property
     def field_parity(self) -> str | None:
-        """Return the FFmpeg deinterlace parity for the source field order."""
+        # ffmpeg deinterlace parity for the source field order
         if self.metadata.field_order in {"tt", "tb"}:
             return "tff"
         if self.metadata.field_order in {"bb", "bt"}:
@@ -312,7 +296,7 @@ class TranscodeContext:
 
     @property
     def scale_height(self) -> str | None:
-        """Return an even output height expression or fixed pixel value."""
+        # even output height expression or fixed pixel value
         max_height = self.options.max_height
         if not self.needs_scale:
             return None
@@ -330,7 +314,7 @@ class TranscodeContext:
 
     @property
     def scale_width(self) -> str | None:
-        """Return a 16-pixel-aligned output width expression or value."""
+        # output width expression or value aligned to 16 pixels
         height = self.scale_height
         if height is None:
             return None
@@ -345,12 +329,10 @@ class TranscodeContext:
 
     @property
     def hdr_type(self) -> HDRType:
-        """Return the classified source HDR subtype."""
         return classify_hdr(self.metadata)
 
     @property
     def is_hdr10(self) -> bool:
-        """Return whether the source carries a PQ-compatible HDR base layer."""
         return self.hdr_type in {
             HDRType.HDR10,
             HDRType.HDR10_PLUS,
@@ -359,12 +341,11 @@ class TranscodeContext:
 
     @property
     def is_hlg(self) -> bool:
-        """Return whether the source uses Hybrid Log-Gamma transfer."""
         return self.hdr_type is HDRType.HLG
 
     @property
     def needs_tonemap(self) -> bool:
-        """Return whether the source must be converted from HDR to SDR."""
+        # whether the source must be converted from HDR to SDR
         return self.hdr_type in {
             HDRType.HDR10,
             HDRType.HLG,
@@ -374,7 +355,6 @@ class TranscodeContext:
 
     @property
     def encoder_config(self) -> EncoderConfig:
-        """Return the encoder configuration selected by transcode options."""
         return self.options.encoder_config
 
     def supports_filter(self, name: str) -> bool:
@@ -382,11 +362,11 @@ class TranscodeContext:
         return self.capabilities is None or self.capabilities.supports_filter(name)
 
     def supports_hwaccel(self, name: str) -> bool:
-        """Return whether a hardware decoder is available."""
+        """Return whether hardware decoding is available or unprobed."""
         return self.capabilities is None or self.capabilities.supports_hwaccel(name)
 
     def supports_encoder_option(self, name: str) -> bool:
-        """Return whether the selected encoder advertises a private option."""
+        """Return whether an encoder option is available or unprobed."""
         return self.capabilities is None or self.capabilities.supports_encoder_option(
             name
         )
@@ -401,7 +381,7 @@ class TranscodeContext:
 
     @property
     def uses_hw_decode(self) -> bool:
-        """Return whether the selected strategy can request hardware decoding."""
+        # whether the selected strategy can request hardware decoding
         if self.hardware is not None:
             return self.hardware.can_decode
         hwaccel = self.encoder_config.hwaccel
@@ -409,12 +389,12 @@ class TranscodeContext:
 
     @property
     def uses_hw_filters(self) -> bool:
-        """Return whether source-specific hardware transforms passed probing."""
+        # whether source-specific hardware transforms passed probing
         return self.hardware is not None and self.hardware.can_filter
 
     @property
     def needs_cpu_geometry(self) -> bool:
-        """Return whether geometry transforms must run in system memory."""
+        # whether geometry transforms must run in system memory
         return self.needs_scale or (
             (self.needs_rotation or self.is_interlaced) and not self.uses_hw_filters
         )
