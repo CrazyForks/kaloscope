@@ -20,14 +20,11 @@ class QSV(HWAccelStrategy):
             )
         return device
 
-    def encoder_probe_args(
-        self, context: TranscodeContext, device: str | None
-    ) -> list[str]:
+    def encoder_probe_args(self, context: TranscodeContext) -> list[str]:
         """Build a synthetic VAAPI-backed QSV upload and encode probe."""
-        assert device is not None
         return [
             "-init_hw_device",
-            f"qsv=qs:hw,child_device={device},child_device_type=vaapi",
+            f"qsv=qs:hw,child_device={context.device},child_device_type=vaapi",
             "-filter_hw_device",
             "qs",
             "-f",
@@ -109,11 +106,7 @@ class QSV(HWAccelStrategy):
         Raises:
             RuntimeError: If no usable DRM render device is available.
         """
-        qsv_dev = (
-            context.hardware.device
-            if context.hardware is not None
-            else await self.resolve_device(context)
-        )
+        qsv_dev = context.device or await self.resolve_device(context)
         assert qsv_dev is not None
         cmd = [
             "-init_hw_device",

@@ -21,14 +21,11 @@ class VAAPI(HWAccelStrategy):
             )
         return device
 
-    def encoder_probe_args(
-        self, context: TranscodeContext, device: str | None
-    ) -> list[str]:
+    def encoder_probe_args(self, context: TranscodeContext) -> list[str]:
         """Build a synthetic VAAPI upload and encode probe."""
-        assert device is not None
         return [
             "-vaapi_device",
-            device,
+            context.device,
             "-f",
             "lavfi",
             "-i",
@@ -110,11 +107,7 @@ class VAAPI(HWAccelStrategy):
         Raises:
             RuntimeError: If no usable DRM render device is available.
         """
-        vaapi_dev = (
-            context.hardware.device
-            if context.hardware is not None
-            else await self.resolve_device(context)
-        )
+        vaapi_dev = context.device or await self.resolve_device(context)
         assert vaapi_dev is not None
         cmd = await super().input_args(context)
         cmd.extend(["-vaapi_device", vaapi_dev])

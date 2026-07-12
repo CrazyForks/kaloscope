@@ -357,6 +357,10 @@ class TranscodeContext:
     def encoder_config(self) -> EncoderConfig:
         return self.options.encoder_config
 
+    @property
+    def device(self) -> str | None:
+        return self.hardware.device if self.hardware is not None else None
+
     def supports_filter(self, name: str) -> bool:
         """Return whether a filter is available or capabilities are unprobed."""
         return self.capabilities is None or self.capabilities.supports_filter(name)
@@ -500,9 +504,7 @@ class HWAccelStrategy(ABC):
         """Resolve the device used by this hardware strategy."""
         return None
 
-    def encoder_probe_args(
-        self, context: TranscodeContext, device: str | None
-    ) -> list[str]:
+    def encoder_probe_args(self, context: TranscodeContext) -> list[str]:
         """Build a one-frame hardware encoder health probe."""
         return [
             "-f",
@@ -568,13 +570,17 @@ class HWAccelStrategy(ABC):
             )
 
         device = await self.resolve_device(context)
+        encoder_context = replace(
+            context,
+            hardware=HardwareRuntime(device, False),
+        )
         # encoder probing fails early before source-specific decode decisions
         await require_hardware_encoder(
             capabilities.executable,
             strategy,
             encoder,
             device,
-            self.encoder_probe_args(context, device),
+            self.encoder_probe_args(encoder_context),
         )
 
         hwaccel = context.encoder_config.hwaccel
