@@ -45,30 +45,36 @@ class MediaProbe:
 
 def classify_hdr(metadata: MediaProbe) -> HDRType:
     """Classify HDR metadata without guessing from incomplete HDR signals."""
-    if metadata.dovi_profile is not None:
-        if (
-            metadata.dovi_bl_present is True
-            and metadata.dovi_bl_signal_compatibility_id == 1
-        ):
-            return HDRType.DOVI_COMPATIBLE
-        return HDRType.DOVI_ONLY
-
     transfer = (metadata.color_transfer or "").lower()
     is_pq = transfer == "smpte2084"
     is_hlg = transfer == "arib-std-b67"
-    has_hdr_signal = is_pq or is_hlg or metadata.hdr10_plus
-    if not has_hdr_signal:
-        return HDRType.SDR
-
     primaries = (metadata.color_primaries or "").lower()
     color_space = (metadata.color_space or "").lower()
-    is_valid_hdr = (
+    has_valid_hdr_color = (
         metadata.bit_depth is not None
         and metadata.bit_depth >= 10
         and primaries == "bt2020"
         and color_space in {"bt2020nc", "bt2020_ncl", "bt2020c", "bt2020_cl"}
     )
-    if not is_valid_hdr:
+
+    if metadata.dovi_profile is not None:
+        has_compatible_base_layer = metadata.dovi_bl_present is True and (
+            metadata.dovi_bl_signal_compatibility_id == 1
+            or (
+                metadata.dovi_bl_signal_compatibility_id == 6
+                and is_pq
+                and has_valid_hdr_color
+            )
+        )
+        if has_compatible_base_layer:
+            return HDRType.DOVI_COMPATIBLE
+        return HDRType.DOVI_ONLY
+
+    has_hdr_signal = is_pq or is_hlg or metadata.hdr10_plus
+    if not has_hdr_signal:
+        return HDRType.SDR
+
+    if not has_valid_hdr_color:
         return HDRType.UNKNOWN
     if is_pq:
         return HDRType.HDR10_PLUS if metadata.hdr10_plus else HDRType.HDR10

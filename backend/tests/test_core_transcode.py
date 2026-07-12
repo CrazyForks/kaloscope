@@ -695,6 +695,99 @@ def test_transcode_context():
         ),
         (
             MediaProbe(
+                bit_depth=10,
+                color_transfer="smpte2084",
+                color_primaries="bt2020",
+                color_space="bt2020nc",
+                dovi_profile=7,
+                dovi_bl_present=True,
+                dovi_bl_signal_compatibility_id=6,
+            ),
+            HDRType.DOVI_COMPATIBLE,
+        ),
+        (
+            MediaProbe(
+                bit_depth=10,
+                color_transfer="smpte2084",
+                color_primaries="bt2020",
+                color_space="bt2020nc",
+                dovi_profile=8,
+                dovi_bl_present=True,
+                dovi_bl_signal_compatibility_id=6,
+            ),
+            HDRType.DOVI_COMPATIBLE,
+        ),
+        (
+            MediaProbe(
+                bit_depth=8,
+                color_transfer="smpte2084",
+                color_primaries="bt2020",
+                color_space="bt2020nc",
+                dovi_profile=7,
+                dovi_bl_present=True,
+                dovi_bl_signal_compatibility_id=6,
+            ),
+            HDRType.DOVI_ONLY,
+        ),
+        (
+            MediaProbe(
+                bit_depth=10,
+                color_transfer="bt709",
+                color_primaries="bt2020",
+                color_space="bt2020nc",
+                dovi_profile=7,
+                dovi_bl_present=True,
+                dovi_bl_signal_compatibility_id=6,
+            ),
+            HDRType.DOVI_ONLY,
+        ),
+        (
+            MediaProbe(
+                bit_depth=10,
+                color_transfer="smpte2084",
+                color_primaries="bt709",
+                color_space="bt2020nc",
+                dovi_profile=7,
+                dovi_bl_present=True,
+                dovi_bl_signal_compatibility_id=6,
+            ),
+            HDRType.DOVI_ONLY,
+        ),
+        (
+            MediaProbe(
+                bit_depth=10,
+                color_transfer="smpte2084",
+                color_primaries="bt2020",
+                color_space="bt709",
+                dovi_profile=7,
+                dovi_bl_present=True,
+                dovi_bl_signal_compatibility_id=6,
+            ),
+            HDRType.DOVI_ONLY,
+        ),
+        (
+            MediaProbe(
+                bit_depth=10,
+                color_transfer="smpte2084",
+                color_primaries="bt2020",
+                color_space="bt2020nc",
+                dovi_profile=7,
+                dovi_bl_present=False,
+                dovi_bl_signal_compatibility_id=6,
+            ),
+            HDRType.DOVI_ONLY,
+        ),
+        (
+            MediaProbe(
+                bit_depth=10,
+                dovi_profile=4,
+                dovi_bl_present=True,
+                dovi_bl_signal_compatibility_id=2,
+            ),
+            HDRType.DOVI_ONLY,
+        ),
+        (
+            MediaProbe(
                 dovi_profile=5,
                 dovi_bl_present=True,
                 dovi_bl_signal_compatibility_id=0,
@@ -718,6 +811,43 @@ def test_transcode_context():
 )
 def test_classify_hdr(metadata, expected):
     assert classify_hdr(metadata) is expected
+
+
+@pytest.mark.parametrize("profile", [7, 8])
+def test_supported_hdr_guard_accepts_id6_hdr10_base(profile):
+    metadata = MediaProbe(
+        bit_depth=10,
+        color_transfer="smpte2084",
+        color_primaries="bt2020",
+        color_space="bt2020nc",
+        dovi_profile=profile,
+        dovi_bl_present=True,
+        dovi_bl_signal_compatibility_id=6,
+    )
+
+    transcoder._require_supported_hdr(metadata)
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        MediaProbe(
+            bit_depth=10,
+            dovi_profile=4,
+            dovi_bl_present=True,
+            dovi_bl_signal_compatibility_id=2,
+        ),
+        MediaProbe(
+            bit_depth=10,
+            dovi_profile=5,
+            dovi_bl_present=True,
+            dovi_bl_signal_compatibility_id=0,
+        ),
+    ],
+)
+def test_supported_hdr_guard_rejects_dovi_without_hdr10_base(metadata):
+    with pytest.raises(RuntimeError, match="Dolby Vision-only"):
+        transcoder._require_supported_hdr(metadata)
 
 
 @pytest.mark.parametrize(
