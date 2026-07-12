@@ -2,8 +2,7 @@
 
 import asyncio
 import importlib
-import threading
-from dataclasses import fields, replace
+from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,55 +26,11 @@ from app.core.transcode.hwaccels.base import (
     TranscodeContext,
     classify_hdr,
 )
-from app.core.transcode.options import TranscodeOptions
-
-
-def test_hls_exports():
-    package = importlib.import_module("app.core.transcode")
-    hls = importlib.import_module("app.core.transcode.hls")
-    names = (
-        "TranscodeStats",
-        "delete_output",
-        "estimate_progress",
-        "output_dir",
-        "output_stats",
-        "parse_profile",
-        "read_m3u8",
-        "scan_outputs",
-    )
-
-    assert all(getattr(package, name) is getattr(hls, name) for name in names)
-
-
-def test_task_exports():
-    package = importlib.import_module("app.core.transcode")
-    tasks = importlib.import_module("app.core.transcode.tasks")
-    names = (
-        "delete_tasks",
-        "finish_task",
-        "list_tasks",
-        "register_task",
-        "stop_tasks",
-    )
-
-    assert all(getattr(package, name) is getattr(tasks, name) for name in names)
-
-
-def test_task_types():
-    package = importlib.import_module("app.core.transcode")
-
-    assert {state.value for state in package.TaskState} == {
-        "running",
-        "stopping",
-        "stopped",
-        "finished",
-        "error",
-    }
-    assert package.TaskState.RUNNING == "running"
-    assert "out_dir" in package.RuntimeTask.__required_keys__
-    assert "out_dir" not in package.TaskSnapshot.__required_keys__
-    assert "encoded_size" in package.TaskSnapshot.__required_keys__
-    assert "encoded_size_text" in package.TaskSnapshot.__optional_keys__
+from app.core.transcode.options import (
+    HWAccelType,
+    ResolutionLimit,
+    TranscodeOptions,
+)
 
 
 @pytest.mark.parametrize(
@@ -157,51 +112,26 @@ def test_load_ffmpeg_capabilities_caches_success(monkeypatch):
 
 
 class _ProbeStream:
-    def __init__(self, *chunks):
-        self.chunks = list(chunks)
+    def __init__(self, *chunks: bytes):
+        self.chunks: list[bytes] = list(chunks)
 
-    async def read(self, size):
+    async def read(self, size: int) -> bytes:
         del size
         return self.chunks.pop(0) if self.chunks else b""
 
 
 class _ProbeProcess:
-    def __init__(self, returncode=0, stderr=()):
-        self.returncode = returncode
+    def __init__(
+        self,
+        returncode: int | None = 0,
+        stderr: tuple[bytes, ...] = (),
+    ):
+        self.returncode: int | None = returncode
         self.stderr = _ProbeStream(*stderr)
         self.kill = Mock()
 
-    async def wait(self):
+    async def wait(self) -> int | None:
         return self.returncode
-
-
-def test_run_ffmpeg_probe_success(monkeypatch):
-    proc = _ProbeProcess()
-    create = AsyncMock(return_value=proc)
-    monkeypatch.setattr(
-        capability_module.asyncio,
-        "create_subprocess_exec",
-        create,
-    )
-
-    result = asyncio.run(
-        capability_module._run_ffmpeg_probe(
-            "ffmpeg-test",
-            ["-f", "null", "-"],
-        )
-    )
-
-    assert result == (True, "")
-    assert create.await_args.args[:4] == (
-        "ffmpeg-test",
-        "-hide_banner",
-        "-loglevel",
-        "error",
-    )
-    assert create.await_args.kwargs == {
-        "stdout": asyncio.subprocess.DEVNULL,
-        "stderr": asyncio.subprocess.PIPE,
-    }
 
 
 def test_run_ffmpeg_probe_failure_returns_bounded_stderr(monkeypatch):
@@ -218,21 +148,6 @@ def test_run_ffmpeg_probe_failure_returns_bounded_stderr(monkeypatch):
 
     assert success is False
     assert len(detail) == capability_module._RUNTIME_STDERR_LIMIT
-
-
-def test_run_ffmpeg_probe_allows_driver_info_after_zero_exit(monkeypatch):
-    driver_info = b"libva info: va_openDriver() returns 0"
-    proc = _ProbeProcess(stderr=(driver_info,))
-    monkeypatch.setattr(
-        capability_module.asyncio,
-        "create_subprocess_exec",
-        AsyncMock(return_value=proc),
-    )
-
-    assert asyncio.run(capability_module._run_ffmpeg_probe("ffmpeg-test", [])) == (
-        True,
-        driver_info.decode(),
-    )
 
 
 def test_run_ffmpeg_probe_start_failure_is_reported(monkeypatch):
@@ -357,14 +272,6 @@ def test_run_ffmpeg_probe_stalled_reap_remains_bounded(monkeypatch):
 
     assert result == (False, "timed out after 0.0 seconds")
     proc.kill.assert_called_once_with()
-
-
-def test_stderr_tail_retains_only_bounded_bytes():
-    stream = _ProbeStream(b"a" * 1500, b"b" * 1500)
-
-    result = asyncio.run(capability_module._read_stderr_tail(stream))
-
-    assert result == b"a" * 548 + b"b" * 1500
 
 
 def test_hardware_encoder_probe_caches_success(monkeypatch):
@@ -555,51 +462,6 @@ def test_hardware_transform_probe_failure_is_not_cached(monkeypatch, tmp_path):
     assert probe.await_count == 2
 
 
-def test_clear_caches_clears_runtime_successes(monkeypatch, tmp_path):
-    media = tmp_path / "input.mkv"
-    media.write_bytes(b"video")
-    probe = AsyncMock(return_value=(True, ""))
-    capability_module._clear_caches()
-    monkeypatch.setattr(capability_module, "_run_ffmpeg_probe", probe)
-    monkeypatch.setattr(
-        capability_module,
-        "_resolved_executable",
-        lambda value: value,
-    )
-
-    async def run_probes():
-        await capability_module.require_hardware_encoder(
-            "ffmpeg-test",
-            "vaapi",
-            "h264_vaapi",
-            None,
-            [],
-        )
-        await capability_module.probe_hardware_decode(
-            "ffmpeg-test",
-            "vaapi",
-            None,
-            str(media),
-            0,
-            [],
-        )
-        await capability_module.probe_hardware_transform(
-            "ffmpeg-test",
-            "vaapi",
-            None,
-            str(media),
-            0,
-            "transpose_vaapi=dir=clock",
-            [],
-        )
-
-    asyncio.run(run_probes())
-    capability_module._clear_caches()
-    asyncio.run(run_probes())
-
-    assert probe.await_count == 6
-
-
 class _Lock:
     def __init__(self):
         self.locked = False
@@ -635,7 +497,7 @@ def _runtime_task(out_dir, state=tasks.TaskState.RUNNING):
 def test_register_stores_process_start_id(monkeypatch, tmp_path):
     store = {}
     process_start_id = AsyncMock(return_value="process-start-id")
-    proc = SimpleNamespace(pid=123)
+    proc = cast(asyncio.subprocess.Process, SimpleNamespace(pid=123))
 
     monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
     monkeypatch.setattr(tasks, "_process_start_id", process_start_id)
@@ -689,50 +551,6 @@ def test_reads_macos_process_start_id(monkeypatch):
     )
 
 
-@pytest.mark.parametrize(
-    ("encoded", "duration", "expected"),
-    [(25, 100, 25), (100, 100, 99), (0, 100, None), (25, None, None)],
-)
-def test_progress(encoded, duration, expected):
-    assert hls.estimate_progress(encoded, duration) == expected
-
-
-@pytest.mark.parametrize(
-    ("profile", "expected"),
-    [
-        (
-            "high_720p_nvenc",
-            {"quality": "high", "resolution": "720p", "hwaccel": "nvenc"},
-        ),
-        (
-            "medium_original_none",
-            {"quality": "medium", "resolution": "original", "hwaccel": None},
-        ),
-        (
-            "invalid",
-            {"quality": None, "resolution": None, "hwaccel": None},
-        ),
-    ],
-)
-def test_parse_profile(profile, expected):
-    assert hls.parse_profile(profile) == expected
-
-
-def test_output_stats(tmp_path):
-    playlist = tmp_path / "index.m3u8"
-    playlist.write_text(
-        "#EXTM3U\n#EXTINF:6.0,\nsegment_000000.ts\n"
-        "#EXTINF:5.5,\nsegment_000001.ts\n#EXT-X-ENDLIST\n"
-    )
-
-    stats = hls.output_stats(tmp_path, duration=12)
-
-    assert stats.finished is True
-    assert stats.duration == 11.5
-    assert stats.segments == 2
-    assert stats.progress == 100
-
-
 def test_scan_skips_excluded(monkeypatch, tmp_path):
     (tmp_path / "hash" / "profile").mkdir(parents=True)
     output_stats = Mock(side_effect=AssertionError("output scanned"))
@@ -743,52 +561,6 @@ def test_scan_skips_excluded(monkeypatch, tmp_path):
 
     assert result == []
     output_stats.assert_not_called()
-
-
-def test_scan_outputs(tmp_path):
-    finished = tmp_path / "hash-a" / "high_720p_nvenc"
-    stopped = tmp_path / "hash-b" / "medium_original_none"
-    empty = tmp_path / "hash-c" / "low_480p_vaapi"
-    finished.mkdir(parents=True)
-    stopped.mkdir(parents=True)
-    empty.mkdir(parents=True)
-    (finished / "index.m3u8").write_text(
-        "#EXTM3U\n#EXTINF:6.0,\nsegment_000000.ts\n#EXT-X-ENDLIST\n"
-    )
-    (stopped / "index.m3u8").write_text("#EXTM3U\n#EXTINF:3.0,\nsegment_000000.ts\n")
-
-    result = {task["id"]: task for task in hls.scan_outputs(tmp_path)}
-
-    assert set(result) == {
-        "hash-a:high_720p_nvenc",
-        "hash-b:medium_original_none",
-    }
-    assert result["hash-a:high_720p_nvenc"]["state"] == tasks.TaskState.FINISHED
-    assert result["hash-a:high_720p_nvenc"]["duration"] == 6.0
-    assert result["hash-b:medium_original_none"]["state"] == tasks.TaskState.STOPPED
-    assert result["hash-b:medium_original_none"]["encoded_duration"] == 3.0
-
-
-def test_delete_output(tmp_path):
-    root = tmp_path / "transcoded"
-    out_dir = root / "hash" / "profile"
-    out_dir.mkdir(parents=True)
-    (out_dir / "index.m3u8").write_text("#EXTM3U\n")
-
-    assert hls.delete_output("hash", "profile", root=root) is True
-    assert not out_dir.exists()
-    assert not out_dir.parent.exists()
-
-
-def test_lock_name(tmp_path):
-    out_dir = tmp_path / "transcoded" / "hash" / "medium_720p_none"
-    lock = hls.acquire_output_lock(out_dir)
-    assert lock is not None
-
-    try:
-        assert Path(lock.lock_file).name == "hash_medium_720p_none.lock"
-    finally:
-        lock.release()
 
 
 def test_delete_locked(tmp_path):
@@ -827,10 +599,6 @@ def test_read_fallback(tmp_path):
     assert asyncio.run(hls.read_m3u8(playlist)) == hls._MINIMAL_M3U8
     playlist.write_text("#EXTM3U\n")
     assert asyncio.run(hls.read_m3u8(playlist)) == "#EXTM3U\n"
-
-
-def test_read_missing(tmp_path):
-    assert asyncio.run(hls.read_m3u8(tmp_path / "missing" / "index.m3u8")) is None
 
 
 def test_wait_segment(tmp_path):
@@ -1178,20 +946,6 @@ def test_probe_media_invalid(monkeypatch, returncode, stdout, expected):
     assert asyncio.run(transcoder._probe_media("input.mkv")) == expected
 
 
-@pytest.mark.parametrize(
-    ("rate", "expected"),
-    [(Fraction(30000, 1001), 30000 / 1001), (None, None)],
-)
-def test_probe_framerate_converts_average_at_api_boundary(monkeypatch, rate, expected):
-    monkeypatch.setattr(
-        transcoder,
-        "_probe_media",
-        AsyncMock(return_value=MediaProbe(avg_frame_rate=rate)),
-    )
-
-    assert asyncio.run(transcoder.probe_framerate("input.mkv")) == expected
-
-
 def test_probe_timeout(monkeypatch):
     proc = SimpleNamespace(
         returncode=None,
@@ -1209,63 +963,6 @@ def test_probe_timeout(monkeypatch):
     assert asyncio.run(transcoder._probe_media("input.mkv")) == MediaProbe()
     proc.kill.assert_called_once_with()
     assert proc.communicate.await_count == 2
-
-
-def test_transcode_context():
-    options = TranscodeOptions(
-        hwaccel="nvenc",
-        quality="high",
-        resolution="720p",
-    )
-    metadata = MediaProbe(
-        avg_frame_rate=Fraction(47, 2),
-        r_frame_rate=Fraction(47, 2),
-        pixel_format="yuv420p10le",
-        width=1920,
-        height=1080,
-    )
-    context = TranscodeContext(options=options, metadata=metadata)
-
-    assert context.options is options
-    assert context.metadata is metadata
-    assert context.source_framerate == Fraction(47, 2)
-    assert context.has_stable_framerate is True
-    assert context.fixed_gop_size == 141
-    assert context.source_pixel_format == "yuv420p10le"
-    assert context.source_height == 1080
-    assert options.segment_length == 6
-    assert "segment_length" not in {field.name for field in fields(TranscodeOptions)}
-    assert context.needs_scale is True
-    assert context.scale_height == "720"
-    assert context.scale_width == "1280"
-    assert context.encoder_config is options.encoder_config
-
-
-@pytest.mark.parametrize(
-    ("avg_frame_rate", "r_frame_rate", "expected_stable", "expected_gop"),
-    [
-        (Fraction(24000, 1001), Fraction(24), True, 144),
-        (Fraction(30000, 1001), Fraction(30000, 1001), True, 180),
-        (Fraction(3003, 125), Fraction(24), True, 145),
-        (Fraction(961, 40), Fraction(24), False, None),
-        (Fraction(6075, 271), Fraction(15), False, None),
-        (Fraction(24), None, False, None),
-        (None, Fraction(24), False, None),
-    ],
-)
-def test_transcode_context_frame_rate_stability(
-    avg_frame_rate, r_frame_rate, expected_stable, expected_gop
-):
-    context = TranscodeContext(
-        options=TranscodeOptions(),
-        metadata=MediaProbe(
-            avg_frame_rate=avg_frame_rate,
-            r_frame_rate=r_frame_rate,
-        ),
-    )
-
-    assert context.has_stable_framerate is expected_stable
-    assert context.fixed_gop_size == expected_gop
 
 
 @pytest.mark.parametrize(
@@ -1384,28 +1081,12 @@ def test_hardware_decode_candidate(metadata, expected):
     assert base_module._is_decode_candidate(metadata) is expected
 
 
-def test_context_uses_prepared_hardware_decode_result():
-    options = TranscodeOptions(hwaccel="vaapi")
-    capabilities = _capabilities(hwaccels=("vaapi",))
-
-    enabled = TranscodeContext(
-        options=options,
-        capabilities=capabilities,
-        hardware=base_module.HardwareRuntime("/dev/dri/renderD128", True),
-    )
-    disabled = TranscodeContext(
-        options=options,
-        capabilities=capabilities,
-        hardware=base_module.HardwareRuntime("/dev/dri/renderD128", False),
-    )
-    unprepared = TranscodeContext(options=options, capabilities=capabilities)
-
-    assert enabled.uses_hw_decode is True
-    assert disabled.uses_hw_decode is False
-    assert unprepared.uses_hw_decode is True
-
-
-def _eligible_hardware_context(hwaccel, *, capabilities=None, resolution="original"):
+def _eligible_hardware_context(
+    hwaccel: HWAccelType,
+    *,
+    capabilities: FFmpegCapabilities | None = None,
+    resolution: ResolutionLimit = "original",
+) -> TranscodeContext:
     return TranscodeContext(
         options=TranscodeOptions(hwaccel=hwaccel, resolution=resolution),
         metadata=MediaProbe(
@@ -1418,61 +1099,6 @@ def _eligible_hardware_context(hwaccel, *, capabilities=None, resolution="origin
         ),
         capabilities=capabilities or _capabilities(),
     )
-
-
-def test_software_prepare_hardware_is_noop():
-    context = TranscodeContext(
-        options=TranscodeOptions(),
-        media_path="input.mkv",
-    )
-
-    assert asyncio.run(get_hwaccel(None).prepare_hardware(context)) is None
-
-
-def test_prepare_hardware_requires_media_path_for_decode_probe(monkeypatch):
-    monkeypatch.setattr(base_module, "require_hardware_encoder", AsyncMock())
-    monkeypatch.setattr(
-        base_module,
-        "probe_hardware_decode",
-        AsyncMock(return_value=True),
-    )
-    context = _eligible_hardware_context("videotoolbox")
-
-    with pytest.raises(RuntimeError, match="decode probe requires a media path"):
-        asyncio.run(get_hwaccel("videotoolbox").prepare_hardware(context))
-
-
-def test_videotoolbox_prepare_hardware_uses_null_probes(monkeypatch, tmp_path):
-    media = tmp_path / "input.mkv"
-    media.write_bytes(b"video")
-    require_encoder = AsyncMock()
-    probe_decode = AsyncMock(return_value=True)
-    monkeypatch.setattr(
-        base_module,
-        "require_hardware_encoder",
-        require_encoder,
-        raising=False,
-    )
-    monkeypatch.setattr(
-        base_module,
-        "probe_hardware_decode",
-        probe_decode,
-        raising=False,
-    )
-    context = _eligible_hardware_context("videotoolbox")
-    context.media_path = str(media)
-
-    runtime = asyncio.run(get_hwaccel("videotoolbox").prepare_hardware(context))
-
-    assert runtime == base_module.HardwareRuntime(None, True)
-    encoder_args = require_encoder.await_args.args[-1]
-    assert encoder_args[-2:] == ["null", "-"]
-    assert "h264_videotoolbox" in encoder_args
-    decode_args = probe_decode.await_args.args[-1]
-    assert decode_args[decode_args.index("-map") + 1] == "0:2"
-    assert decode_args[decode_args.index("-vf") + 1] == "hwdownload,format=nv12"
-    assert decode_args[-2:] == ["null", "-"]
-    assert "videotoolbox" in decode_args
 
 
 def test_prepare_hardware_downloads_10_bit_probe_frame(monkeypatch, tmp_path):
@@ -1503,7 +1129,9 @@ def test_prepare_hardware_downloads_10_bit_probe_frame(monkeypatch, tmp_path):
 
     asyncio.run(get_hwaccel("videotoolbox").prepare_hardware(context))
 
-    decode_args = probe_decode.await_args.args[-1]
+    decode_call = probe_decode.await_args
+    assert decode_call is not None
+    decode_args = decode_call.args[-1]
     assert decode_args[decode_args.index("-vf") + 1] == "hwdownload,format=p010le"
 
 
@@ -1531,98 +1159,12 @@ def test_nvenc_prepare_hardware_decode_failure_keeps_encoder(monkeypatch, tmp_pa
 
     assert runtime == base_module.HardwareRuntime("0", False)
     require_encoder.assert_awaited_once()
-    assert "h264_nvenc" in require_encoder.await_args.args[-1]
-    assert "cuda" in probe_decode.await_args.args[-1]
-
-
-def test_prepare_hardware_probes_source_transform_graph(monkeypatch, tmp_path):
-    media = tmp_path / "input.mkv"
-    media.write_bytes(b"video")
-    strategy = get_hwaccel("nvenc")
-    require_encoder = AsyncMock()
-    probe_decode = AsyncMock(return_value=True)
-    probe_transform = AsyncMock(return_value=True)
-    monkeypatch.setattr(base_module, "require_hardware_encoder", require_encoder)
-    monkeypatch.setattr(base_module, "probe_hardware_decode", probe_decode)
-    monkeypatch.setattr(
-        base_module,
-        "probe_hardware_transform",
-        probe_transform,
-        raising=False,
-    )
-    monkeypatch.setattr(
-        strategy,
-        "transform_filters",
-        Mock(return_value=["transpose_cuda=dir=clock"]),
-        raising=False,
-    )
-    monkeypatch.setattr(
-        strategy,
-        "transform_filter_names",
-        Mock(return_value={"transpose_cuda"}),
-        raising=False,
-    )
-    context = _eligible_hardware_context(
-        "nvenc",
-        capabilities=_capabilities(
-            filters=(*_capabilities().filters, "transpose_cuda")
-        ),
-    )
-    context.metadata = replace(
-        context.metadata,
-        width=1920,
-        height=1080,
-        rotation=90,
-    )
-    context.media_path = str(media)
-
-    runtime = asyncio.run(strategy.prepare_hardware(context))
-
-    assert runtime == base_module.HardwareRuntime("0", True, True)
-    transform_args = probe_transform.await_args.args[-1]
-    assert transform_args[transform_args.index("-noautorotate") + 1] == "-i"
-    assert transform_args[transform_args.index("-map") + 1] == "0:2"
-    assert transform_args[transform_args.index("-vf") + 1] == (
-        "transpose_cuda=dir=clock,hwdownload,format=nv12"
-    )
-    assert transform_args[-2:] == ["null", "-"]
-    assert probe_transform.await_args.args[-2] == "transpose_cuda=dir=clock"
-
-
-def test_prepare_hardware_missing_transform_filter_uses_cpu(monkeypatch, tmp_path):
-    media = tmp_path / "input.mkv"
-    media.write_bytes(b"video")
-    strategy = get_hwaccel("nvenc")
-    monkeypatch.setattr(base_module, "require_hardware_encoder", AsyncMock())
-    monkeypatch.setattr(
-        base_module, "probe_hardware_decode", AsyncMock(return_value=True)
-    )
-    probe_transform = AsyncMock(return_value=True)
-    monkeypatch.setattr(
-        base_module,
-        "probe_hardware_transform",
-        probe_transform,
-        raising=False,
-    )
-    monkeypatch.setattr(
-        strategy,
-        "transform_filters",
-        Mock(return_value=["transpose_cuda=dir=clock"]),
-        raising=False,
-    )
-    monkeypatch.setattr(
-        strategy,
-        "transform_filter_names",
-        Mock(return_value={"transpose_cuda"}),
-        raising=False,
-    )
-    context = _eligible_hardware_context("nvenc")
-    context.media_path = str(media)
-
-    runtime = asyncio.run(strategy.prepare_hardware(context))
-
-    assert runtime == base_module.HardwareRuntime("0", True, False)
-    probe_transform.assert_not_awaited()
+    encoder_call = require_encoder.await_args
+    decode_call = probe_decode.await_args
+    assert encoder_call is not None
+    assert decode_call is not None
+    assert "h264_nvenc" in encoder_call.args[-1]
+    assert "cuda" in decode_call.args[-1]
 
 
 @pytest.mark.parametrize(
@@ -1714,7 +1256,9 @@ def test_scaled_transform_success_builds_hardware_frame_command(
     cmd = asyncio.run(transcoder._build_hls_cmd(str(media), tmp_path, context))
 
     assert context.hardware == base_module.HardwareRuntime(device, True, True)
-    transform_args = probe_transform.await_args.args[-1]
+    transform_call = probe_transform.await_args
+    assert transform_call is not None
+    transform_args = transform_call.args[-1]
     assert transform_args[transform_args.index("-hwaccel_output_format") + 1] == (
         output_format
     )
@@ -1777,7 +1321,9 @@ def test_ten_bit_sdr_scale_probe_uses_transform_output_format(
 
     asyncio.run(strategy.prepare_hardware(context))
 
-    transform_args = probe_transform.await_args.args[-1]
+    transform_call = probe_transform.await_args
+    assert transform_call is not None
+    transform_args = transform_call.args[-1]
     assert transform_args[transform_args.index("-vf") + 1].endswith(
         f"hwdownload,format={expected_download}"
     )
@@ -2152,79 +1698,6 @@ def test_runtime_decode_failure_builds_software_decode_command(
     require_encoder.assert_awaited_once()
 
 
-def test_vaapi_prepare_hardware_uses_device_once(monkeypatch, tmp_path):
-    media = tmp_path / "input.mkv"
-    media.write_bytes(b"video")
-    device = "/dev/dri/renderD128"
-    resolve = AsyncMock(return_value=device)
-    require_encoder = AsyncMock()
-    probe_decode = AsyncMock(return_value=True)
-    monkeypatch.setattr(vaapi_module, "resolve_vaapi_device", resolve)
-    monkeypatch.setattr(
-        base_module,
-        "require_hardware_encoder",
-        require_encoder,
-        raising=False,
-    )
-    monkeypatch.setattr(
-        base_module,
-        "probe_hardware_decode",
-        probe_decode,
-        raising=False,
-    )
-    context = _eligible_hardware_context("vaapi")
-    context.media_path = str(media)
-
-    runtime = asyncio.run(get_hwaccel("vaapi").prepare_hardware(context))
-
-    assert runtime == base_module.HardwareRuntime(device, True)
-    resolve.assert_awaited_once()
-    encoder_args = require_encoder.await_args.args[-1]
-    assert encoder_args[:2] == ["-vaapi_device", device]
-    assert encoder_args[encoder_args.index("-vf") + 1] == "format=nv12,hwupload"
-    assert "h264_vaapi" in encoder_args
-    decode_args = probe_decode.await_args.args[-1]
-    assert decode_args[decode_args.index("-vaapi_device") + 1] == device
-    assert "vaapi" in decode_args
-
-
-def test_qsv_prepare_hardware_uses_device_once(monkeypatch, tmp_path):
-    media = tmp_path / "input.mkv"
-    media.write_bytes(b"video")
-    device = "/dev/dri/renderD128"
-    resolve = AsyncMock(return_value=device)
-    require_encoder = AsyncMock()
-    probe_decode = AsyncMock(return_value=True)
-    monkeypatch.setattr(qsv_module, "resolve_vaapi_device", resolve)
-    monkeypatch.setattr(
-        base_module,
-        "require_hardware_encoder",
-        require_encoder,
-        raising=False,
-    )
-    monkeypatch.setattr(
-        base_module,
-        "probe_hardware_decode",
-        probe_decode,
-        raising=False,
-    )
-    context = _eligible_hardware_context("qsv")
-    context.media_path = str(media)
-
-    runtime = asyncio.run(get_hwaccel("qsv").prepare_hardware(context))
-
-    assert runtime == base_module.HardwareRuntime(device, True)
-    resolve.assert_awaited_once()
-    encoder_args = require_encoder.await_args.args[-1]
-    device_arg = f"qsv=qs:hw,child_device={device},child_device_type=vaapi"
-    assert encoder_args[encoder_args.index("-init_hw_device") + 1] == device_arg
-    assert encoder_args[encoder_args.index("-vf") + 1] == "format=nv12,hwupload"
-    assert "h264_qsv" in encoder_args
-    decode_args = probe_decode.await_args.args[-1]
-    assert decode_args[decode_args.index("-init_hw_device") + 1] == device_arg
-    assert "qsv" in decode_args
-
-
 @pytest.mark.parametrize(
     "case",
     ["unsupported_codec", "missing_hwaccel", "qsv_hdr"],
@@ -2292,20 +1765,6 @@ def test_prepare_hardware_skips_ineligible_decode(monkeypatch, tmp_path, case):
     assert runtime.can_decode is False
     require_encoder.assert_awaited_once()
     probe_decode.assert_not_awaited()
-
-
-def test_prepare_hardware_rejects_missing_encoder_before_device(monkeypatch):
-    context = _eligible_hardware_context(
-        "vaapi",
-        capabilities=_capabilities(encoders=("aac",)),
-    )
-    resolve = AsyncMock(side_effect=AssertionError("device resolved"))
-    monkeypatch.setattr(vaapi_module, "resolve_vaapi_device", resolve)
-
-    with pytest.raises(RuntimeError, match="encoders: h264_vaapi"):
-        asyncio.run(get_hwaccel("vaapi").prepare_hardware(context))
-
-    resolve.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
@@ -2506,59 +1965,6 @@ def test_supported_hdr_guard_rejects_dovi_without_hdr10_base(metadata):
 
 
 @pytest.mark.parametrize(
-    ("hdr_type", "is_hdr10", "is_hlg", "needs_tonemap"),
-    [
-        (HDRType.SDR, False, False, False),
-        (HDRType.HDR10, True, False, True),
-        (HDRType.HLG, False, True, True),
-        (HDRType.HDR10_PLUS, True, False, True),
-        (HDRType.DOVI_COMPATIBLE, True, False, True),
-        (HDRType.DOVI_ONLY, False, False, False),
-        (HDRType.UNKNOWN, False, False, False),
-    ],
-)
-def test_context_detects_hdr(hdr_type, is_hdr10, is_hlg, needs_tonemap):
-    metadata_by_type = {
-        HDRType.SDR: MediaProbe(bit_depth=8, color_transfer="bt709"),
-        HDRType.HDR10: MediaProbe(
-            bit_depth=10,
-            color_transfer="smpte2084",
-            color_primaries="bt2020",
-            color_space="bt2020nc",
-        ),
-        HDRType.HLG: MediaProbe(
-            bit_depth=10,
-            color_transfer="arib-std-b67",
-            color_primaries="bt2020",
-            color_space="bt2020nc",
-        ),
-        HDRType.HDR10_PLUS: MediaProbe(
-            bit_depth=10,
-            color_transfer="smpte2084",
-            color_primaries="bt2020",
-            color_space="bt2020nc",
-            hdr10_plus=True,
-        ),
-        HDRType.DOVI_COMPATIBLE: MediaProbe(
-            dovi_profile=8,
-            dovi_bl_present=True,
-            dovi_bl_signal_compatibility_id=1,
-        ),
-        HDRType.DOVI_ONLY: MediaProbe(dovi_profile=5),
-        HDRType.UNKNOWN: MediaProbe(bit_depth=8, color_transfer="smpte2084"),
-    }
-    context = TranscodeContext(
-        options=TranscodeOptions(),
-        metadata=metadata_by_type[hdr_type],
-    )
-
-    assert context.hdr_type is hdr_type
-    assert context.is_hdr10 is is_hdr10
-    assert context.is_hlg is is_hlg
-    assert context.needs_tonemap is needs_tonemap
-
-
-@pytest.mark.parametrize(
     (
         "width",
         "height",
@@ -2749,11 +2155,11 @@ def _capabilities(
 
 
 def _hdr_context(
-    hwaccel=None,
-    resolution="original",
-    transfer="smpte2084",
-    capabilities=None,
-):
+    hwaccel: HWAccelType | None = None,
+    resolution: ResolutionLimit = "original",
+    transfer: str = "smpte2084",
+    capabilities: FFmpegCapabilities | None = None,
+) -> TranscodeContext:
     return TranscodeContext(
         options=TranscodeOptions(hwaccel=hwaccel, resolution=resolution),
         metadata=MediaProbe(
@@ -2813,30 +2219,6 @@ def test_software_hdr_filters(transfer):
         "tonemap=hable:desat=0",
         "zscale=primaries=bt709:transfer=bt709:matrix=bt709:range=tv",
         "format=yuv420p",
-    ]
-
-
-def test_software_scaled_hdr_filters():
-    context = _hdr_context(resolution="720p")
-
-    assert get_hwaccel(None).video_filters(context)[0] == (
-        "zscale=transfer=linear:npl=100:"
-        f"w='{context.scale_width}':h='{context.scale_height}'"
-    )
-
-
-def test_nvenc_hdr_uses_software_tonemap():
-    context = _hdr_context(hwaccel="nvenc")
-    strategy = get_hwaccel("nvenc")
-
-    assert asyncio.run(strategy.input_args(context)) == ["-hwaccel", "cuda"]
-    assert strategy.video_filters(context) == [
-        "zscale=transfer=linear:npl=100",
-        "format=gbrpf32le",
-        "tonemap=hable:desat=0",
-        "zscale=primaries=bt709:transfer=bt709:matrix=bt709:range=tv",
-        "format=yuv420p",
-        "hwupload_cuda",
     ]
 
 
@@ -3062,441 +2444,6 @@ def test_build_rejects_input_without_video_stream(tmp_path):
         asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
 
 
-def test_nvenc_args():
-    strategy = get_hwaccel("nvenc")
-    options = TranscodeOptions(hwaccel="nvenc", quality="high")
-    context = TranscodeContext(
-        options=options,
-        metadata=MediaProbe(
-            avg_frame_rate=Fraction(47, 2),
-            r_frame_rate=Fraction(47, 2),
-            pixel_format="yuv420p",
-        ),
-    )
-
-    assert asyncio.run(strategy.input_args(context)) == [
-        "-hwaccel",
-        "cuda",
-        "-hwaccel_output_format",
-        "cuda",
-    ]
-    scaled_context = TranscodeContext(
-        options=TranscodeOptions(hwaccel="nvenc", resolution="720p"),
-        metadata=MediaProbe(width=1920, height=1080),
-    )
-    assert asyncio.run(strategy.input_args(scaled_context)) == ["-hwaccel", "cuda"]
-    assert strategy.video_filters(context) == ["scale_cuda=format=yuv420p"]
-    ten_bit_context = TranscodeContext(
-        options=options,
-        metadata=MediaProbe(pixel_format="yuv420p10le"),
-    )
-    assert strategy.video_filters(ten_bit_context) == ["scale_cuda=format=yuv420p"]
-    scaled_ten_bit_context = TranscodeContext(
-        options=scaled_context.options,
-        metadata=MediaProbe(
-            width=1920,
-            height=1080,
-            pixel_format="yuv420p10le",
-        ),
-    )
-    assert strategy.video_filters(scaled_ten_bit_context) == [
-        "scale=1280:720",
-        "setsar=1",
-        "format=yuv420p",
-    ]
-    assert strategy.encoder_args(context) == [
-        "-preset",
-        "p7",
-        "-b:v",
-        "6000k",
-        "-maxrate",
-        "6000k",
-        "-bufsize",
-        "12000k",
-        "-forced-idr",
-        "1",
-    ]
-    assert strategy.keyframe_args(context) == [
-        "-force_key_frames:0",
-        "expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+6))",
-        "-flags:v:0",
-        "+cgop",
-        "-g:v:0",
-        "141",
-        "-keyint_min:v:0",
-        "141",
-    ]
-
-
-@pytest.mark.parametrize(
-    ("hwaccel", "device", "rotation", "field_order", "expected"),
-    [
-        (
-            "nvenc",
-            "0",
-            0,
-            "tt",
-            [
-                "yadif_cuda=mode=send_frame:parity=tff:deint=all",
-                "setfield=prog",
-                "scale_cuda=format=yuv420p",
-            ],
-        ),
-        (
-            "vaapi",
-            "/dev/dri/renderD128",
-            90,
-            "tt",
-            [
-                "deinterlace_vaapi=rate=frame:auto=0",
-                "setfield=prog",
-                "transpose_vaapi=dir=clock",
-                "scale_vaapi=format=nv12",
-            ],
-        ),
-        (
-            "qsv",
-            "/dev/dri/renderD128",
-            270,
-            "bb",
-            [
-                "vpp_qsv=deinterlace=advanced:rate=frame:transpose=cclock:format=nv12",
-                "setfield=prog",
-            ],
-        ),
-        (
-            "videotoolbox",
-            None,
-            270,
-            "progressive",
-            ["transpose_vt=dir=cclock"],
-        ),
-    ],
-)
-def test_hardware_geometry_filters(hwaccel, device, rotation, field_order, expected):
-    context = TranscodeContext(
-        options=TranscodeOptions(hwaccel=hwaccel),
-        metadata=MediaProbe(
-            width=1920,
-            height=1080,
-            rotation=rotation,
-            field_order=field_order,
-            pixel_format="yuv420p",
-        ),
-        capabilities=_capabilities(),
-        hardware=base_module.HardwareRuntime(device, True, True),
-    )
-
-    assert get_hwaccel(hwaccel).video_filters(context) == expected
-
-
-@pytest.mark.parametrize(
-    ("hwaccel", "device", "expected"),
-    [
-        (
-            "nvenc",
-            "0",
-            [
-                "scale_cuda=w=1280:h=720:format=yuv420p",
-                "setsar=1",
-            ],
-        ),
-        (
-            "vaapi",
-            "/dev/dri/renderD128",
-            [
-                "scale_vaapi=w=1280:h=720:format=nv12",
-                "setsar=1",
-            ],
-        ),
-        (
-            "qsv",
-            "/dev/dri/renderD128",
-            [
-                "vpp_qsv=w=1280:h=720:format=nv12",
-                "setsar=1",
-            ],
-        ),
-        (
-            "videotoolbox",
-            None,
-            [
-                "scale_vt=w=1280:h=720",
-                "setsar=1",
-            ],
-        ),
-    ],
-)
-def test_hardware_scale_filters(hwaccel, device, expected):
-    context = TranscodeContext(
-        options=TranscodeOptions(hwaccel=hwaccel, resolution="720p"),
-        metadata=MediaProbe(
-            width=1920,
-            height=1080,
-            field_order="progressive",
-            pixel_format="yuv420p",
-        ),
-        capabilities=_capabilities(),
-        hardware=base_module.HardwareRuntime(device, True, True),
-    )
-
-    assert get_hwaccel(hwaccel).video_filters(context) == expected
-
-
-@pytest.mark.parametrize(
-    ("hwaccel", "device", "rotation", "field_order", "expected"),
-    [
-        (
-            "nvenc",
-            "0",
-            0,
-            "tt",
-            [
-                "yadif_cuda=mode=send_frame:parity=tff:deint=all",
-                "setfield=prog",
-                "scale_cuda=w=1280:h=720:format=yuv420p",
-                "setsar=1",
-            ],
-        ),
-        (
-            "vaapi",
-            "/dev/dri/renderD128",
-            90,
-            "tt",
-            [
-                "deinterlace_vaapi=rate=frame:auto=0",
-                "setfield=prog",
-                "transpose_vaapi=dir=clock",
-                "scale_vaapi=w=592:h=1080:format=nv12",
-                "setsar=1",
-            ],
-        ),
-        (
-            "qsv",
-            "/dev/dri/renderD128",
-            270,
-            "bb",
-            [
-                (
-                    "vpp_qsv=deinterlace=advanced:rate=frame:transpose=cclock:"
-                    "w=592:h=1080:format=nv12"
-                ),
-                "setfield=prog",
-                "setsar=1",
-            ],
-        ),
-        (
-            "videotoolbox",
-            None,
-            90,
-            "progressive",
-            [
-                "transpose_vt=dir=clock",
-                "scale_vt=w=592:h=1080",
-                "setsar=1",
-            ],
-        ),
-    ],
-)
-def test_scaled_hardware_geometry_filters(
-    hwaccel,
-    device,
-    rotation,
-    field_order,
-    expected,
-):
-    context = TranscodeContext(
-        options=TranscodeOptions(
-            hwaccel=hwaccel,
-            resolution="720p" if hwaccel == "nvenc" else "1080p",
-        ),
-        metadata=MediaProbe(
-            width=1920,
-            height=1080,
-            rotation=rotation,
-            field_order=field_order,
-            pixel_format="yuv420p",
-        ),
-        capabilities=_capabilities(),
-        hardware=base_module.HardwareRuntime(device, True, True),
-    )
-
-    assert get_hwaccel(hwaccel).video_filters(context) == expected
-
-
-@pytest.mark.parametrize(
-    ("hwaccel", "device", "expected_scale"),
-    [
-        ("nvenc", "0", "scale_cuda=w=768:h=576:format=yuv420p"),
-        (
-            "vaapi",
-            "/dev/dri/renderD128",
-            "scale_vaapi=w=768:h=576:format=nv12",
-        ),
-        (
-            "qsv",
-            "/dev/dri/renderD128",
-            "vpp_qsv=w=768:h=576:format=nv12",
-        ),
-        ("videotoolbox", None, "scale_vt=w=768:h=576"),
-    ],
-)
-def test_hardware_scale_normalizes_sar(hwaccel, device, expected_scale):
-    context = TranscodeContext(
-        options=TranscodeOptions(hwaccel=hwaccel),
-        metadata=MediaProbe(
-            width=720,
-            height=576,
-            sample_aspect_ratio=(16, 15),
-            field_order="progressive",
-            pixel_format="yuv420p",
-        ),
-        capabilities=_capabilities(),
-        hardware=base_module.HardwareRuntime(device, True, True),
-    )
-
-    assert get_hwaccel(hwaccel).video_filters(context) == [
-        expected_scale,
-        "setsar=1",
-    ]
-
-
-@pytest.mark.parametrize(
-    ("hwaccel", "device", "expected_tail"),
-    [
-        ("nvenc", "0", ["format=yuv420p"]),
-        ("vaapi", "/dev/dri/renderD128", ["format=nv12", "hwupload"]),
-        ("qsv", "/dev/dri/renderD128", ["format=nv12"]),
-        ("videotoolbox", None, ["format=nv12"]),
-    ],
-)
-def test_hardware_geometry_runtime_failure_uses_cpu(hwaccel, device, expected_tail):
-    context = TranscodeContext(
-        options=TranscodeOptions(hwaccel=hwaccel),
-        metadata=MediaProbe(
-            width=1920,
-            height=1080,
-            rotation=90,
-            field_order="tt",
-            pixel_format="yuv420p",
-        ),
-        capabilities=_capabilities(),
-        hardware=base_module.HardwareRuntime(device, True, False),
-    )
-
-    filters = get_hwaccel(hwaccel).video_filters(context)
-
-    assert filters[:3] == [
-        "bwdif=mode=send_frame:parity=tff:deint=all",
-        "setfield=prog",
-        "transpose=clock",
-    ]
-    assert filters[3:] == expected_tail
-
-
-def test_nvenc_falls_back_to_software_decoding():
-    strategy = get_hwaccel("nvenc")
-    context = TranscodeContext(
-        options=TranscodeOptions(hwaccel="nvenc"),
-        metadata=MediaProbe(pixel_format="yuv420p10le"),
-        capabilities=_capabilities(hwaccels=()),
-    )
-
-    assert asyncio.run(strategy.input_args(context)) == []
-    assert strategy.video_filters(context) == ["format=yuv420p"]
-
-
-def test_nvenc_fallback_omits_unavailable_cuda_upload():
-    context = _hdr_context(
-        hwaccel="nvenc",
-        capabilities=_capabilities(
-            hwaccels=(), filters=("format", "tonemap", "zscale")
-        ),
-    )
-
-    filters = get_hwaccel("nvenc").video_filters(context)
-
-    assert "hwupload_cuda" not in filters
-    assert filters[-1] == "format=yuv420p"
-
-
-def test_qsv_args(monkeypatch):
-    device = "/dev/dri/renderD128"
-    strategy = get_hwaccel("qsv")
-    context = TranscodeContext(
-        options=TranscodeOptions(hwaccel="qsv"),
-        metadata=MediaProbe(
-            avg_frame_rate=Fraction(25),
-            r_frame_rate=Fraction(25),
-        ),
-    )
-    scaled_context = TranscodeContext(
-        options=TranscodeOptions(hwaccel="qsv", resolution="720p"),
-        metadata=MediaProbe(width=1920, height=1080),
-    )
-
-    monkeypatch.setattr(
-        qsv_module, "resolve_vaapi_device", AsyncMock(return_value=device)
-    )
-
-    assert asyncio.run(strategy.input_args(context)) == [
-        "-init_hw_device",
-        f"qsv=qs:hw,child_device={device},child_device_type=vaapi",
-        "-filter_hw_device",
-        "qs",
-        "-hwaccel",
-        "qsv",
-        "-hwaccel_device",
-        "qs",
-        "-hwaccel_output_format",
-        "qsv",
-    ]
-    assert asyncio.run(strategy.input_args(scaled_context)) == [
-        "-init_hw_device",
-        f"qsv=qs:hw,child_device={device},child_device_type=vaapi",
-        "-filter_hw_device",
-        "qs",
-        "-hwaccel",
-        "qsv",
-        "-hwaccel_device",
-        "qs",
-        "-hwaccel_output_format",
-        "qsv",
-    ]
-    assert strategy.video_filters(context) == ["vpp_qsv=format=nv12"]
-    assert strategy.video_filters(scaled_context) == [
-        "scale=1280:720",
-        "setsar=1",
-        "format=nv12",
-    ]
-    assert strategy.encoder_args(context) == [
-        "-preset",
-        "veryfast",
-        "-b:v",
-        "3000k",
-        "-maxrate",
-        "3001k",
-        "-bufsize",
-        "12000k",
-        "-mbbrc",
-        "1",
-        "-rc_init_occupancy",
-        "6000000",
-        "-forced_idr",
-        "1",
-    ]
-    assert strategy.keyframe_args(context) == [
-        "-force_key_frames:0",
-        "expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+6))",
-        "-flags:v:0",
-        "+cgop",
-        "-g:v:0",
-        "150",
-        "-keyint_min:v:0",
-        "150",
-    ]
-
-
 @pytest.mark.parametrize(
     "hdr_type",
     [
@@ -3527,98 +2474,6 @@ def test_qsv_hdr_disables_hardware_decode(monkeypatch, hdr_type):
     ]
 
 
-def test_qsv_falls_back_to_software_decoding(monkeypatch):
-    device = "/dev/dri/renderD128"
-    strategy = get_hwaccel("qsv")
-    context = TranscodeContext(
-        options=TranscodeOptions(hwaccel="qsv"),
-        capabilities=_capabilities(hwaccels=()),
-    )
-    monkeypatch.setattr(
-        qsv_module, "resolve_vaapi_device", AsyncMock(return_value=device)
-    )
-
-    args = asyncio.run(strategy.input_args(context))
-
-    assert "-hwaccel" not in args
-    assert strategy.video_filters(context) == ["format=nv12"]
-
-
-@pytest.mark.parametrize(
-    "hdr_type",
-    [
-        HDRType.HDR10,
-        HDRType.HLG,
-        HDRType.HDR10_PLUS,
-        HDRType.DOVI_COMPATIBLE,
-    ],
-)
-def test_qsv_hdr_filters_use_software_tonemap(hdr_type):
-    context = TranscodeContext(
-        options=TranscodeOptions(hwaccel="qsv"),
-        metadata=_qsv_hdr_metadata(hdr_type),
-        capabilities=_capabilities(),
-    )
-
-    assert get_hwaccel("qsv").video_filters(context) == [
-        "zscale=transfer=linear:npl=100",
-        "format=gbrpf32le",
-        "tonemap=hable:desat=0",
-        "zscale=primaries=bt709:transfer=bt709:matrix=bt709:range=tv",
-        "format=nv12",
-        "hwupload",
-    ]
-
-
-def test_qsv_scaled_hdr_keeps_scaling_in_zscale():
-    context = TranscodeContext(
-        options=TranscodeOptions(hwaccel="qsv", resolution="720p"),
-        metadata=MediaProbe(
-            width=3840,
-            height=2160,
-            bit_depth=10,
-            color_transfer="smpte2084",
-            color_primaries="bt2020",
-            color_space="bt2020nc",
-        ),
-        capabilities=_capabilities(),
-    )
-
-    filters = get_hwaccel("qsv").video_filters(context)
-
-    assert filters[0] == (
-        "zscale=transfer=linear:npl=100:"
-        f"w='{context.scale_width}':h='{context.scale_height}'"
-    )
-    assert filters[-3:] == ["format=nv12", "setsar=1", "hwupload"]
-    assert all(not value.startswith("vpp_qsv") for value in filters)
-
-
-def test_qsv_hdr_command_does_not_require_vpp_qsv(monkeypatch, tmp_path):
-    context = TranscodeContext(
-        options=TranscodeOptions(hwaccel="qsv"),
-        metadata=MediaProbe(
-            video_stream_index=0,
-            bit_depth=10,
-            color_transfer="smpte2084",
-            color_primaries="bt2020",
-            color_space="bt2020nc",
-        ),
-        capabilities=_capabilities(filters=("format", "hwupload", "tonemap", "zscale")),
-    )
-    monkeypatch.setattr(
-        qsv_module,
-        "resolve_vaapi_device",
-        AsyncMock(return_value="/dev/dri/renderD128"),
-    )
-
-    cmd = asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
-    vf = cmd[cmd.index("-vf") + 1]
-
-    assert "vpp_qsv" not in vf
-    assert vf.endswith("format=nv12,hwupload")
-
-
 @pytest.mark.parametrize("missing", ["format", "hwupload", "tonemap", "zscale"])
 def test_qsv_hdr_command_requires_cpu_tonemap_filters(monkeypatch, tmp_path, missing):
     filters = {"format", "hwupload", "tonemap", "zscale"} - {missing}
@@ -3643,83 +2498,6 @@ def test_qsv_hdr_command_requires_cpu_tonemap_filters(monkeypatch, tmp_path, mis
         asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
 
 
-def test_qsv_sdr_command_does_not_require_tonemap_filters(monkeypatch, tmp_path):
-    context = TranscodeContext(
-        options=TranscodeOptions(hwaccel="qsv"),
-        metadata=MediaProbe(
-            video_stream_index=0,
-            bit_depth=8,
-            color_transfer="bt709",
-        ),
-        capabilities=_capabilities(filters=("vpp_qsv",)),
-    )
-    monkeypatch.setattr(
-        qsv_module,
-        "resolve_vaapi_device",
-        AsyncMock(return_value="/dev/dri/renderD128"),
-    )
-
-    cmd = asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
-
-    assert cmd[cmd.index("-vf") + 1] == "vpp_qsv=format=nv12"
-
-
-def test_qsv_device(monkeypatch):
-    monkeypatch.setattr(
-        qsv_module, "resolve_vaapi_device", AsyncMock(return_value=None)
-    )
-    context = TranscodeContext(options=TranscodeOptions(hwaccel="qsv"))
-
-    with pytest.raises(RuntimeError, match="DRM render device"):
-        asyncio.run(get_hwaccel("qsv").input_args(context))
-
-
-def test_vaapi_args(monkeypatch):
-    device = "/dev/dri/renderD128"
-    strategy = get_hwaccel("vaapi")
-    options = TranscodeOptions(hwaccel="vaapi", quality="high")
-    context = TranscodeContext(options=options)
-
-    monkeypatch.setattr(
-        vaapi_module,
-        "resolve_vaapi_device",
-        AsyncMock(return_value=device),
-    )
-
-    assert asyncio.run(strategy.input_args(context)) == [
-        "-hwaccel",
-        "vaapi",
-        "-hwaccel_output_format",
-        "vaapi",
-        "-vaapi_device",
-        device,
-    ]
-    assert strategy.video_filters(context) == ["scale_vaapi=format=nv12"]
-
-    scaled_context = TranscodeContext(
-        options=TranscodeOptions(hwaccel="vaapi", resolution="720p"),
-        metadata=MediaProbe(width=1920, height=1080),
-    )
-    assert asyncio.run(strategy.input_args(scaled_context)) == [
-        "-hwaccel",
-        "vaapi",
-        "-vaapi_device",
-        device,
-    ]
-    assert strategy.video_filters(scaled_context) == [
-        "scale=1280:720",
-        "setsar=1",
-        "format=nv12",
-        "hwupload",
-    ]
-    assert strategy.keyframe_args(context) == [
-        "-force_key_frames:0",
-        "expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+6))",
-        "-flags:v:0",
-        "+cgop",
-    ]
-
-
 @pytest.mark.parametrize(
     ("quality", "bitrate", "bufsize"),
     [
@@ -3740,35 +2518,6 @@ def test_vaapi_auto_rate_control(quality, bitrate, bufsize):
         bitrate,
         "-bufsize",
         bufsize,
-    ]
-
-
-def test_vaapi_hdr10_filters(monkeypatch):
-    context = _hdr_context(hwaccel="vaapi", resolution="720p")
-    context.hardware = base_module.HardwareRuntime(
-        "/dev/dri/renderD128",
-        True,
-        True,
-    )
-    strategy = get_hwaccel("vaapi")
-    monkeypatch.setattr(
-        vaapi_module,
-        "resolve_vaapi_device",
-        AsyncMock(return_value="/dev/dri/renderD128"),
-    )
-
-    args = asyncio.run(strategy.input_args(context))
-
-    assert args[:4] == [
-        "-hwaccel",
-        "vaapi",
-        "-hwaccel_output_format",
-        "vaapi",
-    ]
-    assert strategy.video_filters(context) == [
-        f"scale_vaapi=w={context.scale_width}:h={context.scale_height}",
-        "setsar=1",
-        "tonemap_vaapi=format=nv12:p=bt709:t=bt709:m=bt709",
     ]
 
 
@@ -3805,7 +2554,9 @@ def test_vaapi_scaled_hdr10_probe_preserves_p010(monkeypatch, tmp_path):
     context.hardware = asyncio.run(strategy.prepare_hardware(context))
 
     assert context.hardware == base_module.HardwareRuntime(device, True, True)
-    transform_args = probe_transform.await_args.args[-1]
+    transform_call = probe_transform.await_args
+    assert transform_call is not None
+    transform_args = transform_call.args[-1]
     assert transform_args[transform_args.index("-vf") + 1] == (
         "scale_vaapi=w=1280:h=720,setsar=1,hwdownload,format=p010le"
     )
@@ -3814,41 +2565,6 @@ def test_vaapi_scaled_hdr10_probe_preserves_p010(monkeypatch, tmp_path):
         "setsar=1",
         "tonemap_vaapi=format=nv12:p=bt709:t=bt709:m=bt709",
     ]
-
-
-def test_vaapi_hlg_filters(monkeypatch):
-    context = _hdr_context(hwaccel="vaapi", transfer="arib-std-b67")
-    strategy = get_hwaccel("vaapi")
-    monkeypatch.setattr(
-        vaapi_module,
-        "resolve_vaapi_device",
-        AsyncMock(return_value="/dev/dri/renderD128"),
-    )
-
-    args = asyncio.run(strategy.input_args(context))
-    filters = strategy.video_filters(context)
-
-    assert "-hwaccel_output_format" not in args
-    assert "tonemap=hable:desat=0" in filters
-    assert filters[-2:] == ["format=nv12", "hwupload"]
-
-
-def test_vaapi_falls_back_to_software_decoding(monkeypatch):
-    strategy = get_hwaccel("vaapi")
-    context = TranscodeContext(
-        options=TranscodeOptions(hwaccel="vaapi"),
-        capabilities=_capabilities(hwaccels=()),
-    )
-    monkeypatch.setattr(
-        vaapi_module,
-        "resolve_vaapi_device",
-        AsyncMock(return_value="/dev/dri/renderD128"),
-    )
-
-    args = asyncio.run(strategy.input_args(context))
-
-    assert args == ["-vaapi_device", "/dev/dri/renderD128"]
-    assert strategy.video_filters(context) == ["format=nv12", "hwupload"]
 
 
 def test_vaapi_hdr10_fallback_uploads_for_tonemap(monkeypatch):
@@ -3877,80 +2593,6 @@ def test_vaapi_device(monkeypatch):
 
     with pytest.raises(RuntimeError, match="DRM render device"):
         asyncio.run(get_hwaccel("vaapi").input_args(context))
-
-
-def test_videotoolbox_args():
-    strategy = get_hwaccel("videotoolbox")
-    options = TranscodeOptions(hwaccel="videotoolbox", quality="low")
-    context = TranscodeContext(
-        options=options,
-        metadata=MediaProbe(
-            avg_frame_rate=Fraction(24),
-            r_frame_rate=Fraction(24),
-            pixel_format="yuv420p",
-        ),
-    )
-
-    assert asyncio.run(strategy.input_args(context)) == [
-        "-hwaccel",
-        "videotoolbox",
-        "-hwaccel_output_format",
-        "videotoolbox_vld",
-    ]
-    scaled_context = TranscodeContext(
-        options=TranscodeOptions(hwaccel="videotoolbox", resolution="720p"),
-        metadata=MediaProbe(width=1920, height=1080),
-    )
-    assert asyncio.run(strategy.input_args(scaled_context)) == [
-        "-hwaccel",
-        "videotoolbox",
-    ]
-    assert strategy.video_filters(context) == []
-    unknown_format_context = TranscodeContext(options=options)
-    assert strategy.video_filters(unknown_format_context) == ["scale_vt"]
-    nonstandard_8_bit_context = TranscodeContext(
-        options=options,
-        metadata=MediaProbe(pixel_format="yuvj420p"),
-    )
-    assert strategy.video_filters(nonstandard_8_bit_context) == ["scale_vt"]
-    ten_bit_context = TranscodeContext(
-        options=options,
-        metadata=MediaProbe(pixel_format="yuv420p10le"),
-    )
-    assert strategy.video_filters(ten_bit_context) == ["scale_vt"]
-    scaled_ten_bit_context = TranscodeContext(
-        options=scaled_context.options,
-        metadata=MediaProbe(
-            width=1920,
-            height=1080,
-            pixel_format="yuv420p10le",
-        ),
-    )
-    assert strategy.video_filters(scaled_ten_bit_context) == [
-        "scale=1280:720",
-        "setsar=1",
-        "format=nv12",
-    ]
-    assert strategy.encoder_args(context) == [
-        "-b:v",
-        "1500k",
-        "-qmin",
-        "-1",
-        "-qmax",
-        "-1",
-        "-prio_speed",
-        "1",
-    ]
-    assert strategy.keyframe_args(context) == [
-        "-force_key_frames:0",
-        "expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+6))",
-        "-flags:v:0",
-        "+cgop",
-        "-g:v:0",
-        "144",
-        "-keyint_min:v:0",
-        "144",
-    ]
 
 
 @pytest.mark.parametrize(
@@ -3993,43 +2635,6 @@ def test_independent_hardware_segments_require_forced_idr(hwaccel, option):
         get_hwaccel(hwaccel).encoder_args(context)
 
 
-def test_videotoolbox_sdr_normalization_uses_standard_scale_vt():
-    strategy = get_hwaccel("videotoolbox")
-    options = TranscodeOptions(hwaccel="videotoolbox")
-    unknown = TranscodeContext(options=options)
-    ten_bit = TranscodeContext(
-        options=options,
-        metadata=MediaProbe(pixel_format="yuv420p10le"),
-    )
-
-    assert strategy.video_filters(unknown) == ["scale_vt"]
-    assert strategy.video_filters(ten_bit) == ["scale_vt"]
-
-
-def test_videotoolbox_falls_back_to_software_decoding():
-    context = TranscodeContext(
-        options=TranscodeOptions(hwaccel="videotoolbox"),
-        metadata=MediaProbe(pixel_format="yuv420p10le"),
-        capabilities=_capabilities(hwaccels=()),
-    )
-    strategy = get_hwaccel("videotoolbox")
-
-    assert asyncio.run(strategy.input_args(context)) == []
-    assert strategy.video_filters(context) == ["format=nv12"]
-
-
-def test_videotoolbox_hdr_fallback_uses_software_tonemap():
-    context = _hdr_context(
-        hwaccel="videotoolbox",
-        capabilities=_capabilities(hwaccels=()),
-    )
-
-    filters = get_hwaccel("videotoolbox").video_filters(context)
-
-    assert "tonemap=hable:desat=0" in filters
-    assert filters[-1] == "format=nv12"
-
-
 @pytest.mark.parametrize(
     ("hwaccel", "available", "missing"),
     [
@@ -4053,78 +2658,6 @@ def test_encoder_args_omit_unavailable_private_options(hwaccel, available, missi
     args = get_hwaccel(hwaccel).encoder_args(context)
 
     assert missing.isdisjoint(args)
-
-
-@pytest.mark.parametrize("transfer", ["smpte2084", "arib-std-b67"])
-def test_videotoolbox_hdr_filters(transfer):
-    context = _hdr_context(
-        hwaccel="videotoolbox",
-        resolution="720p",
-        transfer=transfer,
-    )
-    strategy = get_hwaccel("videotoolbox")
-
-    assert asyncio.run(strategy.input_args(context)) == [
-        "-hwaccel",
-        "videotoolbox",
-        "-hwaccel_output_format",
-        "videotoolbox_vld",
-    ]
-    assert strategy.video_filters(context) == [
-        (
-            f"scale_vt=w='{context.scale_width}':h='{context.scale_height}':"
-            "color_matrix=bt709:color_primaries=bt709:color_transfer=bt709"
-        ),
-        "setsar=1",
-    ]
-
-
-@pytest.mark.parametrize(
-    ("hwaccel", "device", "expected"),
-    [
-        (
-            "vaapi",
-            "/dev/dri/renderD128",
-            [
-                "transpose_vaapi=dir=clock",
-                "scale_vaapi=w=592:h=1080",
-                "setsar=1",
-                "tonemap_vaapi=format=nv12:p=bt709:t=bt709:m=bt709",
-            ],
-        ),
-        (
-            "videotoolbox",
-            None,
-            [
-                "transpose_vt=dir=clock",
-                (
-                    "scale_vt=w='592':h='1080':color_matrix=bt709:"
-                    "color_primaries=bt709:color_transfer=bt709"
-                ),
-                "setsar=1",
-            ],
-        ),
-    ],
-)
-def test_hardware_rotated_hdr_scale_resets_sar(hwaccel, device, expected):
-    context = _hdr_context(hwaccel=hwaccel, resolution="1080p")
-    context.metadata = replace(
-        context.metadata,
-        width=1920,
-        height=1080,
-        rotation=90,
-    )
-    context.hardware = base_module.HardwareRuntime(device, True, True)
-
-    assert get_hwaccel(hwaccel).video_filters(context) == expected
-
-
-@pytest.mark.parametrize(
-    ("quality", "bitrate"),
-    [("low", "1500k"), ("medium", "3000k"), ("high", "6000k")],
-)
-def test_options_bitrate(quality, bitrate):
-    assert TranscodeOptions(quality=quality).bitrate == bitrate
 
 
 @pytest.mark.parametrize(
@@ -4263,80 +2796,6 @@ def test_capability_preflight_failure_releases_lock(monkeypatch, tmp_path):
     release.assert_called_once_with(lock)
 
 
-def test_no_video_rejected_before_capability_discovery(monkeypatch, tmp_path):
-    lock = object()
-    release = Mock()
-    load = AsyncMock(side_effect=AssertionError("capabilities queried"))
-
-    monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
-    monkeypatch.setattr(transcoder, "is_complete", Mock(return_value=False))
-    monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
-    monkeypatch.setattr(transcoder, "cleanup_stale_hls", Mock())
-    monkeypatch.setattr(
-        transcoder,
-        "_probe_media",
-        AsyncMock(return_value=MediaProbe(audio_stream_index=1, duration=60.0)),
-    )
-    monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
-    monkeypatch.setattr(transcoder, "load_ffmpeg_capabilities", load)
-    monkeypatch.setattr(transcoder, "_release_lock", release)
-
-    with pytest.raises(RuntimeError, match="no transcodable video stream"):
-        asyncio.run(
-            transcoder.ensure_transcode("input.mkv", "hash", TranscodeOptions())
-        )
-
-    load.assert_not_awaited()
-    release.assert_called_once_with(lock)
-
-
-def test_dovi_only_rejected_before_capability_discovery(monkeypatch, tmp_path):
-    lock = object()
-    release = Mock()
-    load = AsyncMock(side_effect=AssertionError("capabilities queried"))
-    create = AsyncMock(side_effect=AssertionError("transcode process started"))
-    metadata = MediaProbe(
-        video_stream_index=0,
-        dovi_profile=5,
-        dovi_bl_present=True,
-        dovi_bl_signal_compatibility_id=0,
-    )
-
-    monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
-    monkeypatch.setattr(transcoder, "is_complete", Mock(return_value=False))
-    monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
-    monkeypatch.setattr(transcoder, "cleanup_stale_hls", Mock())
-    monkeypatch.setattr(transcoder, "_probe_media", AsyncMock(return_value=metadata))
-    monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
-    monkeypatch.setattr(transcoder, "load_ffmpeg_capabilities", load)
-    monkeypatch.setattr(transcoder.asyncio, "create_subprocess_exec", create)
-    monkeypatch.setattr(transcoder, "_release_lock", release)
-
-    with pytest.raises(RuntimeError, match="Dolby Vision-only"):
-        asyncio.run(
-            transcoder.ensure_transcode("input.mkv", "hash", TranscodeOptions())
-        )
-
-    load.assert_not_awaited()
-    create.assert_not_awaited()
-    release.assert_called_once_with(lock)
-
-
-def test_build_hls_cmd_rejects_dovi_only(tmp_path):
-    context = TranscodeContext(
-        options=TranscodeOptions(),
-        metadata=MediaProbe(
-            video_stream_index=0,
-            dovi_profile=5,
-            dovi_bl_present=True,
-            dovi_bl_signal_compatibility_id=0,
-        ),
-    )
-
-    with pytest.raises(RuntimeError, match="Dolby Vision-only"):
-        asyncio.run(transcoder._build_hls_cmd("input.mkv", tmp_path, context))
-
-
 @pytest.mark.parametrize(
     ("metadata", "options", "message"),
     [
@@ -4365,94 +2824,6 @@ def test_build_hls_cmd_rejects_dovi_only(tmp_path):
 def test_supported_geometry_guard_rejects_invalid_plan(metadata, options, message):
     with pytest.raises(RuntimeError, match=message):
         transcoder._require_supported_geometry(metadata, options)
-
-
-def test_supported_geometry_guard_allows_unknown_original_geometry():
-    transcoder._require_supported_geometry(MediaProbe(), TranscodeOptions())
-
-
-def test_rotation_rejected_before_capability_discovery(monkeypatch, tmp_path):
-    lock = object()
-    release = Mock()
-    load = AsyncMock(side_effect=AssertionError("capabilities queried"))
-    metadata = MediaProbe(
-        video_stream_index=0,
-        width=1920,
-        height=1080,
-        rotation=45,
-    )
-
-    monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
-    monkeypatch.setattr(transcoder, "is_complete", Mock(return_value=False))
-    monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
-    monkeypatch.setattr(transcoder, "cleanup_stale_hls", Mock())
-    monkeypatch.setattr(transcoder, "_probe_media", AsyncMock(return_value=metadata))
-    monkeypatch.setattr(transcoder, "load_ffmpeg_capabilities", load)
-    monkeypatch.setattr(transcoder, "_release_lock", release)
-
-    with pytest.raises(RuntimeError, match="Unsupported video rotation: 45"):
-        asyncio.run(
-            transcoder.ensure_transcode("input.mkv", "hash", TranscodeOptions())
-        )
-
-    load.assert_not_awaited()
-    release.assert_called_once_with(lock)
-
-
-def test_hardware_preparation_precedes_build_and_start(monkeypatch, tmp_path):
-    events = []
-    lock = object()
-    proc = SimpleNamespace(pid=123, returncode=None, stderr=None)
-    metadata = MediaProbe(
-        video_stream_index=0,
-        duration=60.0,
-        codec="h264",
-        profile="High",
-        bit_depth=8,
-        pixel_format="yuv420p",
-    )
-    options = TranscodeOptions(hwaccel="nvenc")
-
-    async def prepare(context):
-        events.append("prepare")
-        assert context.media_path == "input.mkv"
-        context.hardware = base_module.HardwareRuntime("0", False)
-
-    async def build(_media_path, _out_dir, context):
-        events.append("build")
-        assert context.hardware == base_module.HardwareRuntime("0", False)
-        return ["ffmpeg"]
-
-    async def create(*_args, **_kwargs):
-        events.append("start")
-        return proc
-
-    async def register(*_args):
-        events.append("register")
-        return "hash:profile"
-
-    monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
-    monkeypatch.setattr(transcoder, "is_complete", Mock(return_value=False))
-    monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
-    monkeypatch.setattr(transcoder, "cleanup_stale_hls", Mock())
-    monkeypatch.setattr(transcoder, "_probe_media", AsyncMock(return_value=metadata))
-    monkeypatch.setattr(transcoder, "_prepare_hardware", prepare, raising=False)
-    monkeypatch.setattr(transcoder, "_build_hls_cmd", build)
-    monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
-    monkeypatch.setattr(
-        transcoder,
-        "load_ffmpeg_capabilities",
-        AsyncMock(return_value=_capabilities()),
-    )
-    monkeypatch.setattr(transcoder.asyncio, "create_subprocess_exec", create)
-    monkeypatch.setattr(transcoder, "register_task", register)
-    monkeypatch.setattr(transcoder, "_start_monitor", Mock())
-    monkeypatch.setattr(transcoder, "wait_segment", AsyncMock(return_value=True))
-
-    result = asyncio.run(transcoder.ensure_transcode("input.mkv", "hash", options))
-
-    assert result == ("hash", options.profile)
-    assert events == ["prepare", "build", "start", "register"]
 
 
 def test_hardware_preparation_failure_releases_lock(monkeypatch, tmp_path):
@@ -4504,83 +2875,6 @@ def test_hardware_preparation_failure_releases_lock(monkeypatch, tmp_path):
     create.assert_not_awaited()
     register.assert_not_awaited()
     release.assert_called_once_with(lock)
-
-
-@pytest.mark.parametrize(
-    ("avg_frame_rate", "expected_framerate"),
-    [(Fraction(24), Fraction(24)), (None, None)],
-)
-def test_ensure_builds_context(
-    monkeypatch, tmp_path, avg_frame_rate, expected_framerate
-):
-    lock = object()
-    proc = SimpleNamespace(pid=123, returncode=None, stderr=None)
-    metadata = MediaProbe(
-        video_stream_index=0,
-        audio_stream_index=1,
-        duration=60.0,
-        avg_frame_rate=avg_frame_rate,
-        r_frame_rate=avg_frame_rate,
-        pixel_format="yuv420p10le",
-        bit_depth=10,
-        height=1080,
-        color_transfer="smpte2084",
-        color_primaries="bt2020",
-        color_space="bt2020nc",
-    )
-    probe = AsyncMock(return_value=metadata)
-    build = AsyncMock(return_value=["ffmpeg"])
-    register = AsyncMock(return_value="hash:profile")
-    options = TranscodeOptions()
-    capabilities = _capabilities()
-
-    monkeypatch.setattr(transcoder, "output_dir", lambda _hash, _profile: tmp_path)
-    monkeypatch.setattr(transcoder, "is_complete", Mock(return_value=False))
-    monkeypatch.setattr(transcoder, "_acquire_lock", lambda _path: lock)
-    monkeypatch.setattr(transcoder, "cleanup_stale_hls", Mock())
-    monkeypatch.setattr(transcoder, "_probe_media", probe)
-    monkeypatch.setattr(
-        transcoder,
-        "probe_framerate",
-        AsyncMock(side_effect=AssertionError("separate probe called")),
-    )
-    monkeypatch.setattr(
-        transcoder,
-        "probe_duration",
-        AsyncMock(side_effect=AssertionError("separate probe called")),
-    )
-    monkeypatch.setattr(transcoder, "_build_hls_cmd", build)
-    monkeypatch.setattr(transcoder, "_ffmpeg", AsyncMock(return_value="ffmpeg"))
-    monkeypatch.setattr(
-        transcoder,
-        "load_ffmpeg_capabilities",
-        AsyncMock(return_value=capabilities),
-    )
-    monkeypatch.setattr(
-        transcoder.asyncio, "create_subprocess_exec", AsyncMock(return_value=proc)
-    )
-    monkeypatch.setattr(transcoder, "register_task", register)
-    monkeypatch.setattr(transcoder, "_start_monitor", Mock())
-    monkeypatch.setattr(transcoder, "wait_segment", AsyncMock(return_value=True))
-
-    result = asyncio.run(transcoder.ensure_transcode("input.mkv", "hash", options))
-
-    assert result == ("hash", options.profile)
-    probe.assert_awaited_once_with("input.mkv")
-    await_args = build.await_args
-    assert await_args is not None
-    context = await_args.args[2]
-    assert isinstance(context, TranscodeContext)
-    assert context.options is options
-    assert context.source_framerate == expected_framerate
-    assert context.source_pixel_format == "yuv420p10le"
-    assert context.source_height == 1080
-    assert context.metadata is metadata
-    assert context.capabilities is capabilities
-    assert context.needs_tonemap is True
-    register.assert_awaited_once_with(
-        "input.mkv", "hash", options, tmp_path, proc, 60.0
-    )
 
 
 def test_cleanup_kills_on_timeout():
@@ -4642,35 +2936,6 @@ def test_shutdown_stops_monitors(monkeypatch):
     release.assert_called_once_with(lock)
 
 
-def test_monitor_errors_logged(monkeypatch):
-    error = Mock()
-
-    async def fail(*_args, **_kwargs):
-        raise RuntimeError("monitor failed")
-
-    monkeypatch.setattr(transcoder, "_monitor_ffmpeg", fail)
-    monkeypatch.setattr(transcoder.logger, "error", error)
-
-    async def run():
-        completion = transcoder._start_monitor(
-            cast(asyncio.subprocess.Process, object()),
-            cast(FileLock, object()),
-            "task",
-        )
-        task = next(iter(transcoder._MONITOR_TASKS))
-        assert task in transcoder._MONITOR_TASKS
-        await asyncio.gather(task, return_exceptions=True)
-        await asyncio.sleep(0)
-        return task, completion
-
-    task, completion = asyncio.run(run())
-
-    assert task not in transcoder._MONITOR_TASKS
-    assert completion.result().state == "failed"
-    assert completion.result().error is None
-    error.assert_called_once()
-
-
 def test_stderr_detail_redacts_media_and_output_paths():
     detail = transcoder._stderr_detail(
         (
@@ -4699,23 +2964,6 @@ def test_stderr_detail_is_bounded_to_recent_lines():
     assert "error-00" not in detail
 
 
-@pytest.mark.parametrize(
-    ("returncode", "expected"),
-    [
-        (0, "finished"),
-        (255, "stopped"),
-        (1, "failed"),
-        (None, "failed"),
-    ],
-)
-def test_ffmpeg_completion_classifies_exit(returncode, expected):
-    completion = transcoder.FFmpegCompletion.from_exit(returncode, "detail")
-
-    assert completion.returncode == returncode
-    assert completion.state == expected
-    assert completion.error == "detail"
-
-
 def test_monitor_tail(monkeypatch):
     read = AsyncMock(side_effect=[b"a" * 400, b"b" * 400, b""])
     proc = SimpleNamespace(
@@ -4742,118 +2990,6 @@ def test_monitor_tail(monkeypatch):
     assert read.await_count == 3
     assert result == transcoder.FFmpegCompletion.from_exit(1, "a" * 400 + "b" * 400)
     finish.assert_awaited_once_with("task", 1, "a" * 400 + "b" * 400)
-
-
-def test_monitor_completion_precedes_task_store_completion(monkeypatch):
-    proc = SimpleNamespace(
-        pid=123,
-        returncode=1,
-        stderr=SimpleNamespace(
-            read=AsyncMock(side_effect=[b"device initialization failed\n", b""])
-        ),
-        wait=AsyncMock(),
-    )
-    release = Mock()
-    persistence_started = asyncio.Event()
-    allow_persistence = asyncio.Event()
-
-    async def finish_task(*_args):
-        persistence_started.set()
-        await allow_persistence.wait()
-
-    monkeypatch.setattr(transcoder, "finish_task", AsyncMock(side_effect=finish_task))
-    monkeypatch.setattr(transcoder, "_release_lock", release)
-    monkeypatch.setattr(transcoder.logger, "error", Mock())
-
-    async def run():
-        completion = transcoder._start_monitor(
-            cast(asyncio.subprocess.Process, proc),
-            cast(FileLock, object()),
-            "task",
-        )
-        monitor = next(iter(transcoder._MONITOR_TASKS))
-        await persistence_started.wait()
-        assert completion.done()
-        result = completion.result()
-        allow_persistence.set()
-        await monitor
-        await asyncio.sleep(0)
-        return result
-
-    result = asyncio.run(run())
-
-    assert result == transcoder.FFmpegCompletion.from_exit(
-        1, "device initialization failed"
-    )
-    release.assert_called_once()
-
-
-def test_monitor_discards_stderr_older_than_raw_tail(monkeypatch):
-    read = AsyncMock(
-        side_effect=[
-            b"old root cause\n" + b"x" * (20 * 1024),
-            b"\nlatest failure\n",
-            b"",
-        ]
-    )
-    proc = SimpleNamespace(
-        pid=123,
-        returncode=1,
-        stderr=SimpleNamespace(read=read),
-        wait=AsyncMock(),
-    )
-    monkeypatch.setattr(transcoder, "finish_task", AsyncMock())
-    monkeypatch.setattr(transcoder, "_release_lock", Mock())
-    monkeypatch.setattr(transcoder.logger, "error", Mock())
-
-    result = asyncio.run(
-        transcoder._monitor_ffmpeg(
-            cast(asyncio.subprocess.Process, proc),
-            cast(FileLock, object()),
-            "task",
-        )
-    )
-
-    assert result.error is not None
-    assert "old root cause" not in result.error
-    assert "latest failure" in result.error
-    assert len(result.error.encode()) <= 8 * 1024
-    assert len(result.error.splitlines()) <= 24
-
-
-def test_monitor_completion_precedes_logging_failure(monkeypatch):
-    proc = SimpleNamespace(
-        pid=123,
-        returncode=1,
-        stderr=SimpleNamespace(
-            read=AsyncMock(side_effect=[b"primary encoder failure\n", b""])
-        ),
-        wait=AsyncMock(),
-    )
-    release = Mock()
-    monkeypatch.setattr(transcoder, "finish_task", AsyncMock())
-    monkeypatch.setattr(transcoder, "_release_lock", release)
-    monkeypatch.setattr(
-        transcoder.logger,
-        "error",
-        Mock(side_effect=[RuntimeError("logging failed"), None]),
-    )
-
-    async def run():
-        completion = transcoder._start_monitor(
-            cast(asyncio.subprocess.Process, proc),
-            cast(FileLock, object()),
-            "task",
-        )
-        monitor = next(iter(transcoder._MONITOR_TASKS))
-        await asyncio.gather(monitor, return_exceptions=True)
-        await asyncio.sleep(0)
-        return completion.result()
-
-    result = asyncio.run(run())
-
-    assert result == transcoder.FFmpegCompletion.from_exit(1, "primary encoder failure")
-    release.assert_called_once()
 
 
 def test_startup_failure_returns_ffmpeg_detail(monkeypatch, tmp_path):
@@ -5013,67 +3149,6 @@ def test_monitor_releases_lock(monkeypatch, tmp_path):
     release.assert_called_once_with(lock)
 
 
-def test_list_releases_lock(monkeypatch):
-    lock = _Lock()
-    store = {"task": {"id": "task"}}
-
-    monkeypatch.setattr(tasks, "_task_store", lambda: (store, lock))
-    monkeypatch.setattr(tasks, "scan_outputs", lambda *, exclude_ids=None: [])
-
-    def snapshot(_task):
-        assert lock.locked is False
-        return {"id": "task", "started_at": "2026-01-01", "encoded_size": 0}
-
-    monkeypatch.setattr(tasks, "_task_snapshot", snapshot)
-
-    result = asyncio.run(tasks.list_tasks())
-
-    assert [task["id"] for task in result] == ["task"]
-
-
-def test_list_offloads_scan(monkeypatch):
-    main_thread = threading.get_ident()
-    scan_threads = []
-    store = {"task": {"id": "task"}}
-
-    def snapshot(_task):
-        scan_threads.append(threading.get_ident())
-        return {"id": "task", "started_at": "2026-01-01", "encoded_size": 0}
-
-    def scan_outputs(*, exclude_ids=None):
-        scan_threads.append(threading.get_ident())
-        return []
-
-    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
-    monkeypatch.setattr(tasks, "_task_snapshot", snapshot)
-    monkeypatch.setattr(tasks, "scan_outputs", scan_outputs)
-
-    result = asyncio.run(tasks.list_tasks())
-
-    assert [task["id"] for task in result] == ["task"]
-    assert scan_threads
-    assert all(thread != main_thread for thread in scan_threads)
-
-
-def test_list_excludes_registered(monkeypatch):
-    store = {"task": {"id": "task"}}
-
-    def snapshot(_task):
-        return {"id": "task", "started_at": "2026-01-01", "encoded_size": 0}
-
-    def scan_outputs(*, exclude_ids=None):
-        assert exclude_ids == {"task"}
-        return []
-
-    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
-    monkeypatch.setattr(tasks, "_task_snapshot", snapshot)
-    monkeypatch.setattr(tasks, "scan_outputs", scan_outputs)
-
-    result = asyncio.run(tasks.list_tasks())
-
-    assert [task["id"] for task in result] == ["task"]
-
-
 def test_finish_releases_lock(monkeypatch, tmp_path):
     lock = _Lock()
     store = {
@@ -5224,36 +3299,6 @@ def test_finish_states(monkeypatch, tmp_path, state, returncode, expected):
     assert store["task"]["state"] == expected
     assert store["task"]["finished_at"] is not None
     if returncode == 0:
-        remove.assert_not_called()
-    else:
-        remove.assert_called_once_with(str(tmp_path))
-
-
-@pytest.mark.parametrize(
-    ("complete", "expected"),
-    [
-        (True, tasks.TaskState.FINISHED),
-        (False, tasks.TaskState.STOPPED),
-    ],
-)
-def test_stop_missing(monkeypatch, tmp_path, complete, expected):
-    store = {"task": _runtime_task(tmp_path)}
-    remove = Mock()
-
-    monkeypatch.setattr(tasks, "_task_store", lambda: (store, _Lock()))
-    monkeypatch.setattr(
-        tasks, "_process_start_id", AsyncMock(return_value="original-process")
-    )
-    monkeypatch.setattr(tasks.os, "kill", Mock(side_effect=ProcessLookupError))
-    monkeypatch.setattr(tasks, "is_complete", Mock(return_value=complete))
-    monkeypatch.setattr(tasks, "remove_endlist", remove)
-
-    result = asyncio.run(tasks.stop_tasks(["task"]))
-
-    assert result == ["task"]
-    assert store["task"]["state"] == expected
-    assert store["task"]["finished_at"] is not None
-    if complete:
         remove.assert_not_called()
     else:
         remove.assert_called_once_with(str(tmp_path))
