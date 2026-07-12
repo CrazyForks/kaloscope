@@ -49,7 +49,7 @@ export default class Chapters extends OptionsIcon {
 
   onItemClick = (event: DelegateEvent, data: ChangeData) => {
     super.onItemClick(event, data);
-    const { id, showText } = data.to;
+
     let { url } = data.to;
     if (typeof url === 'string') {
       const resolvedUrl: string = this.player.config.settings.resolveChapterUrl(url);
@@ -58,6 +58,8 @@ export default class Chapters extends OptionsIcon {
       }
       url = resolvedUrl;
     }
+
+    const { id, showText } = data.to;
     if (typeof this.config.chapterChange === 'function') {
       this.config.chapterChange({
         id: id,

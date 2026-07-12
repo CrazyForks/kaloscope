@@ -240,6 +240,7 @@
   import { fade } from 'svelte/transition';
   import { Events } from 'xgplayer';
   import HLS from 'xgplayer-hls';
+  import { videoPlugins } from './plugins/preset';
 
   let { player }: { player: Player | null } = $props();
   // whether the current video is a local media file
@@ -262,7 +263,6 @@
   let rotateDegree: number = $state(0);
   let definitions: Definition[] = $state([]);
   let definition: string = $state('');
-  let playbackMode: PlaybackMode = 'direct';
 
   // the modal dialog instance
   let modal: Modal;
@@ -323,8 +323,7 @@
     // playback mode
     if (localMedia && $video !== null) {
       const url = player?.config.url;
-      playbackMode = isTranscodedStream(url) ? 'transcode' : 'direct';
-      $video.playbackMode = playbackMode;
+      $video.playbackMode = isTranscodedStream(url) ? 'transcode' : 'direct';
     }
     // playback rate
     changePressRate();
@@ -374,7 +373,6 @@
     if (!player || !localMedia) {
       return;
     }
-    playbackMode = mode;
     const url = player.config.url as string;
     const isTranscoded = isTranscodedStream(url);
     if ((mode === 'transcode' && isTranscoded) || (mode === 'direct' && !isTranscoded)) {
@@ -384,17 +382,22 @@
     if ($video !== null) {
       $video.playbackMode = mode;
     }
-    // switch the URL
+    // switch the URL and restore the direct playback pipeline only when leaving a transcoded stream
     const newUrl = mode === 'transcode' ? url + '&transcode=true' : url.replace('&transcode=true', '');
-    changeDefinition(newUrl);
+    changePlaybackSource(newUrl, { restoreDirect: mode === 'direct' && isTranscoded });
   }
 
-  /** Apply the active playback mode to a chapter stream URL. */
+  /**
+   * Apply the active playback mode to a chapter stream URL.
+   *
+   * @param url - The original chapter stream URL.
+   * @returns The resolved chapter stream URL.
+   */
   export function resolveChapterUrl(url: string): string {
     if (!url.startsWith(MEDIA_STREAM_PREFIX)) {
       return url;
     }
-    if (playbackMode === 'transcode') {
+    if ($video?.playbackMode === 'transcode') {
       return isTranscodedStream(url) ? url : `${url}&transcode=true`;
     }
     return url.replace('&transcode=true', '');
@@ -417,7 +420,30 @@
     player.registerPlugin(HLS);
   }
 
-  /** Show loading while a transcoded stream is being prepared and switched. */
+  /**
+   * Restore the media pipeline that was replaced by server-side HLS transcoding.
+   *
+   * @param url - The new video URL.
+   */
+  function prepareDirectPlayback(url: IUrl): boolean {
+    if (!player || !player.getPlugin('hls')) {
+      return false;
+    }
+    player.unRegisterPlugin('hls', true);
+    // xgplayer-hls installs instance-level URL accessors and disables native
+    // source handling; its destroy hook does not restore them.
+    Reflect.deleteProperty(player, 'switchURL');
+    Reflect.deleteProperty(player, 'url');
+    player.handleSource = true;
+    for (const plugin of videoPlugins(player.config.videoType, url)) {
+      player.registerPlugin(plugin);
+    }
+    return true;
+  }
+
+  /**
+   * Show loading while a transcoded stream is being prepared and switched.
+   */
   export function showSwitchLoading() {
     if (!player) {
       return;
@@ -425,23 +451,25 @@
     const switchId = ++playbackSwitchId;
     player.addClass('xgplayer-switch-loading');
 
-    const restore = () => {
+    // remove the loading indicator when the stream is ready
+    const remove = () => {
       if (switchId !== playbackSwitchId) {
         return;
       }
       player?.removeClass('xgplayer-switch-loading');
     };
-    player.once(Events.PLAYING, restore);
-    player.once(Events.AUTOPLAY_PREVENTED, restore);
-    player.once(Events.ERROR, restore);
+    player.once(Events.ERROR, remove);
+    player.once(Events.PLAYING, remove);
+    player.once(Events.AUTOPLAY_PREVENTED, remove);
   }
 
   /**
-   * Change the video definition.
+   * Change the video playback source.
    *
    * @param url - The new video URL.
+   * @param options - Controls how the player switches sources.
    */
-  export async function changeDefinition(url: IUrl) {
+  export async function changePlaybackSource(url: IUrl, { restoreDirect = false }: { restoreDirect?: boolean } = {}) {
     if (!player) {
       return;
     }
@@ -449,15 +477,12 @@
     // handle transcoded HLS streams
     if (isTranscodedStream(url) && typeof url === 'string') {
       prepareTranscodePlayback();
-      // Start the new playback pipeline immediately, just like a chapter
-      // switch. Waiting for the probe first leaves xgplayer in the old paused
-      // state, so neither its waiting event nor loading plugin can activate.
+      // start the new playback pipeline immediately
       player.playNext({ url });
       showSwitchLoading();
       definition = url;
 
-      // The full duration is only metadata for the controls. Probe it in
-      // parallel and apply it only if this stream is still current.
+      // probe the duration of the stream in parallel
       const duration = await probeDuration(url);
       if (player?.config.url === url && duration !== undefined) {
         player.setConfig({ customDuration: duration });
@@ -466,6 +491,16 @@
     }
 
     const duration = await probeDuration(url);
+
+    // handle restore direct playback pipeline
+    const restoredToDirect = restoreDirect && prepareDirectPlayback(url);
+    if (restoredToDirect) {
+      player.playNext({ url, customDuration: duration });
+      if (typeof url === 'string') {
+        definition = url;
+      }
+      return;
+    }
 
     // handle DASH streams
     if (player.config.videoType === 'dash' && typeof url === 'string') {
@@ -491,6 +526,7 @@
       });
     }
 
+    // update definition
     if (typeof url === 'string') {
       if (definition !== url) {
         definition = url;
@@ -796,7 +832,7 @@
             native={!rotateFullscreen}
             options={definitions.map((d) => ({ value: d.url, label: String(d.definition) }))}
             bind:value={definition}
-            onchange={() => changeDefinition(definition)}
+            onchange={() => changePlaybackSource(definition)}
             class="dropdown-top [&_p]:max-h-32!"
           />
         {:else}

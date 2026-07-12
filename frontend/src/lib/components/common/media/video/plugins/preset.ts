@@ -36,6 +36,8 @@ import PlaybackRate from './playbackrate';
 import TextTrack from './texttrack';
 import TopBar from './topbar';
 
+type VideoPlugin = typeof FLV | typeof HLS | typeof MP4 | typeof Shaka;
+
 // import all i18n json files from locales directory
 const locales = import.meta.glob('$lib/locales/*.json', {
   eager: true,
@@ -169,7 +171,7 @@ function guessVideoType(url?: IUrl): string | null {
  * @param url - The media URL, used to check if it's a transcoded stream.
  * @returns An array of video plugins.
  */
-function videoPlugins(videoType: string | null | undefined, url: IUrl | undefined): Partial<BasePlugin>[] {
+export function videoPlugins(videoType: string | null | undefined, url: IUrl | undefined): VideoPlugin[] {
   // if it's a transcoded stream, use HLS plugin if supported since transcoded streams are delivered via HLS
   if (isTranscodedStream(url)) {
     return HLS.isSupported() ? [HLS] : [];

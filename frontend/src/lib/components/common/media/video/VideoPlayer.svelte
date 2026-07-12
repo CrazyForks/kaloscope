@@ -303,7 +303,7 @@
       if (options.next) {
         player.playNext({ url, topBar: { title: options.title }, customDuration: duration });
       } else {
-        videoSettings.changeDefinition(url);
+        videoSettings.changePlaybackSource(url);
       }
       return;
     }

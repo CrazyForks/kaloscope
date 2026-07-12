@@ -48,7 +48,7 @@ export default class Definitions extends OptionsIcon {
     super.onItemClick(event, data);
     const { url } = data.to;
     if (typeof url === 'string') {
-      this.player.config.settings.changeDefinition(url);
+      this.player.config.settings.changePlaybackSource(url);
     }
   };
 
