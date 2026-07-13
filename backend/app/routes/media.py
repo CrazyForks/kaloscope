@@ -348,14 +348,27 @@ async def list_transcodes(_, query: TranscodeTaskQuery) -> HTTPResponse:
     hashes = {task["hash"] for task in tasks if task.get("hash")}
     if hashes:
         items = await MediaItem.filter(hash__in=hashes).values(
-            "hash", "name", "title", "path"
+            "hash",
+            "name",
+            "title",
+            "path",
+            "season",
+            "episode",
+            parent_name="parent__name",
+            parent_title="parent__title",
         )
         hash_items = {}
         for item in items:
             hash_items.setdefault(item["hash"], item)
         for task in tasks:
             if item := hash_items.get(task["hash"]):
-                task["name"] = item["title"] or item["name"] or task["name"]
+                title = item["title"] or item["name"]
+                if item["season"] is not None and item["episode"] is not None:
+                    title = f"S{item['season']}E{item['episode']} - {title}"
+                parent = item["parent_title"] or item["parent_name"]
+                task["title"] = parent or title
+                if parent:
+                    task["subtitle"] = title
                 task["path"] = item["path"]
 
     # filter tasks by state and keyword
@@ -364,7 +377,16 @@ async def list_transcodes(_, query: TranscodeTaskQuery) -> HTTPResponse:
     if query.keyword:
         keyword = query.keyword.lower()
         tasks = [
-            task for task in tasks if keyword in str(task.get("name") or "").lower()
+            task
+            for task in tasks
+            if any(
+                keyword in value.lower()
+                for value in (
+                    task.get("title") or task["name"],
+                    task.get("subtitle"),
+                )
+                if value
+            )
         ]
 
     # sort tasks by ordering field

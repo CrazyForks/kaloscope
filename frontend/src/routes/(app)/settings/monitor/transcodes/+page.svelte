@@ -201,7 +201,12 @@
       <div class="flex w-full flex-col gap-2 pr-2">
         <div class="flex items-center justify-between gap-1">
           <div class="min-w-0">
-            <div class="text-sm wrap-break-word">{task.name}</div>
+            <div class="text-sm wrap-break-word">
+              {task.title ?? task.name}
+              {#if task.subtitle}
+                <span class="italic-text">[{task.subtitle}]</span>
+              {/if}
+            </div>
             {#if task.path}
               <div class="truncate text-xs opacity-50">{task.path}</div>
             {/if}

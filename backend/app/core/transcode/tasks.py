@@ -69,6 +69,8 @@ class TaskSnapshot(TypedDict):
 
     id: str
     name: str
+    title: NotRequired[str]
+    subtitle: NotRequired[str]
     path: str | None
     hash: str
     state: TaskState

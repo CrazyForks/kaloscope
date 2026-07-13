@@ -247,7 +247,7 @@ def scan_outputs(
             tasks.append(
                 {
                     "id": task_id,
-                    "name": f"{media_hash}/{profile}",
+                    "name": task_id,
                     "path": None,
                     "hash": media_hash,
                     "state": state,

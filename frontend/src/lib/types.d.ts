@@ -764,6 +764,8 @@ export type TranscodeOptions = {
 export type TranscodeTask = {
   id: string;
   name: string;
+  title?: string;
+  subtitle?: string;
   path: string | null;
   hash: string;
   state: keyof typeof TranscodeState;
