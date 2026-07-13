@@ -86,7 +86,26 @@ const BASE_PLUGINS = [
 ];
 
 /**
- * The custom SVG icons for the player control bar.
+ * Create the 12-bar spinner used by the `Loading` plugin.
+ *
+ * @returns The spinner element.
+ */
+function createLoadingSpinner(): HTMLElement {
+  const enter = document.createElement('xg-enter');
+  enter.className = 'xgplayer-enter xgplayer-loading-enter';
+  const spinner = document.createElement('div');
+  spinner.className = 'xgplayer-enter-spinner';
+  for (let index = 1; index <= 12; index++) {
+    const bar = document.createElement('div');
+    bar.className = `xgplayer-enter-bar${index}`;
+    spinner.appendChild(bar);
+  }
+  enter.appendChild(spinner);
+  return enter;
+}
+
+/**
+ * The custom icons for the player controls.
  *
  * https://h5player.bytedance.com/plugins/icons.html
  */
@@ -103,7 +122,7 @@ const ICONS = {
   exitFullscreen: iconToSVG(icons.fullScreenMinimizeFilled),
   startPlay: iconToSVG(icons.playFilled, 'text-white !size-12'),
   startPause: iconToSVG(icons.pauseFilled, 'text-white !size-12'),
-  loadingIcon: iconToSVG(icons.loading, 'text-white')
+  loadingIcon: createLoadingSpinner
 };
 
 /**

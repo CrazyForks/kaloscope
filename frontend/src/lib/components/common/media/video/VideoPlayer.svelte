@@ -634,6 +634,30 @@
         }
       }
 
+      .xgplayer-loading {
+        width: 100px;
+        height: 100px;
+
+        xg-loading-inner {
+          animation: none;
+          > xg-enter.xgplayer-enter.xgplayer-loading-enter {
+            display: block;
+            position: relative;
+            z-index: auto;
+            left: auto;
+            top: auto;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+          }
+        }
+      }
+
+      &.xgplayer-mobile .xgplayer-loading {
+        width: 70px;
+        height: 70px;
+      }
+
       &.xgplayer-isloading,
       &.xgplayer-playing {
         .xgplayer-start {
@@ -647,6 +671,9 @@
         }
         .xgplayer-loading {
           display: block;
+        }
+        > xg-enter.xgplayer-enter:not(.xgplayer-loading-enter) .xgplayer-enter-spinner {
+          display: none;
         }
       }
 
