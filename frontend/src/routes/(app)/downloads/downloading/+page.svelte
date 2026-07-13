@@ -207,7 +207,7 @@
     <Button
       size="md"
       icon={icons.delete}
-      text={$_('action.batch_delete', $_('entity.task'))}
+      text={$_('action.batch_delete', $_('entity.tasks'))}
       onclick={() => batchDelete()}
     />
     <Button

@@ -95,7 +95,7 @@
   function confirmDelete(task: TranscodeTask) {
     confirm({
       icon: icons.delete,
-      title: $_('action.delete', `[${task.name}]`),
+      title: $_('action.delete', $_('entity.transcode')),
       onconfirm: () => deleteTasks([task.id])
     });
   }
@@ -175,7 +175,7 @@
     <Button
       size="md"
       icon={icons.delete}
-      text={$_('action.batch_delete', $_('entity.transcodes'))}
+      text={$_('action.batch_delete', $_('entity.tasks'))}
       onclick={() => batchDelete()}
     />
   {/snippet}
@@ -189,7 +189,7 @@
     <HCell actions />
   {/snippet}
   {#snippet row(task)}
-    {@const stateConfig = TranscodeState[task.state]}
+    {@const state = TranscodeState[task.state]}
     {@const quality = task.quality ? $_(`transcode.quality.${task.quality}`) : null}
     {@const resolution = task.resolution ? $_(`transcode.resolution.${task.resolution}`) : null}
     {@const hwaccel = task.hwaccel ? $_(`transcode.hwaccel.${task.hwaccel}`) : 'CPU'}
@@ -211,9 +211,9 @@
               <div class="truncate text-xs opacity-50">{task.path}</div>
             {/if}
           </div>
-          {#if task.state === 'error' && task.error_msg}
+          {#if task.state === 'error'}
             <iconify-icon
-              use:tooltip={{ content: task.error_msg, placement: 'left' }}
+              use:tooltip={{ content: task.error_msg || '', placement: 'left' }}
               icon={icons.info}
               width="1rem"
               class="text-error"
@@ -247,7 +247,9 @@
       </div>
     </Cell>
     <Cell class="max-lg:hidden">
-      <Badge icon={stateConfig.icon} iconColor={stateConfig.iconColor}>{$_(stateConfig.label)}</Badge>
+      <Badge icon={state.icon} iconColor={state.iconColor} iconClass={task.state === 'running' ? 'animate-spin' : ''}>
+        {$_(state.label)}
+      </Badge>
     </Cell>
     <Cell class="max-lg:hidden" text={task.encoded_size_text} />
     <Cell
@@ -257,14 +259,14 @@
           loading: loadingIds.has(task.id),
           class: '[&_iconify-icon]:text-surface/80',
           icon: icons.pauseFilled,
-          text: $_('action.stop', $_('entity.transcode')),
+          text: $_('action.stop', $_('entity.task')),
           onclick: () => stopTask(task)
         },
         {
           condition: deletable,
           loading: loadingIds.has(task.id),
           icon: icons.delete,
-          text: $_('action.delete', $_('entity.transcode')),
+          text: $_('action.delete', $_('entity.task')),
           onclick: () => confirmDelete(task)
         }
       ]}

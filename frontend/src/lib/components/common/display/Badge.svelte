@@ -18,6 +18,7 @@
     shadow?: boolean;
     /** The class names for the badge. */
     class?: string;
+    iconClass?: string;
     /** The click event handler. */
     onclick?: MouseEventHandler<HTMLDivElement>;
   };
@@ -32,6 +33,7 @@
     dashed = false,
     shadow = true,
     class: _class,
+    iconClass,
     onclick
   }: BadgeProps = $props();
 
@@ -50,7 +52,7 @@
   class="{badgeClass} {borderClass} {shadowClass} {uppercaseClass} {btnClass} {_class}"
 >
   {#if icon}
-    <iconify-icon {icon} width="1rem" class="size-4" style:color={iconColor}></iconify-icon>
+    <iconify-icon {icon} width="1rem" class="size-4 {iconClass}" style:color={iconColor}></iconify-icon>
   {/if}
   {@render children()}
 </div>
