@@ -1,13 +1,13 @@
 <script lang="ts" module>
   import type { DropdownProps } from '$lib/components';
-  import type { Nav, Resp } from '$lib/types';
+  import type { Navigation, Resp } from '$lib/types';
   import type { IconifyIcon } from 'iconify-icon';
   import type { MouseEventHandler } from 'svelte/elements';
   import { MediaQuery } from 'svelte/reactivity';
 
   type UserCenterProps = {
     /** Navigation items. */
-    navs?: Nav[];
+    navs?: Navigation[];
     /** Function to switch the theme. */
     switchTheme?: () => void;
     /** Function to switch the language. */

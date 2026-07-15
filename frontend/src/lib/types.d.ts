@@ -70,7 +70,7 @@ export type Option = {
 /**
  * An application navigation item.
  */
-export type Nav = {
+export type Navigation = {
   title: string;
   path: string;
   icon: string | IconifyIcon;

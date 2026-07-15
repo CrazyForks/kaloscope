@@ -1,9 +1,9 @@
 <script lang="ts" module>
-  import type { Nav } from '$lib/types';
+  import type { Navigation } from '$lib/types';
 
   export type NavbarProps = {
     /** Navigation items. */
-    navs?: Nav[];
+    navs?: Navigation[];
     /** Whether to show the back button. */
     back?: boolean;
     /** Whether to show the shadow effect. */

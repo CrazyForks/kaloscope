@@ -1,9 +1,9 @@
 <script lang="ts" module>
-  import type { Nav } from '$lib/types';
+  import type { Navigation } from '$lib/types';
 
   export type DockProps = {
     /** List of navigation items. */
-    navs: Nav[];
+    navs: Navigation[];
     /** Whether to show the shadow. */
     shadow?: boolean;
   };

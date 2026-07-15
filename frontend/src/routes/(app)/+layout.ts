@@ -1,10 +1,10 @@
 import { getCurrentRole } from '$lib/api';
 import { icons } from '$lib/icons';
-import type { Nav } from '$lib/types';
+import type { Navigation } from '$lib/types';
 import type { LayoutLoad } from './$types';
 
 export const load: LayoutLoad = async () => {
-  const navs: Nav[] = [
+  const navs: Navigation[] = [
     {
       title: 'nav.dashboard.title',
       path: '/dashboard',
