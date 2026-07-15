@@ -41,7 +41,6 @@ from app.services.flow import (
 )
 from app.services.user import UserFavoriteService
 
-# subroutes for all flow related operations
 flow = Blueprint("flow", url_prefix="/flow")
 
 

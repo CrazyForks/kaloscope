@@ -4,11 +4,10 @@ from pathlib import Path
 
 from sanic import Blueprint, HTTPResponse, json
 
-# subroutes for all system related operations
-system = Blueprint("system", url_prefix="/system")
-
 # path to the project's pyproject.toml (backend/pyproject.toml)
 _PYPROJECT = Path(__file__).parents[2] / "pyproject.toml"
+
+system = Blueprint("system", url_prefix="/system")
 
 
 @system.get("/platform")

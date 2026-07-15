@@ -4,7 +4,6 @@ from sanic_ext import validate
 from app.core.notifications import Notifications
 from app.models.base import IDs
 
-# subroutes for all notification related operations
 notification = Blueprint("notification", url_prefix="/notification")
 
 

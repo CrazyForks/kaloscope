@@ -12,9 +12,8 @@ from app.core.exceptions import BadRequestException, ErrorCode, ForbiddenExcepti
 from app.utils.disk import disk_usage, format_bytes
 
 # the concatenation of the drive and root
-ANCHOR = Path(__file__).anchor
+_ANCHOR = Path(__file__).anchor
 
-# subroutes for all filesystem related operations
 filesystem = Blueprint("filesystem", url_prefix="/filesystem")
 
 
@@ -30,7 +29,7 @@ class ListRequest(BaseModel):
 @validate(query=ListRequest)
 async def list_files(_, query: ListRequest) -> HTTPResponse:
     """List the files in the given directory."""
-    path = Path(query.path or ANCHOR)
+    path = Path(query.path or _ANCHOR)
     if not os.access(path, os.R_OK) or not path.is_dir():
         raise BadRequestException
     expand_to = Path(query.expand_to) if query.expand_to else None

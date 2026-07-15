@@ -8,7 +8,6 @@ from app.models.general import GlobalVariable, VariableQuery, VariableUpsert
 from app.models.user import UserRole
 from app.services.variable import VariableService
 
-# subroutes for all variable related operations
 variable = Blueprint("variable", url_prefix="/variable")
 
 

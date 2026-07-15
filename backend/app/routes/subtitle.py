@@ -5,7 +5,6 @@ from app.core.exceptions import ErrorCode, KaloscopeException
 from app.models.media import MediaResource
 from app.services.subtitle import SubtitleService
 
-# subroutes for all subtitle related operations
 subtitle = Blueprint("subtitle", url_prefix="/subtitle")
 
 

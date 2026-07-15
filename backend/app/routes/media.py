@@ -55,7 +55,6 @@ from app.services.media import MediaItemService, MediaLibService
 from app.utils.extractor import extract_title
 from app.utils.proxy import PROXY_RESPONSE_HEADERS, RemoteProxy, remote_proxy_request
 
-# subroutes for all media related operations
 media = Blueprint("media", url_prefix="/media")
 
 

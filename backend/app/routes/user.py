@@ -33,7 +33,6 @@ from app.services.user import (
     UserService,
 )
 
-# subroutes for all user related operations
 user = Blueprint("user", url_prefix="/user")
 
 

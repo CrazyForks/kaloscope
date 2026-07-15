@@ -8,7 +8,6 @@ from app.services.danmaku import (
     EpisodeQuery,
 )
 
-# subroutes for all danmaku related operations
 danmaku = Blueprint("danmaku", url_prefix="/danmaku")
 
 

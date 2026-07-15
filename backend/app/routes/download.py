@@ -36,7 +36,6 @@ from app.services.download import (
 from app.utils.bittorrent import standardize_magnet
 from app.utils.disk import disk_usage
 
-# subroutes for all download related operations
 download = Blueprint("download", url_prefix="/download")
 
 

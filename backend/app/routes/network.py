@@ -17,7 +17,6 @@ from app.models.network import (
 from app.models.user import UserRole
 from app.services.network import DNSResolverService, HTTPProxyService, URLRuleService
 
-# subroutes for all network related operations
 network = Blueprint("network", url_prefix="/network")
 
 

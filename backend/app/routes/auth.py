@@ -10,7 +10,6 @@ from app.models.user import UserInfo, UserLogin
 from app.services.user import UserService
 from app.utils.dict import remove, values
 
-# subroutes for all authentication related operations
 auth = Blueprint("auth", url_prefix="/auth")
 
 

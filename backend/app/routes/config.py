@@ -8,7 +8,6 @@ from app.models.general import ConfigQuery, ConfigUpsert, GlobalConfig
 from app.models.user import UserRole
 from app.services.config import ConfigService
 
-# subroutes for all config related operations
 config = Blueprint("config", url_prefix="/config")
 
 

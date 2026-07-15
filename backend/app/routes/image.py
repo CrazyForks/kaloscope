@@ -12,7 +12,6 @@ from app.core.config import KaloscopeConfig
 from app.core.exceptions import ErrorCode, KaloscopeException
 from app.utils.proxy import PROXY_RESPONSE_HEADERS, RemoteProxy, remote_proxy_request
 
-# subroutes for all image related operations
 image = Blueprint("image")
 
 

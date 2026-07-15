@@ -8,7 +8,6 @@ from sanic_ext import validate
 from app.core.renderer import render
 from app.utils import json
 
-# subroutes for all code related operations
 code = Blueprint("code", url_prefix="/code")
 
 
