@@ -1,6 +1,9 @@
-from typing import Any
+from typing import Any, cast
 
 import httpx
+from curl_cffi import AsyncSession
+from curl_cffi.requests.exceptions import RequestException
+from curl_cffi.requests.session import HttpMethod
 from sanic import Sanic
 from sanic.log import logger
 
@@ -15,12 +18,25 @@ from app.core.flow.fields import (
     URLField,
 )
 from app.core.flow.nodes.base import Node, general_node
+from app.core.network import resolve_proxy
 from app.core.renderer import render
 from app.utils.json import try_loads
+
+_IMPERSONATION_HEADERS = {
+    "user-agent",
+    "sec-ch-ua",
+    "sec-ch-ua-mobile",
+    "sec-ch-ua-platform",
+}
 
 
 @general_node(order=1, icon="globe")
 class HTTPNode(Node):
+    client = SelectField(
+        required=True,
+        options={"httpx": "httpx", "curl_cffi": "curl_cffi"},
+        default="httpx",
+    )
     method = SelectField(
         required=True,
         options={
@@ -33,10 +49,11 @@ class HTTPNode(Node):
             "OPTIONS": "OPTIONS",
         },
         default="GET",
+        span=20,
     )
-    url = URLField(required=True, maxlength=1024)
+    url = URLField(required=True, maxlength=1024, span=80)
     headers = KVPairsField(placeholder=("key", "value"))
-    body = CodeField(language="jinja2", width="32rem")
+    body = CodeField(language="jinja2", width="32rem", collapse=True)
     ___ = DividerField("response")
     formatter = CodeField(
         "formatter",
@@ -49,7 +66,7 @@ class HTTPNode(Node):
 
     @classmethod
     async def execute(cls, *, node_data: dict[str, Any], context: Context, **kwargs):
-        method = str(cls.method.extract(node_data))
+        method = cast(HttpMethod, str(cls.method.extract(node_data)))
         url = cls.url.extract(node_data, context=context)
 
         # request headers
@@ -97,23 +114,45 @@ class HTTPNode(Node):
                 binary = body.encode(ENCODING)
 
         # make the request
-        client: httpx.AsyncClient = Sanic.get_app().ctx.httpx
+        app_ctx = Sanic.get_app().ctx
         try:
-            response = await client.request(
-                method,
-                url,
-                headers=headers,
-                content=binary,
-                data=form,
-                json=json,
-                extensions=extensions,
-            )
-            if response.extensions.get("hishel_from_cache"):
-                logger.debug(
-                    'HTTP Response: served from cache "%s %s"',
-                    response.http_version,
-                    response.status_code,
+            if cls.client.extract(node_data) == "curl_cffi":
+                # use curl_cffi client
+                curl_client: AsyncSession = app_ctx.curl_cffi
+                response = await curl_client.request(
+                    method,
+                    url,
+                    headers=[
+                        (key, value)
+                        for key, value in headers.multi_items()
+                        if key.lower() not in _IMPERSONATION_HEADERS
+                    ],
+                    data=cast(
+                        dict[str, str] | bytes | None,
+                        binary if binary is not None else form,
+                    ),
+                    json=cast(dict[str, Any] | list[Any] | None, json),
+                    proxy=await resolve_proxy(url),
+                    impersonate="chrome",
                 )
+            else:
+                # use HTTPX client
+                httpx_client: httpx.AsyncClient = app_ctx.httpx
+                response = await httpx_client.request(
+                    method,
+                    url,
+                    headers=headers,
+                    content=binary,
+                    data=form,
+                    json=json,
+                    extensions=extensions,
+                )
+                if response.extensions.get("hishel_from_cache"):
+                    logger.debug(
+                        'HTTP Response: served from cache "%s %s"',
+                        response.http_version,
+                        response.status_code,
+                    )
 
             formatter = cls.formatter.extract(node_data)
             # merge the rendered response into context
@@ -122,6 +161,6 @@ class HTTPNode(Node):
                 return
             if isinstance((obj := try_loads(rendered, with_comments=True)), dict):
                 context.update(obj)
-        except httpx.RequestError as e:
+        except (httpx.RequestError, RequestException) as e:
             logger.error("An error occurred while requesting %s.", url, exc_info=True)
             raise KaloscopeException(ErrorCode.HTTP_REQUEST_FAILED) from e
