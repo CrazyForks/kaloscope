@@ -208,20 +208,24 @@
 
     let comments = danmakus.filter((danmaku) => danmaku.text && !blockPattern?.test(danmaku.text));
     if (settings?.merge) {
+      type DanmakuGroup = { comment: Danmaku; count: number; start: number };
       // eslint-disable-next-line svelte/prefer-svelte-reactivity
-      const groups = new Map<string, { comment: Danmaku; count: number }>();
+      const latestGroups = new Map<string, DanmakuGroup>();
+      const mergedGroups: DanmakuGroup[] = [];
+      comments.sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
       for (const comment of comments) {
-        const window = Math.floor((comment.start ?? 0) / DANMAKU_MERGE_WINDOW);
-        const key = `${window}:${comment.text}`;
-        const group = groups.get(key);
-        if (group) {
+        const start = comment.start ?? 0;
+        const group = latestGroups.get(comment.text);
+        if (group && start - group.start <= DANMAKU_MERGE_WINDOW) {
           group.count += 1;
         } else {
-          groups.set(key, { comment, count: 1 });
+          const nextGroup = { comment, count: 1, start };
+          latestGroups.set(comment.text, nextGroup);
+          mergedGroups.push(nextGroup);
         }
       }
 
-      comments = [...groups.values()].map(({ comment, count }) => ({
+      comments = mergedGroups.map(({ comment, count }) => ({
         ...comment,
         text: count >= DANMAKU_MERGE_MIN_COUNT ? `${comment.text} X${count}` : comment.text
       }));
