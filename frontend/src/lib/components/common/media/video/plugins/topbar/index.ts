@@ -4,13 +4,25 @@ import { Events, Plugin } from 'xgplayer';
 
 const { POSITIONS } = Plugin;
 
+/**
+ * Player top bar with navigation, media metadata, and settings access.
+ */
 export default class TopBar extends Plugin {
+  /**
+   * The last accepted control event timestamp.
+   */
   private clickTimeStamp = 0;
 
+  /**
+   * The xgplayer plugin name.
+   */
   static get pluginName() {
     return 'topBar';
   }
 
+  /**
+   * The default top bar configuration.
+   */
   static get defaultConfig() {
     return {
       position: POSITIONS.ROOT_TOP,
@@ -22,15 +34,26 @@ export default class TopBar extends Plugin {
     };
   }
 
+  /**
+   * The current media title.
+   */
   get title(): string {
     return this.config.title || '';
   }
 
+  /**
+   * The formatted uploader and upload time label.
+   */
   get uploader(): string {
     const { uploader, uploadedAt } = this.config;
     return `${uploader ? `UP: ${uploader}` : ''}${uploader && uploadedAt ? ' ・ ' : ''}${uploadedAt}`;
   }
 
+  /**
+   * Reject duplicate `touchend` and synthetic `click` events.
+   *
+   * @returns Whether the current event falls within the debounce window.
+   */
   private isClickDebounced() {
     const now = Date.now();
     if (now - this.clickTimeStamp < 300) {
@@ -40,6 +63,11 @@ export default class TopBar extends Plugin {
     return false;
   }
 
+  /**
+   * Navigate back using the configured callback or app history.
+   *
+   * @param event - The control activation event.
+   */
   onBackIconClick = (event: Event) => {
     if (this.isClickDebounced()) {
       return;
@@ -53,6 +81,11 @@ export default class TopBar extends Plugin {
     }
   };
 
+  /**
+   * Open the player settings modal.
+   *
+   * @param event - The control activation event.
+   */
   onSettingsIconClick = (event: Event) => {
     if (this.isClickDebounced()) {
       return;
@@ -64,19 +97,21 @@ export default class TopBar extends Plugin {
     }
   };
 
+  /**
+   * Toggle the title marquee when its content overflows.
+   */
   toggleMarquee() {
     const titleEl = this.root?.querySelector('.font-title');
     const titleCopyEl = titleEl?.querySelector('span:last-child');
     const titleParentEl = titleEl?.parentElement;
     if (titleEl && titleCopyEl && titleParentEl) {
+      // the visible copy doubles the measured marquee width
       const scrollWidth = titleCopyEl.classList.contains('hidden') ? titleEl.scrollWidth : titleEl.scrollWidth / 2;
       if (scrollWidth > titleParentEl.clientWidth) {
-        // enable marquee animation if title overflows
         titleEl.classList.add('animate-marquee');
         titleCopyEl.classList.remove('hidden');
         titleParentEl.classList.add('marquee-mask');
       } else {
-        // disable marquee animation if title fits
         titleEl.classList.remove('animate-marquee');
         titleCopyEl.classList.add('hidden');
         titleParentEl.classList.remove('marquee-mask');
@@ -84,6 +119,9 @@ export default class TopBar extends Plugin {
     }
   }
 
+  /**
+   * Bind controls and keep title layout synchronized with player events.
+   */
   afterCreate() {
     this.bind('.back-icon', ['click', 'touchend'], this.onBackIconClick);
     this.bind('.settings-icon', ['click', 'touchend'], this.onSettingsIconClick);
@@ -94,7 +132,7 @@ export default class TopBar extends Plugin {
     this.on(Events.PLAYNEXT, () => {
       const newTitle = this.player.config.topBar.title;
       if (newTitle && newTitle !== this.title) {
-        // update title when playNext with a different title
+        // keep the title in sync when chapter playback changes media
         this.config.title = newTitle;
         const titleEl = this.root?.querySelector('.font-title');
         if (titleEl) {
@@ -108,11 +146,17 @@ export default class TopBar extends Plugin {
     });
   }
 
+  /**
+   * Remove top bar control bindings.
+   */
   destroy() {
     this.unbind('.back-icon', ['click', 'touchend'], this.onBackIconClick);
     this.unbind('.settings-icon', ['click', 'touchend'], this.onSettingsIconClick);
   }
 
+  /**
+   * Render top bar controls and media metadata.
+   */
   render() {
     return `
     <div class="flex gap-4 w-full">

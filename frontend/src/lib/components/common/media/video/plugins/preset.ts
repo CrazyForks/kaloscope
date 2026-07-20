@@ -2,7 +2,6 @@ import { icons, iconToSVG } from '$lib/icons';
 import { isTranscodedStream, sniffer } from '$lib/utils';
 import { I18N, type BasePlugin, type IPlayerOptions } from 'xgplayer';
 import type { IUrl } from 'xgplayer/es/defaultConfig';
-// import plugins
 import FLV from 'xgplayer-flv';
 import HLS from 'xgplayer-hls';
 import MP4 from 'xgplayer-mp4';
@@ -36,15 +35,20 @@ import PlaybackRate from './playbackrate';
 import TextTrack from './texttrack';
 import TopBar from './topbar';
 
+/**
+ * A media pipeline plugin supported by the player preset.
+ */
 type VideoPlugin = typeof FLV | typeof HLS | typeof MP4 | typeof Shaka;
 
-// import all i18n json files from locales directory
+/**
+ * App locale dictionaries eagerly loaded for xgplayer registration.
+ */
 const locales = import.meta.glob('$lib/locales/*.json', {
   eager: true,
   import: 'default'
 });
 
-// register i18n languages
+// expose app media translations through xgplayer i18n
 // https://h5player.bytedance.com/guide/i18n.html
 Object.entries(locales).forEach(([path, content]) => {
   const lang = path.split('/').pop()?.slice(0, -5);
@@ -126,27 +130,39 @@ const ICONS = {
 };
 
 /**
- * Default preset plugins for the video player.
+ * App plugin preset with device and media pipeline selection.
  */
 export default class DefaultPreset {
+  /**
+   * The plugins enabled for this player instance.
+   */
   plugins: Partial<BasePlugin>[];
 
+  /**
+   * Build the player plugin list and shared media options.
+   *
+   * @param _ - The unused preset context supplied by xgplayer.
+   * @param options - The player options updated by the preset.
+   */
   constructor(_: unknown, options: IPlayerOptions) {
-    // set base plugins
     this.plugins = [...BASE_PLUGINS];
+    // live streams omit duration-based controls
     if (!options.isLive) {
       this.plugins.push(Time, TimeSegments, Progress, MiniProgress, ProgressPreview);
     }
+    // select controls for the current input model
     if (sniffer.isMobile()) {
       this.plugins.push(Mobile);
     } else {
       this.plugins.push(PC, Keyboard);
     }
     if (sniffer.isIpad()) {
+      // iPad needs desktop controls alongside touch gestures
       this.plugins.push(PC);
     }
-    // set video plugins
+    // select the media pipeline after device plugins are known
     this.plugins.push(...videoPlugins(options.videoType || guessVideoType(options.url), options.url));
+    // prefer `ManagedMediaSource` when the browser supports it
     options.mp4Plugin = {
       preferMMS: true
     };
@@ -156,7 +172,6 @@ export default class DefaultPreset {
     options.hls = {
       preferMMS: true
     };
-    // set icons
     options.icons = ICONS;
   }
 }
@@ -191,7 +206,7 @@ function guessVideoType(url?: IUrl): string | null {
  * @returns An array of video plugins.
  */
 export function videoPlugins(videoType: string | null | undefined, url: IUrl | undefined): VideoPlugin[] {
-  // if it's a transcoded stream, use HLS plugin if supported since transcoded streams are delivered via HLS
+  // server transcodes always expose an HLS stream
   if (isTranscodedStream(url)) {
     return HLS.isSupported() ? [HLS] : [];
   }
@@ -199,6 +214,7 @@ export function videoPlugins(videoType: string | null | undefined, url: IUrl | u
   videoType = videoType?.toLowerCase();
   if (videoType === 'mp4') {
     // https://h5player.bytedance.com/plugins/extension/xgplayer-mp4.html
+    // native iOS playback is more reliable than the MP4 plugin
     const ios = sniffer.isIos();
     if (!ios) {
       return [MP4];
@@ -211,6 +227,7 @@ export function videoPlugins(videoType: string | null | undefined, url: IUrl | u
     }
   } else if (videoType === 'hls') {
     // https://h5player.bytedance.com/plugins/extension/xgplayer-hls.html
+    // prefer native HLS when the browser exposes it
     const native = document.createElement('video').canPlayType('application/vnd.apple.mpegurl');
     if (!native && HLS.isSupported()) {
       return [HLS];

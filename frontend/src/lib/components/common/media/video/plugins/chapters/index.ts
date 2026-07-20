@@ -5,25 +5,43 @@ import OptionList from 'xgplayer/es/plugins/common/optionList';
 import OptionsIcon from 'xgplayer/es/plugins/common/optionsIcon';
 import './index.css';
 
+/**
+ * The option attributes used by xgplayer's delegated option list.
+ */
 type AttrObject = {
   [key: string]: string | number | undefined;
   index?: number;
 };
 
+/**
+ * The previous and selected chapter option values.
+ */
 type ChangeData = {
   from: AttrObject | null;
   to: AttrObject;
 };
 
+/**
+ * A delegated DOM event emitted by xgplayer's option list.
+ */
 type DelegateEvent = Event & {
   delegateTarget: Element;
 };
 
+/**
+ * Chapter selector with playback pipeline and progress marker support.
+ */
 export default class Chapters extends OptionsIcon {
+  /**
+   * The xgplayer plugin name.
+   */
   static get pluginName() {
     return 'chapters';
   }
 
+  /**
+   * The default chapter selector configuration.
+   */
   static get defaultConfig() {
     return {
       ...OptionsIcon.defaultConfig,
@@ -36,6 +54,9 @@ export default class Chapters extends OptionsIcon {
     };
   }
 
+  /**
+   * Close other option menus before opening the chapter selector.
+   */
   onIconClick = () => {
     for (const name of ['definitions', 'playbackRate']) {
       const plugin = this.player.getPlugin(name);
@@ -46,11 +67,18 @@ export default class Chapters extends OptionsIcon {
     }
   };
 
+  /**
+   * Switch to the selected chapter using its resolved playback URL.
+   *
+   * @param event - The delegated option click event.
+   * @param data - The previous and selected option values.
+   */
   onItemClick = (event: DelegateEvent, data: ChangeData) => {
     super.onItemClick(event, data);
 
     let { url } = data.to;
     if (typeof url === 'string') {
+      // resolve chapter URLs through the active playback mode
       const resolvedUrl: string = this.player.config.settings.resolveChapterUrl(url);
       if (isTranscodedStream(resolvedUrl)) {
         this.player.config.settings.showSwitchLoading();
@@ -60,6 +88,7 @@ export default class Chapters extends OptionsIcon {
 
     const { id, showText } = data.to;
     if (typeof this.config.chapterChange === 'function') {
+      // let callers own navigation when a chapter callback is configured
       this.config.chapterChange({
         id: id,
         url: url,
@@ -70,12 +99,21 @@ export default class Chapters extends OptionsIcon {
     }
   };
 
+  /**
+   * Restart playback with metadata for the selected chapter.
+   *
+   * @param url - The resolved chapter URL.
+   * @param title - The chapter title shown in the top bar.
+   */
   private async playNext(url: string, title: string | number | undefined) {
     const { duration, progressDot } = await this.player.config.settings.probeMedia(url);
     this.player.getPlugin('progresspreview')?.updateAllDots(progressDot);
     this.player.playNext({ url, topBar: { title }, customDuration: duration });
   }
 
+  /**
+   * Register the app chapter icon.
+   */
   registerIcons() {
     return {
       chapters: {
@@ -85,11 +123,17 @@ export default class Chapters extends OptionsIcon {
     };
   }
 
+  /**
+   * Initialize and render the chapter options.
+   */
   afterCreate() {
     super.afterCreate();
     this.renderItemList();
   }
 
+  /**
+   * Render chapter options and select the active chapter.
+   */
   renderItemList() {
     const { config, optionsList, player } = this;
 
@@ -97,7 +141,7 @@ export default class Chapters extends OptionsIcon {
     const items = (config.list as Chapter[]).map((item, index) => {
       let url = player.config.url;
       if (typeof url === 'string' && isTranscodedStream(url)) {
-        // remove transcode=true from url if it's a transcoded stream
+        // compare transcoded playback against its direct chapter URL
         url = url.replace('&transcode=true', '');
       }
       const chapterItem = {
@@ -115,6 +159,7 @@ export default class Chapters extends OptionsIcon {
     if (optionsList) {
       optionsList.renderItemList(items);
     } else {
+      // side lists need an option list rooted in the player container
       const isSide = config.listType === 'side';
       this.optionsList = new OptionList({
         root: isSide ? player.innerContainer || player.root : this.root,
@@ -129,12 +174,18 @@ export default class Chapters extends OptionsIcon {
     }
   }
 
+  /**
+   * Show the selector when chapters are available.
+   */
   show() {
     if (this.config.list && this.config.list.length > 0) {
       super.show();
     }
   }
 
+  /**
+   * Destroy the chapter selector.
+   */
   destroy() {
     super.destroy();
   }

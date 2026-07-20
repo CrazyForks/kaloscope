@@ -4,25 +4,43 @@ import { isTranscodedStream } from '$lib/utils';
 import OptionsIcon from 'xgplayer/es/plugins/common/optionsIcon';
 import './index.css';
 
+/**
+ * The option attributes used by xgplayer's delegated option list.
+ */
 type AttrObject = {
   [key: string]: string | number | undefined;
   index?: number;
 };
 
+/**
+ * The previous and selected definition option values.
+ */
 type ChangeData = {
   from: AttrObject | null;
   to: AttrObject;
 };
 
+/**
+ * A delegated DOM event emitted by xgplayer's option list.
+ */
 type DelegateEvent = Event & {
   delegateTarget: Element;
 };
 
+/**
+ * Definition selector backed by the app playback source switcher.
+ */
 export default class Definitions extends OptionsIcon {
+  /**
+   * The xgplayer plugin name.
+   */
   static get pluginName() {
     return 'definitions';
   }
 
+  /**
+   * The default definition selector configuration.
+   */
   static get defaultConfig() {
     return {
       ...OptionsIcon.defaultConfig,
@@ -34,6 +52,9 @@ export default class Definitions extends OptionsIcon {
     };
   }
 
+  /**
+   * Close other option menus before opening the definition selector.
+   */
   onIconClick = () => {
     for (const name of ['chapters', 'playbackRate']) {
       const plugin = this.player.getPlugin(name);
@@ -44,6 +65,12 @@ export default class Definitions extends OptionsIcon {
     }
   };
 
+  /**
+   * Switch playback to the selected definition.
+   *
+   * @param event - The delegated option click event.
+   * @param data - The previous and selected option values.
+   */
   onItemClick = (event: DelegateEvent, data: ChangeData) => {
     super.onItemClick(event, data);
     const { url } = data.to;
@@ -52,6 +79,9 @@ export default class Definitions extends OptionsIcon {
     }
   };
 
+  /**
+   * Register the app definition icon.
+   */
   registerIcons() {
     return {
       definitions: {
@@ -61,20 +91,28 @@ export default class Definitions extends OptionsIcon {
     };
   }
 
+  /**
+   * Initialize options and synchronize external source changes.
+   */
   afterCreate() {
     super.afterCreate();
     this.renderItemList();
     this.on('url_change', (url: string) => {
+      // refresh selection after source changes outside this menu
       this.player.config.url = url;
       this.renderItemList();
     });
     this.bind('click', this.onIconClick);
   }
 
+  /**
+   * Render definition options and select the active source.
+   */
   renderItemList() {
     this.curIndex = -1;
     let url = this.player.config.url;
     if (typeof url === 'string' && isTranscodedStream(url)) {
+      // compare transcoded playback against its direct definition URL
       url = url.replace('&transcode=true', '');
     }
     const items = ((this.config.list as Definition[] | undefined) ?? []).map((item, index) => {
@@ -92,12 +130,18 @@ export default class Definitions extends OptionsIcon {
     this.optionsList?.root?.classList.add('xgplayer-definitions');
   }
 
+  /**
+   * Show the selector when definitions are available.
+   */
   show() {
     if (this.config.list && this.config.list.length > 0) {
       super.show();
     }
   }
 
+  /**
+   * Remove the definition selector event binding.
+   */
   destroy() {
     super.destroy();
     this.unbind('click', this.onIconClick);

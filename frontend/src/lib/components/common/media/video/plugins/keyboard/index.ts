@@ -1,20 +1,46 @@
 import Keyboard from 'xgplayer/es/plugins/keyboard';
 
+/**
+ * The trigger action that hides the playback rate note.
+ */
 const PLAYBACK_RATE_HIDDEN = 'auto';
+
+/**
+ * The trigger action that shows the playback rate note.
+ */
 const PLAYBACK_RATE_VISIBLE = 'playbackrate';
 
 /**
  * Keyboard plugin that reuses xgplayer mobile's playback-rate note for keyboard long-press forward.
  */
 export default class KeyboardWithPlaybackRateNote extends Keyboard {
+  /**
+   * The lazily-created playback rate note trigger.
+   */
   private playbackRateTrigger: HTMLElement | null = null;
+
+  /**
+   * Whether long-press forward playback is active.
+   */
   private isForwardPlaybackRateActive = false;
+
+  /**
+   * Whether a short forward seek is waiting for `keyup`.
+   */
   private isForwardSeekPending = false;
 
+  /**
+   * End an active key press when the window loses focus.
+   */
   private onWindowBlur = () => {
     this.handleKeyUp(new Event('blur'));
   };
 
+  /**
+   * End long-press forward playback from a window-level `keyup`.
+   *
+   * @param event - The released keyboard event.
+   */
   private onWindowKeyUp = (event: KeyboardEvent) => {
     if (this.shouldStopForward(event)) {
       this.handleKeyUp(event);
@@ -67,12 +93,14 @@ export default class KeyboardWithPlaybackRateNote extends Keyboard {
   handleKeyUp(event: Event) {
     const shouldStop = this.shouldStopForward(event);
     if (this.isForwardSeekPending) {
+      // treat a released pending forward key as a short seek
       this.isForwardSeekPending = false;
       if (this.isForwardKey(event)) {
         this.seek(event);
       }
     }
     if (this.isForwardPlaybackRateActive && !shouldStop) {
+      // ignore unrelated `keyup` events without restoring the temporary rate
       this.resetKeyPressState();
       return;
     }
@@ -188,6 +216,7 @@ export default class KeyboardWithPlaybackRateNote extends Keyboard {
       return null;
     }
 
+    // mirror xgplayer mobile's trigger structure to reuse its note styles
     const trigger = document.createElement('xg-trigger');
     trigger.className = 'keyboard-playbackrate-trigger';
     trigger.dataset.xgAction = PLAYBACK_RATE_HIDDEN;
