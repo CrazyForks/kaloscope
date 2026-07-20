@@ -197,7 +197,7 @@
     }
 
     let blockPattern: RegExp | null = null;
-    const pattern = settings?.blockPattern?.trim();
+    const pattern = settings?.blockPattern;
     if (pattern) {
       try {
         blockPattern = new RegExp(pattern, 'iu');
