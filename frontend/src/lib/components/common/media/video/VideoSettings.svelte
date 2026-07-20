@@ -208,6 +208,7 @@
 
     let comments = danmakus.filter((danmaku) => danmaku.text && !blockPattern?.test(danmaku.text));
     if (settings?.merge) {
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity
       const groups = new Map<string, { comment: Danmaku; count: number }>();
       for (const comment of comments) {
         const window = Math.floor((comment.start ?? 0) / DANMAKU_MERGE_WINDOW);

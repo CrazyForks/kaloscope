@@ -1,6 +1,6 @@
 # Third-Party License Notices
 
-> This document was automatically generated on July 20, 2026, 05:46 AM UTC
+> This document was automatically generated on July 20, 2026, 08:37 AM UTC
 
 ## Frontend Dependencies
 
@@ -66,7 +66,7 @@
 | [tippy.js](https://github.com/atomiks/tippyjs)                                             | 6.3.7   | MIT               | The complete tooltip, popover, dropdown, and menu solution for the web                                                             |
 | [tsx](https://github.com/privatenumber/tsx)                                                | 4.23.1  | MIT               | TypeScript Execute (tsx): Node.js enhanced with esbuild to run TypeScript & ESM files                                              |
 | [typescript-eslint](https://github.com/typescript-eslint/typescript-eslint)                | 8.64.0  | MIT               | Tooling which enables you to use TypeScript with ESLint                                                                            |
-| [typescript](https://github.com/microsoft/TypeScript)                                      | 7.0.2   | Apache-2.0        | TypeScript is a language for application scale JavaScript development                                                              |
+| [typescript](https://github.com/microsoft/TypeScript)                                      | 6.0.3   | Apache-2.0        | TypeScript is a language for application scale JavaScript development                                                              |
 | [ua-parser-js](https://github.com/faisalman/ua-parser-js)                                  | 2.0.10  | AGPL-3.0-or-later | Detect Browser, Engine, OS, CPU, and Device type/model from User-Agent & Client Hints data. Supports browser & node.js environment |
 | [uuid](https://github.com/uuidjs/uuid)                                                     | 14.0.1  | MIT               | RFC9562 UUIDs                                                                                                                      |
 | [vite-plugin-devtools-json](https://github.com/ChromeDevTools/vite-plugin-devtools-json)   | 1.0.0   | MIT               | Vite plugin for generating `com.chrome.devtools.json` on the fly in the devserver.                                                 |

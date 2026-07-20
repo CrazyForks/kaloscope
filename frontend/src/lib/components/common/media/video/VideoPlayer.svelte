@@ -313,8 +313,8 @@
     }
 
     // create a new player instance
-    SimplePlayer.defaultPreset = DefaultPreset;
     player = new SimplePlayer({
+      presets: [DefaultPreset],
       id: id,
       url: url,
       width: options.width ?? width,
