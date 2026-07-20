@@ -39,7 +39,7 @@ class Subtitle(BaseModel):
 class SubtitleService:
     """The service class for local subtitle discovery and loading."""
 
-    # xgplayer-subtitles expects WebVTT, so other formats are converted on load
+    # normalize subtitles to `WebVTT` for consistent rendering
     SUPPORTED_EMBEDDED_CODECS = {"ass", "ssa", "subrip", "webvtt", "text", "mov_text"}
     SUPPORTED_EXTERNAL_FORMATS = {"vtt", "ass", "ssa", "srt"}
     EXTERNAL_CONVERTERS = {"ass": ass_to_vtt, "ssa": ass_to_vtt, "srt": srt_to_vtt}
