@@ -319,15 +319,6 @@
   export const landscapeMode = () => $video?.landscapeMode;
 
   /**
-   * Store the raw danmakus for applying settings.
-   *
-   * @param comments - The raw video comments.
-   */
-  export function setDanmakus(comments?: Danmaku[] | null) {
-    rawDanmakus = comments ?? [];
-  }
-
-  /**
    * Probe playback metadata for a local media stream.
    *
    * @param url - The media stream URL.
@@ -812,6 +803,15 @@
   }
 
   /**
+   * Store the raw danmakus for applying settings.
+   *
+   * @param comments - The raw video comments.
+   */
+  export function setDanmakus(comments?: Danmaku[] | null) {
+    rawDanmakus = comments ?? [];
+  }
+
+  /**
    * Update the danmakus for the current video.
    *
    * @param data - The danmaku data wrapper.
@@ -1146,10 +1146,10 @@
             onchange={(event) => applyDanmakuSettings({ ...$danmaku, merge: event.currentTarget.checked })}
           />
         </div>
-        <div class="flex-col items-start! gap-1!">
+        <div>
           {@render optionLabel($_('media.danmaku.block_pattern'), $_('media.danmaku.block_pattern_tip'))}
           <input
-            class="input w-full"
+            class="input w-0 grow"
             bind:value={$danmaku.blockPattern}
             placeholder={'^\\d+$|^\\p{P}+$'}
             oninput={(event) => applyDanmakuSettings({ ...$danmaku, blockPattern: event.currentTarget.value })}
@@ -1422,7 +1422,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 1rem;
-      min-height: 3.25rem;
+      min-height: 3rem;
       margin-top: 0.25rem;
       &:first-child {
         margin-top: 0.75rem;
