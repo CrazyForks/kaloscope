@@ -36,7 +36,7 @@ repos:
     hooks:
       - id: prettier
         additional_dependencies:
-          - prettier@3.9.5
+          - prettier@3.9.6
           # https://github.com/sveltejs/prettier-plugin-svelte/issues/155#issuecomment-1932256171
           - prettier-plugin-svelte@4.1.1
           # https://github.com/tailwindlabs/prettier-plugin-tailwindcss/issues/228#issuecomment-1920361470
