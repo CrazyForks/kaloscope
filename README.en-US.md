@@ -1,8 +1,12 @@
+<div align="right">
+
+📖 **English** | [简体中文](README.md)
+
+</div>
+
 <div align="center">
 
-[简体中文](README.md) | **English (en-US)**
-
-![Kaloscope](https://socialify.git.ci/kaloscope/kaloscope/image?custom_description=A%20local%20media%20library%20management%20tool%20powered%20by%20visual%20workflows&description=1&font=KoHo&logo=https%3A%2F%2Fraw.githubusercontent.com%2Fkaloscope%2Fkaloscope%2Frefs%2Fheads%2Fmain%2Ffrontend%2Fstatic%2Flogo.png&name=1&owner=1&pattern=Plus&theme=Auto)
+![Kaloscope](https://socialify.git.ci/kaloscope/kaloscope/image?custom_description=A%20local%20media%20library%20management%20tool%20powered%20by%20visual%20workflows&description=1&font=Raleway&logo=https%3A%2F%2Fraw.githubusercontent.com%2Fkaloscope%2Fkaloscope%2Frefs%2Fheads%2Fmain%2Ffrontend%2Fstatic%2Flogo.png&name=1&owner=1&pattern=Plus&theme=Auto)
 [![GitHub Release](https://img.shields.io/github/v/release/kaloscope/kaloscope?label=Release&color=green&style=flat-square)](https://github.com/kaloscope/kaloscope/releases)
 [![GitHub Stars](https://img.shields.io/github/stars/kaloscope/kaloscope?logo=github&label=Stars&color=yellow&style=flat-square)](https://github.com/kaloscope/kaloscope/stargazers)
 [![Docker Pulls](https://img.shields.io/docker/pulls/kaloscope/kaloscope?logo=docker&label=Docker%20Pulls&color=2496ED&style=flat-square)](https://hub.docker.com/r/kaloscope/kaloscope)
@@ -168,4 +172,4 @@ Thank you to everyone who has contributed code, documentation, feedback, and ide
 
 ## License
 
-This project is licensed under the [`GPLv3`](LICENSE).
+This project is released under the [`GPLv3`](LICENSE) open source license.
