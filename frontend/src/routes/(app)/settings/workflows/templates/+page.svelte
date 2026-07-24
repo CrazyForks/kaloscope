@@ -27,7 +27,7 @@
   let tmplName: string = $state('');
   let tmpls: FlowTemplate[] = $state([]);
 
-  const pagination: PaginatorProps = $state({ current: 1, size: 16, onchange: search });
+  const pagination: PaginatorProps = $state({ current: 1, size: 12, onchange: search });
   const ordering = createSortField();
   const loading = createLoading();
 
@@ -137,7 +137,7 @@
   mode="grid"
   data={tmpls}
   loading={$loading}
-  gridClass="grid-cols-sparse"
+  gridClass="w60:grid-cols-2! w84:grid-cols-3! w108:grid-cols-4!"
   itemClass="mb-2 border overflow-hidden rounded-sm bg-base-100 hover:shadow-lg"
 >
   {#snippet filters()}
