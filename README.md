@@ -33,8 +33,7 @@
 |
 [TG 群组](https://t.me/kaloscope_official)
 
-| <img align="center" src="screenshots/danmaku-settings.png" /> | <img align="center" src="screenshots/image-viewer.png" /> | <img align="center" src="screenshots/text-viewer.png" /> |
-| ------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------- |
+<img align="center" src="screenshots/dashboard.png" />
 
 </div>
 
@@ -97,6 +96,9 @@ docker run -d \
 > 更多详细配置说明请参考[`部署指南`](https://kaloscope.org/docs/deployment)。
 
 ## 功能特性
+
+| <img align="center" src="screenshots/workflow-complex.png" /> | <img align="center" src="screenshots/danmaku-settings.png" /> | <img align="center" src="screenshots/text-viewer.png" /> | <img align="center" src="screenshots/image-viewer.png" /> |
+| ------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
 
 ### :wrench: 工作流
 

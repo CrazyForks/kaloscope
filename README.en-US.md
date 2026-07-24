@@ -33,8 +33,7 @@
 |
 [Telegram Group](https://t.me/kaloscope_official)
 
-| <img align="center" src="screenshots/danmaku-settings.png" /> | <img align="center" src="screenshots/image-viewer.png" /> | <img align="center" src="screenshots/text-viewer.png" /> |
-| ------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------- |
+<img align="center" src="screenshots/dashboard.png" />
 
 </div>
 
@@ -97,6 +96,9 @@ The parameters used above are described below.
 > For more configuration details, see the [`Deployment Guide`](https://kaloscope.org/docs/deployment).
 
 ## Features
+
+| <img align="center" src="screenshots/workflow-complex.png" /> | <img align="center" src="screenshots/danmaku-settings.png" /> | <img align="center" src="screenshots/text-viewer.png" /> | <img align="center" src="screenshots/image-viewer.png" /> |
+| ------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
 
 ### :wrench: Workflows
 
