@@ -183,7 +183,7 @@ class FlowGraph(TortoiseModel):
 
     class Meta:
         table = "flow_graph"
-        ordering = ["-created_at"]
+        ordering = ["-updated_at"]
 
     class PydanticMeta:
         exclude = ("jobs", "triggers", "variables", "instances", "favorites", "plans")
